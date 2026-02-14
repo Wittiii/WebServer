@@ -3,7 +3,7 @@ const express = require('express');
 const session = require('express-session');
 
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
-const { clients } = require('./mqttBroker'); // Broker startet parallel und liefert Client-Status
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -38,15 +38,10 @@ const authRoutes = require('./routes/auth/auth');
 app.use('/login', authRoutes);
 
 
-app.get('/api/mqtt/clients', (req, res) => {
-  const list = [...clients.entries()].map(([id, data]) => ({
-    id,
-    connected: data.connected,
-    last: data.last,
-    lastTopic: data.lastTopic || null
-  }));
-  res.json(list);
-});
+const mqttRoutes = require('./routes/mqtt/mqtt');
+
+app.use('/api/mqtt', mqttRoutes);
+
 
 // 404-Fallback
 app.use((req, res) => {

@@ -40,7 +40,7 @@ httpServer.listen(WS_PORT, () => {
 });
 
 
-//Clkient-Status überwachen
+//Client-Status überwachen
 const clients = new Map();
 
 aedes.on('client', (c) => {
@@ -59,4 +59,20 @@ aedes.on('publish', (p, c) => {
   }
 });
 
-module.exports.clients = clients;
+
+function publish(topic, payload, opts = {}) {
+  return new Promise((resolve, reject) => {
+    aedes.publish(
+      {
+        topic,
+        payload: Buffer.from(String(payload)),
+        qos: 0,
+        retain: false,
+        ...opts
+      },
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+}
+
+module.exports = { clients, publish };
