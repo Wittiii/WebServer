@@ -2,7 +2,9 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 
+
 require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
+require('./database/db')
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,9 +39,12 @@ app.use('/hydroponic', authGuard, hydroponicRoutes);
 const authRoutes = require('./routes/auth/auth');
 app.use('/login', authRoutes);
 
+//Objetcs API Datenbank-Route
+const objectsRoutes = require('./routes/database/database.js');
+app.use('/api/objects',authGuard, objectsRoutes);
 
+//MQTT API Route
 const mqttRoutes = require('./routes/mqtt/mqtt');
-
 app.use('/api/mqtt', mqttRoutes);
 
 

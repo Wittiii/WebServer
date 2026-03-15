@@ -48,5 +48,34 @@ setInterval(updateClock, 1000);
   }
 })();
 
+// Collapsible sections
+(function setupSectionToggles() {
+  const sections = document.querySelectorAll('section');
+  sections.forEach((section) => {
+    const heading = section.querySelector('h2, h3');
+    if (!heading) return;
+
+    section.classList.add('collapsible-section');
+
+    // Wrap heading into a header container with a toggle button
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'section-toggle';
+    toggle.textContent = 'Ausblenden';
+
+    const headingParent = heading.parentNode;
+    headingParent.insertBefore(header, heading);
+    header.appendChild(heading);
+    header.appendChild(toggle);
+
+    toggle.addEventListener('click', () => {
+      const collapsed = section.classList.toggle('collapsed');
+      toggle.textContent = collapsed ? 'Einblenden' : 'Ausblenden';
+    });
+  });
+})();
+
 
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="UTF-8">
@@ -26,9 +26,98 @@
 
       <p id="mqtt-status"></p>
     </section>
+
+    <section>
+      <h2>Objekte verwalten</h2>
+
+      <form id="object-form" class="row">
+        <input id="object-name" type="text" placeholder="Neues Objekt (Name)" required>
+        <button id="object-create" type="submit">Erstellen</button>
+      </form>
+
+      <div class="row">
+        <button id="object-refresh" type="button">Liste aktualisieren</button>
+        <span id="object-status"></span>
+      </div>
+
+      <ul id="object-list" class="object-list"></ul>
+    </section>
+
+    <section>
+      <h2>Objekt-Zuordnung & Befehle</h2>
+
+      <div class="row">
+        <label for="object-select">Objekt</label>
+        <select id="object-select"></select>
+      </div>
+
+      <div class="row">
+        <label for="device-topic">MQTT Topic</label>
+        <select id="topic-select"></select>
+        <input id="device-topic" type="text" placeholder="hydroponic/pump">
+        <button id="device-save" type="button">Speichern</button>
+      </div>
+
+      <h3>Messwert-Keys</h3>
+      <form id="key-form" class="row">
+        <input id="key-id" type="hidden">
+        <input id="key-input" type="text" placeholder="Key (z. B. EC_comp)" required>
+        <input id="key-label" type="text" placeholder="Label (optional)">
+        <input id="key-unit" type="text" placeholder="Einheit (z. B. mS)">
+        <button id="key-save" type="submit">Hinzufuegen</button>
+        <button id="key-cancel" type="button">Abbrechen</button>
+      </form>
+      <ul id="key-list" class="key-list"></ul>
+
+      <h3>Vordefinierte Befehle</h3>
+      <form id="command-form" class="row">
+        <input id="command-label" type="text" placeholder="Button-Name (z. B. Pumpe an)" required>
+        <input id="command-payload" type="text" placeholder="Payload (z. B. on)">
+        <button id="command-add" type="submit">Hinzufuegen</button>
+      </form>
+
+      <ul id="command-list" class="command-list"></ul>
+      <p id="object-config-status"></p>
+    </section>
+
+    <section>
+      <h2>Graph</h2>
+      <div class="row">
+        <label for="key-select">Key</label>
+        <select id="key-select"></select>
+        <label for="readings-limit">Zeilen</label>
+        <input id="readings-limit" type="number" min="1" max="1000" value="100">
+        <button id="graph-refresh" type="button">Aktualisieren</button>
+        <button id="export-csv" type="button">CSV Export</button>
+      </div>
+      <div class="row">
+        <label for="date-from">Von</label>
+        <input id="date-from" type="datetime-local">
+        <label for="date-to">Bis</label>
+        <input id="date-to" type="datetime-local">
+      </div>
+      <canvas id="readings-chart" class="readings-chart" width="900" height="260"></canvas>
+      <div class="row">
+        <label for="auto-refresh">Auto</label>
+        <input id="auto-refresh" type="checkbox">
+        <label for="auto-refresh-sec">Sekunden</label>
+        <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
+      </div>
+    </section>
+
+    <section>
+      <h2>Letzte Messwerte</h2>
+      <div class="row">
+        <button id="readings-refresh" type="button">Aktualisieren</button>
+        <span id="readings-status"></span>
+      </div>
+      <ul id="readings-list" class="readings-list"></ul>
+    </section>
   </main>
 
   <script src="/pages/main.js"></script>
   <script src="/pages/hydroponic/hydroponic.js"></script>
 </body>
 </html>
+
+
