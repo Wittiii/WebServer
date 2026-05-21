@@ -28,19 +28,49 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_object_readings_topic ON object_readings(topic);
 `)
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS object_value_keys (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    object_id INTEGER NOT NULL,
-    value_key TEXT NOT NULL,
-    label TEXT,
-    unit TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE(object_id, value_key),
-    FOREIGN KEY (object_id) REFERENCES objects(id)
-  );
-  CREATE INDEX IF NOT EXISTS idx_object_value_keys_object ON object_value_keys(object_id);
-`);
+const haveValueKeys = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='object_value_keys'").get();
+const keyColumns = haveValueKeys ? db.prepare('PRAGMA table_info(object_value_keys)').all().map(c => c.name) : [];
+
+if (!haveValueKeys) {
+  db.exec(`
+    CREATE TABLE object_value_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      object_id INTEGER NOT NULL,
+      topic TEXT,
+      value_key TEXT NOT NULL,
+      label TEXT,
+      unit TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(object_id, topic, value_key),
+      FOREIGN KEY (object_id) REFERENCES objects(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_object_value_keys_object ON object_value_keys(object_id);
+  `);
+} else if (!keyColumns.includes('topic')) {
+  db.exec('BEGIN');
+  db.exec(`
+    CREATE TABLE object_value_keys_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      object_id INTEGER NOT NULL,
+      topic TEXT,
+      value_key TEXT NOT NULL,
+      label TEXT,
+      unit TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(object_id, topic, value_key),
+      FOREIGN KEY (object_id) REFERENCES objects(id)
+    );
+  `);
+  db.exec(`
+    INSERT INTO object_value_keys_new (id, object_id, topic, value_key, label, unit, created_at)
+    SELECT id, object_id, NULL, value_key, label, unit, created_at
+    FROM object_value_keys;
+  `);
+  db.exec('DROP TABLE object_value_keys;');
+  db.exec('ALTER TABLE object_value_keys_new RENAME TO object_value_keys;');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_object_value_keys_object ON object_value_keys(object_id);');
+  db.exec('COMMIT');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS object_topic_commands (
@@ -69,10 +99,6 @@ if (!columns.includes('commands')) {
   db.exec('ALTER TABLE objects ADD COLUMN commands TEXT');
 }
 
-const keyColumns = db.prepare('PRAGMA table_info(object_value_keys)').all().map(c => c.name);
-if (!keyColumns.includes('unit')) {
-  db.exec('ALTER TABLE object_value_keys ADD COLUMN unit TEXT');
-}
 
 
 

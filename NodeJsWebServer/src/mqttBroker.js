@@ -54,21 +54,26 @@ function extractValue(payload, key) {
   return last ?? '';
 }
 
-function getKeysForObject(objectId, fallbackKey) {
+function getKeysForObject(objectId, topic, fallbackKey) {
   const rows = db
-    .prepare('SELECT value_key FROM object_value_keys WHERE object_id = ? ORDER BY id ASC')
-    .all(objectId);
+    .prepare(
+      'SELECT DISTINCT value_key FROM object_value_keys WHERE object_id = ? AND (topic IS NULL OR topic = ?) ORDER BY id ASC'
+    )
+    .all(objectId, topic);
   if (rows.length > 0) return rows.map((r) => r.value_key);
   if (fallbackKey) return [fallbackKey];
   return [];
 }
 
 function storeReading(topic, payload) {
-  const obj = db.prepare('SELECT id, value_key FROM objects WHERE mqtt_topic = ?').get(topic);
-  if (!obj) return;
-
-  const keys = getKeysForObject(obj.id, obj.value_key);
-  if (keys.length === 0) return;
+  const rows = db.prepare(`
+    SELECT DISTINCT o.id, o.value_key
+    FROM objects o
+    LEFT JOIN object_topic_commands tc ON tc.object_id = o.id
+    LEFT JOIN object_value_keys vk ON vk.object_id = o.id AND vk.topic = ?
+    WHERE o.mqtt_topic = ? OR tc.topic = ? OR vk.topic = ?
+  `).all(topic, topic, topic, topic);
+  if (rows.length === 0) return;
 
   const raw = String(payload ?? '');
   const now = new Date().toISOString();
@@ -77,16 +82,22 @@ function storeReading(topic, payload) {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  for (const key of keys) {
-    const valueText = extractValue(raw, key);
-    if (!valueText) continue;
-    stmt.run(obj.id, topic, key, valueText, raw, now);
+  for (const obj of rows) {
+    const keys = getKeysForObject(obj.id, topic, obj.value_key);
+    if (keys.length === 0) continue;
+
+    for (const key of keys) {
+      const valueText = extractValue(raw, key);
+      if (!valueText) continue;
+      stmt.run(obj.id, topic, key, valueText, raw, now);
+    }
   }
 }
 
 
 //Client-Status überwachen
 const clients = new Map();
+const topics = new Map();
 
 aedes.on('client', (c) => {
   clients.set(c.id, { connected: true, last: Date.now() });
@@ -102,8 +113,10 @@ aedes.on('publish', (p, c) => {
     clients.set(c.id, { connected: true, last: Date.now(), lastTopic: p.topic });
     console.log(`[MQTT] ${c.id} -> ${p.topic}: ${p.payload.toString()}`);
   }
+  const payloadStr = p.payload.toString();
+  topics.set(p.topic, { lastMessage: payloadStr, timestamp: Date.now() });
   try {
-    storeReading(p.topic, p.payload.toString());
+    storeReading(p.topic, payloadStr);
   } catch (e) {
     console.error('[MQTT] storeReading error', e);
   }
@@ -125,4 +138,4 @@ function publish(topic, payload, opts = {}) {
   });
 }
 
-module.exports = { clients, publish };
+module.exports = { clients, publish, topics };

@@ -5,6 +5,7 @@ const {
   updateObject,
   deleteObject,
   listReadings,
+  deleteReadings,
   listValueKeys,
   createValueKey,
   deleteValueKey,
@@ -21,6 +22,7 @@ router.post('/', createObject);
 router.put('/:id', updateObject);
 router.delete('/:id', deleteObject);
 router.get('/:id/readings', listReadings);
+router.delete('/:id/readings', deleteReadings);
 router.get('/:id/keys', listValueKeys);
 router.post('/:id/keys', createValueKey);
 router.put('/:id/keys/:keyId', updateValueKey);

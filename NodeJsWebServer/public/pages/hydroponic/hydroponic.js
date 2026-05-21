@@ -40,7 +40,6 @@ async function loadReadings() {
   readingsList.innerHTML = '<li>Lade ...</li>';
   try {
     const key = getSelectedKey();
-    const listLimit = getLimit();
     const range = getDateRange();
     const params = new URLSearchParams();
     params.set('limit', '0');
@@ -61,14 +60,14 @@ async function loadReadings() {
       return;
     }
 
-    const listView = list.slice(0, listLimit);
-    readingsList.innerHTML = listView.map((r) => {
+    readingsList.innerHTML = list.map((r) => {
       const ts = r.created_at ? new Date(r.created_at).toLocaleString() : '-';
+      const topic = r.topic ? `Topic: ${escapeHtml(r.topic)} - ` : '';
       const key = r.value_key ? `${escapeHtml(r.value_key)} = ` : '';
       const unit = r.value_key ? getUnitForKey(r.value_key) : '';
       const val = escapeHtml(r.value_text ?? '');
       const valWithUnit = unit ? `${val} ${escapeHtml(unit)}` : val;
-      return `<li>${ts} - ${key}${valWithUnit}</li>`;
+      return `<li>${ts} - ${topic}${key}${valWithUnit}</li>`;
     }).join('');
 
     const ordered = list.slice().reverse();
@@ -121,17 +120,16 @@ const objectList = document.getElementById('object-list');
 
 // Object config
 const objectSelect = document.getElementById('object-select');
-const deviceTopic = document.getElementById('device-topic');
-const topicSelect = document.getElementById('topic-select');
-const deviceSave = document.getElementById('device-save');
 const commandForm = document.getElementById('command-form');
 const commandLabel = document.getElementById('command-label');
 const commandPayload = document.getElementById('command-payload');
+const commandTopic = document.getElementById('command-topic');
 const commandList = document.getElementById('command-list');
 const configStatus = document.getElementById('object-config-status');
 const keyForm = document.getElementById('key-form');
 const keyIdInput = document.getElementById('key-id');
 const keyInput = document.getElementById('key-input');
+const keyTopic = document.getElementById('key-topic');
 const keyLabel = document.getElementById('key-label');
 const keyUnit = document.getElementById('key-unit');
 const keySave = document.getElementById('key-save');
@@ -139,7 +137,6 @@ const keyCancel = document.getElementById('key-cancel');
 const keyList = document.getElementById('key-list');
 const keySelect = document.getElementById('key-select');
 const graphRefresh = document.getElementById('graph-refresh');
-const readingsLimit = document.getElementById('readings-limit');
 const exportCsvBtn = document.getElementById('export-csv');
 const chartCanvas = document.getElementById('readings-chart');
 const dateFrom = document.getElementById('date-from');
@@ -147,6 +144,7 @@ const dateTo = document.getElementById('date-to');
 const autoRefreshToggle = document.getElementById('auto-refresh');
 const autoRefreshSec = document.getElementById('auto-refresh-sec');
 const readingsRefresh = document.getElementById('readings-refresh');
+const deleteReadingsBtn = document.getElementById('delete-readings');
 const readingsStatus = document.getElementById('readings-status');
 const readingsList = document.getElementById('readings-list');
 
@@ -188,12 +186,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function getLimit() {
-  const n = Number(readingsLimit?.value);
-  if (!Number.isFinite(n)) return 100;
-  return Math.min(Math.max(n, 1), 1000);
 }
 
 function toIso(value) {
@@ -579,11 +571,12 @@ function renderKeyList(list) {
   }
 
   keyList.innerHTML = list.map((k) => {
+    const topic = k.topic ? ` [${escapeHtml(k.topic)}]` : '';
     const label = k.label ? ` (${escapeHtml(k.label)})` : '';
     const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
     return `
       <li data-id="${k.id}">
-        <span class="key-name">${escapeHtml(k.value_key)}${label}${unit}</span>
+        <span class="key-name">${escapeHtml(k.value_key)}${topic}${label}${unit}</span>
         <button class="key-edit" type="button">Bearbeiten</button>
         <button class="key-delete" type="button">Loeschen</button>
       </li>
@@ -599,9 +592,10 @@ function renderKeySelect(list, selectedKey) {
   }
   keySelect.innerHTML = list.map((k) => {
     const sel = k.value_key === selectedKey ? 'selected' : '';
-    const label = k.label ? ` (${k.label})` : '';
-    const unit = k.unit ? ` [${k.unit}]` : '';
-    return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + label + unit)}</option>`;
+    const topic = k.topic ? ` [${escapeHtml(k.topic)}]` : '';
+    const label = k.label ? ` (${escapeHtml(k.label)})` : '';
+    const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
+    return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + topic + label + unit)}</option>`;
   }).join('');
 }
 
@@ -628,6 +622,7 @@ function setKeyFormMode(editing, keyObj) {
   if (!editing) {
     if (keyIdInput) keyIdInput.value = '';
     if (keyInput) keyInput.value = '';
+    if (keyTopic) keyTopic.value = '';
     if (keyLabel) keyLabel.value = '';
     if (keyUnit) keyUnit.value = '';
     return;
@@ -635,6 +630,7 @@ function setKeyFormMode(editing, keyObj) {
   if (keyObj) {
     if (keyIdInput) keyIdInput.value = String(keyObj.id);
     if (keyInput) keyInput.value = keyObj.value_key || '';
+    if (keyTopic) keyTopic.value = keyObj.topic || '';
     if (keyLabel) keyLabel.value = keyObj.label || '';
     if (keyUnit) keyUnit.value = keyObj.unit || '';
   }
@@ -742,9 +738,10 @@ function renderCommands(commands) {
   }
 
   commandList.innerHTML = commands.map((c, idx) => {
+    const topic = c.topic ? ` [${escapeHtml(c.topic)}]` : '';
     return `
       <li data-index="${idx}">
-        <span class="cmd-label">${escapeHtml(c.label)}</span>
+        <span class="cmd-label">${escapeHtml(c.label)}${topic}</span>
         <span class="cmd-payload">${escapeHtml(c.payload)}</span>
         <button class="cmd-send" type="button">Senden</button>
         <button class="cmd-delete" type="button">Loeschen</button>
@@ -756,15 +753,12 @@ function renderCommands(commands) {
 function renderSelectedObject() {
   const obj = getSelectedObject();
   if (!obj) {
-    if (deviceTopic) deviceTopic.value = '';
     currentCommands = [];
     renderCommands([]);
     return;
   }
 
-  if (deviceTopic) deviceTopic.value = obj.mqtt_topic || '';
-  loadTopics(deviceTopic?.value?.trim() || '');
-  loadTopicCommands(deviceTopic?.value?.trim() || '');
+  loadTopicCommands();
 }
 
 async function loadObjects(preserveSelection = true) {
@@ -814,11 +808,11 @@ async function updateObject(id, patch) {
   return data;
 }
 
-async function createValueKeyForObject(objectId, valueKey, label, unit) {
+async function createValueKeyForObject(objectId, valueKey, topic, label, unit) {
   const res = await fetch(`/api/objects/${objectId}/keys`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ valueKey, label, unit })
+    body: JSON.stringify({ valueKey, topic, label, unit })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Key anlegen fehlgeschlagen');
@@ -834,81 +828,50 @@ async function deleteValueKeyForObject(objectId, keyId) {
   return data;
 }
 
-async function updateValueKeyForObject(objectId, keyId, valueKey, label, unit) {
+async function updateValueKeyForObject(objectId, keyId, valueKey, topic, label, unit) {
   const res = await fetch(`/api/objects/${objectId}/keys/${keyId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ valueKey, label, unit })
+    body: JSON.stringify({ topic, valueKey, label, unit })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Key speichern fehlgeschlagen');
   return data;
 }
 
-async function fetchTopicCommands(objectId, topic) {
-  const url = topic
-    ? `/api/objects/${objectId}/commands?topic=${encodeURIComponent(topic)}`
-    : `/api/objects/${objectId}/commands`;
-  const res = await fetch(url);
+async function fetchTopicCommands(objectId) {
+  const res = await fetch(`/api/objects/${objectId}/commands`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Befehle laden fehlgeschlagen');
   return data;
 }
 
-async function saveTopicCommands(objectId, topic, commands) {
+async function deleteReadingsForObject(objectId) {
+  const res = await fetch(`/api/objects/${objectId}/readings`, {
+    method: 'DELETE'
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Messwerte löschen fehlgeschlagen');
+  return data;
+}
+
+async function saveTopicCommands(objectId, commands) {
   const res = await fetch(`/api/objects/${objectId}/commands`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, commands })
+    body: JSON.stringify({ commands })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Befehle speichern fehlgeschlagen');
   return data;
 }
 
-async function fetchTopics(objectId) {
-  const res = await fetch(`/api/objects/${objectId}/topics`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Topics laden fehlgeschlagen');
-  return Array.isArray(data.topics) ? data.topics : [];
-}
-
-function renderTopicSelect(list, selected) {
-  if (!topicSelect) return;
-  const options = ['(manuell)', ...list];
-  topicSelect.innerHTML = options.map((t) => {
-    const sel = t === selected ? 'selected' : '';
-    return `<option value="${escapeHtml(t)}" ${sel}>${escapeHtml(t)}</option>`;
-  }).join('');
-}
-
-async function loadTopics(preferTopic) {
-  const obj = getSelectedObject();
-  if (!obj) {
-    topicsCache = [];
-    if (topicSelect) topicSelect.innerHTML = '';
-    return;
-  }
-
-  try {
-    const list = await fetchTopics(obj.id);
-    topicsCache = list;
-    const current = preferTopic || deviceTopic?.value?.trim() || obj.mqtt_topic || '';
-    const selected = list.includes(current) ? current : '(manuell)';
-    renderTopicSelect(list, selected);
-    if (selected !== '(manuell)' && deviceTopic) deviceTopic.value = selected;
-  } catch {
-    topicsCache = [];
-    if (topicSelect) topicSelect.innerHTML = '';
-  }
-}
-
-async function loadTopicCommands(topic) {
+async function loadTopicCommands() {
   const obj = getSelectedObject();
   if (!obj) return;
 
   try {
-    const data = await fetchTopicCommands(obj.id, topic);
+    const data = await fetchTopicCommands(obj.id);
     currentCommands = Array.isArray(data.commands) ? data.commands : [];
     renderCommands(currentCommands);
   } catch (err) {
@@ -980,34 +943,6 @@ objectSelect?.addEventListener('change', () => {
   loadKeys(false);
 });
 
-// Topic speichern
-deviceSave?.addEventListener('click', async () => {
-  const obj = getSelectedObject();
-  if (!obj) return;
-
-  const topic = (deviceTopic?.value || '').trim();
-  setConfigStatus('Speichere ...');
-
-  deviceSave.disabled = true;
-  try {
-    await updateObject(obj.id, { mqttTopic: topic });
-    setConfigStatus('Gespeichert.');
-    await loadObjects();
-    await loadTopics(topic);
-    await loadTopicCommands(topic);
-  } catch (err) {
-    setConfigStatus(`Fehler: ${err.message || err}`, true);
-  } finally {
-    deviceSave.disabled = false;
-  }
-});
-
-deviceTopic?.addEventListener('change', () => {
-  const topic = (deviceTopic?.value || '').trim();
-  loadTopicCommands(topic);
-  loadTopics(topic);
-});
-
 readingsRefresh?.addEventListener('click', () => {
   setReadingsStatus('');
   loadReadings();
@@ -1016,6 +951,27 @@ readingsRefresh?.addEventListener('click', () => {
 graphRefresh?.addEventListener('click', () => {
   setReadingsStatus('');
   loadReadings();
+});
+
+deleteReadingsBtn?.addEventListener('click', async () => {
+  const obj = getSelectedObject();
+  if (!obj) return;
+
+  if (!window.confirm('Alle Messwerte für dieses Objekt wirklich löschen?')) {
+    return;
+  }
+
+  setReadingsStatus('Lösche Messwerte...');
+  deleteReadingsBtn.disabled = true;
+  try {
+    await deleteReadingsForObject(obj.id);
+    setReadingsStatus('Messwerte gelöscht.');
+    await loadReadings();
+  } catch (err) {
+    setReadingsStatus(`Fehler: ${err.message || err}`, true);
+  } finally {
+    deleteReadingsBtn.disabled = false;
+  }
 });
 
 chartCanvas?.addEventListener('mousemove', (e) => {
@@ -1064,18 +1020,6 @@ keySelect?.addEventListener('change', () => {
   loadReadings();
 });
 
-topicSelect?.addEventListener('change', () => {
-  const selected = topicSelect?.value || '(manuell)';
-  if (selected !== '(manuell)' && deviceTopic) {
-    deviceTopic.value = selected;
-  }
-  const topic = (deviceTopic?.value || '').trim();
-  loadTopicCommands(topic);
-});
-
-readingsLimit?.addEventListener('change', () => {
-  loadReadings();
-});
 
 exportCsvBtn?.addEventListener('click', () => {
   if (!lastReadingsCache.length) {
@@ -1108,6 +1052,7 @@ keyForm?.addEventListener('submit', async (e) => {
   if (!obj) return;
 
   const valueKey = (keyInput?.value || '').trim();
+  const topic = (keyTopic?.value || '').trim();
   const label = (keyLabel?.value || '').trim();
   const unit = (keyUnit?.value || '').trim();
   const keyId = Number(keyIdInput?.value);
@@ -1122,10 +1067,10 @@ keyForm?.addEventListener('submit', async (e) => {
 
   try {
     if (isEdit) {
-      await updateValueKeyForObject(obj.id, keyId, valueKey, label, unit);
+      await updateValueKeyForObject(obj.id, keyId, valueKey, topic, label, unit);
       setConfigStatus('Key gespeichert.');
     } else {
-      await createValueKeyForObject(obj.id, valueKey, label, unit);
+      await createValueKeyForObject(obj.id, valueKey, topic, label, unit);
       setConfigStatus('Key hinzugefügt.');
     }
     setKeyFormMode(false);
@@ -1183,31 +1128,31 @@ commandForm?.addEventListener('submit', async (e) => {
 
   const label = (commandLabel?.value || '').trim();
   const payload = (commandPayload?.value || '');
-  const topic = (deviceTopic?.value || '').trim();
+  const topic = (commandTopic?.value || '').trim();
 
   if (!label) {
     setConfigStatus('Button-Name fehlt.', true);
     return;
   }
   if (!topic) {
-    setConfigStatus('Bitte MQTT Topic speichern.', true);
+    setConfigStatus('Topic fehlt.', true);
     return;
   }
 
-  const nextCommands = [...currentCommands, { label, payload }];
+  const nextCommands = [...currentCommands, { label, payload, topic }];
   setConfigStatus('Speichere Befehle ...');
 
   const addBtn = document.getElementById('command-add');
   if (addBtn) addBtn.disabled = true;
 
   try {
-    await saveTopicCommands(obj.id, topic, nextCommands);
+    await saveTopicCommands(obj.id, nextCommands);
     if (commandLabel) commandLabel.value = '';
     if (commandPayload) commandPayload.value = '';
+    if (commandTopic) commandTopic.value = '';
     setConfigStatus('Befehl hinzugefügt.');
     currentCommands = nextCommands;
     renderCommands(currentCommands);
-    await loadTopics(topic);
   } catch (err) {
     setConfigStatus(`Fehler: ${err.message || err}`, true);
   } finally {
@@ -1229,15 +1174,15 @@ commandList?.addEventListener('click', async (e) => {
   if (!Number.isFinite(idx)) return;
 
   if (sendBtn) {
-    const topic = (deviceTopic?.value || '').trim();
+    const cmd = currentCommands?.[idx];
+    const topic = (cmd?.topic || '').trim();
     if (!topic) {
-      setConfigStatus('Bitte MQTT Topic speichern.', true);
+      setConfigStatus('Bitte Topic im Befehl angeben.', true);
       return;
     }
     sendBtn.disabled = true;
     setConfigStatus('Sende ...');
     try {
-      const cmd = currentCommands?.[idx];
       await publishMqtt(topic, cmd?.payload ?? '');
       setConfigStatus('Gesendet.');
     } catch (err) {
@@ -1248,16 +1193,14 @@ commandList?.addEventListener('click', async (e) => {
   }
 
   if (delBtn) {
-    const topic = (deviceTopic?.value || '').trim();
     delBtn.disabled = true;
-    setConfigStatus('LÃ¶sche ...');
+    setConfigStatus('Lösche ...');
     try {
       const nextCommands = (currentCommands || []).filter((_, i) => i !== idx);
-      await saveTopicCommands(obj.id, topic, nextCommands);
-      setConfigStatus('GelÃ¶scht.');
+      await saveTopicCommands(obj.id, nextCommands);
+      setConfigStatus('Gelöscht.');
       currentCommands = nextCommands;
       renderCommands(currentCommands);
-      await loadTopics(topic);
     } catch (err) {
       setConfigStatus(`Fehler: ${err.message || err}`, true);
     } finally {

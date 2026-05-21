@@ -52,16 +52,15 @@
       </div>
 
       <div class="row">
-        <label for="device-topic">MQTT Topic</label>
-        <select id="topic-select"></select>
-        <input id="device-topic" type="text" placeholder="hydroponic/pump">
-        <button id="device-save" type="button">Speichern</button>
+        <label>MQTT Topic</label>
+        <span>Jeder Befehl kann sein eigenes Topic haben.</span>
       </div>
 
       <h3>Messwert-Keys</h3>
       <form id="key-form" class="row">
         <input id="key-id" type="hidden">
         <input id="key-input" type="text" placeholder="Key (z. B. EC_comp)" required>
+        <input id="key-topic" type="text" placeholder="Topic (optional)">
         <input id="key-label" type="text" placeholder="Label (optional)">
         <input id="key-unit" type="text" placeholder="Einheit (z. B. mS)">
         <button id="key-save" type="submit">Hinzufuegen</button>
@@ -73,6 +72,7 @@
       <form id="command-form" class="row">
         <input id="command-label" type="text" placeholder="Button-Name (z. B. Pumpe an)" required>
         <input id="command-payload" type="text" placeholder="Payload (z. B. on)">
+        <input id="command-topic" type="text" placeholder="Topic (z. B. hydroponic/pump)" required>
         <button id="command-add" type="submit">Hinzufuegen</button>
       </form>
 
@@ -85,8 +85,6 @@
       <div class="row">
         <label for="key-select">Key</label>
         <select id="key-select"></select>
-        <label for="readings-limit">Zeilen</label>
-        <input id="readings-limit" type="number" min="1" max="1000" value="100">
         <button id="graph-refresh" type="button">Aktualisieren</button>
         <button id="export-csv" type="button">CSV Export</button>
       </div>
@@ -109,6 +107,7 @@
       <h2>Letzte Messwerte</h2>
       <div class="row">
         <button id="readings-refresh" type="button">Aktualisieren</button>
+        <button id="delete-readings" type="button">Messwerte löschen</button>
         <span id="readings-status"></span>
       </div>
       <ul id="readings-list" class="readings-list"></ul>

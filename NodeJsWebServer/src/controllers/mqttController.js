@@ -1,4 +1,5 @@
-const { clients, publish } = require('../mqttBroker');
+const { clients, publish, topics } = require('../mqttBroker');
+const db = require('../database/db');
 
 function getClients(req, res) {
   const list = [...clients.entries()].map(([id, data]) => ({
@@ -7,6 +8,17 @@ function getClients(req, res) {
     last: data.last,
     lastTopic: data.lastTopic || null
   }));
+  res.json(list);
+}
+
+function getTopicsWithLastMessage(req, res) {
+  const list = [...topics.entries()]
+    .filter(([topic]) => !topic.startsWith('$SYS/'))
+    .map(([topic, data]) => ({
+      topic,
+      lastMessage: data.lastMessage,
+      timestamp: new Date(data.timestamp).toISOString()
+    }));
   res.json(list);
 }
 
@@ -24,4 +36,4 @@ async function publishMessage(req, res) {
   }
 }
 
-module.exports = { getClients, publishMessage };
+module.exports = { getClients, publishMessage, getTopicsWithLastMessage };

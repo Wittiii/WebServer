@@ -53,7 +53,7 @@ app.use((req, res) => {
   res.status(404).send('Seite nicht gefunden');
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
 });
 
