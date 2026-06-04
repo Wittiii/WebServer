@@ -3,26 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hauptseite</title>
-  <link rel="stylesheet" href="pages/style.css">
+  <title>Dashboard - Smart IoT</title>
+  <link rel="stylesheet" href="/pages/style.css">
 </head>
 <body>
     <div id="navbar"></div>
+    
     <header class="hero">
-        <h1>Willkommen zum Dashboard</h1>
+        <h1>IoT Command Center</h1>
+        <p>Live-Überwachung Ihres MQTT-Brokers und Systemstatus</p>
     </header>
+
     <main class="container">
-        <section><h2>Dashboard Inhalte</h2><p>Hier sind Ihre Dashboard-Daten …</p></section>
+      <div id="broker-summary" class="grid-2" style="margin-bottom: 1.5rem;"></div>
+        <!-- Stats Row -->
+        <div class="grid-3" style="margin-bottom: 2rem;">
+            <div class="stats-card">
+                <h3>Broker-Status</h3>
+                <div class="stats-val" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #10b981;">
+                    <span class="pulse-online"></span> ONLINE
+                </div>
+            </div>
+            <div class="stats-card">
+                <h3>Aktive Clients</h3>
+                <div class="stats-val" id="stats-clients-count">0</div>
+            </div>
+            <div class="stats-card">
+                <h3>Erfasste Topics</h3>
+                <div class="stats-val" id="stats-topics-count">0</div>
+            </div>
+        </div>
+
+        <section id="mqtt-clients">
+            <h2>Verbundene MQTT-Clients</h2>
+            <p style="margin-bottom: 1rem;">Aktive TCP und WebSocket Verbindungen zum lokalen Broker</p>
+            <ul id="client-list" class="readings-list"></ul>
+        </section>  
+
+        <section id="mqtt-topics">
+            <h2>Verbundene MQTT-Topics</h2>
+            <p style="margin-bottom: 1rem;">Zuletzt empfangene Nachrichten auf den abonnierten Kanälen</p>
+            <ul id="topic-list" class="readings-list"></ul>
+        </section>
+
+        <section>
+            <h2>Trenddiagramm</h2>
+            <p style="margin-bottom: 1rem;">Aktive Clients und Topics im zeitlichen Verlauf</p>
+            <canvas id="dashboard-trend-chart" width="900" height="260" class="readings-chart"></canvas>
+        </section>
     </main>
-    <section id="mqtt-clients">
-    <h2>Verbundene MQTT-Clients</h2>
-    <ul id="client-list"></ul>
-    </section>  
-    <section id="mqtt-topics">
-    <h2>Verbundene MQTT-Topics</h2>
-    <ul id="topic-list"></ul>
-    </section>  
+
     <script src="/pages/main.js"></script>
-     <script src="/pages/dashboard/dashboard.js"></script>
+    <script src="/pages/dashboard/dashboard.js"></script>
 </body>
 </html>

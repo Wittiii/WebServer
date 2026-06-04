@@ -3,25 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login</title>
-  <link rel="stylesheet" href="pages/style.css">
+  <title>Login - Smart IoT Command Center</title>
+  <link rel="stylesheet" href="/pages/style.css">
 </head>
-<body>
-  <main class="container login-card">
-    <h1>Login</h1>
-    <form id="login-form" method="post" action="/login">
-      <div class="form-group">
-        <label for="username">Nutzername</label>
-        <input id="username" name="username" required />
+<body style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 0; margin: 0;">
+  
+  <main class="container login-card" style="margin: 0; padding: 0 1rem;">
+    <section style="padding: 2.5rem; text-align: center;">
+      
+      <div style="margin-bottom: 1.5rem;">
+        <span class="pulse-online" style="width: 14px; height: 14px; margin-right: 0;"></span>
       </div>
-      <div class="form-group">
-        <label for="password">Passwort</label>
-        <input id="password" type="password" name="password" required />
-      </div>
-      <button type="submit">Einloggen</button>
-    </form>
-    <p id="login-error" class="error-msg" hidden></p>
+
+      <h1 style="font-size: 2rem; margin-bottom: 0.5rem; background: linear-gradient(135deg, #fff 40%, var(--accent) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        IoT Login
+      </h1>
+      <p style="margin-bottom: 2rem; font-size: 0.9rem;">Melden Sie sich an, um das Steuerungssystem zu verwalten.</p>
+
+      <form id="login-form" method="post" action="/login" style="text-align: left;">
+        <div class="form-group">
+          <label for="username">Nutzername</label>
+          <input id="username" name="username" placeholder="Admin" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="password">Passwort</label>
+          <input id="password" type="password" name="password" placeholder="••••••••" required />
+        </div>
+
+        <button type="submit" style="width: 100%; margin-top: 1.5rem;">Einloggen</button>
+      </form>
+
+      <p id="login-error" class="error-msg" hidden></p>
+    </section>
   </main>
-  <script src="pages/login/login.js"></script>
+
+  <script src="/pages/login/login.js"></script>
 </body>
 </html>

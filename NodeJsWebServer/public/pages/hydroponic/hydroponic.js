@@ -75,6 +75,7 @@ async function loadReadings() {
     chartHoverIndex = null;
     drawChart(ordered);
     lastReadingsCache = list;
+    checkThresholds(list);
   } catch (err) {
     readingsList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
     drawChart([]);
@@ -117,6 +118,11 @@ const objectCreate = document.getElementById('object-create');
 const objectRefresh = document.getElementById('object-refresh');
 const objectStatus = document.getElementById('object-status');
 const objectList = document.getElementById('object-list');
+const brokerSummary = document.getElementById('broker-summary');
+const thresholdMin = document.getElementById('threshold-min');
+const thresholdMax = document.getElementById('threshold-max');
+const thresholdSave = document.getElementById('threshold-save');
+const thresholdStatus = document.getElementById('threshold-status');
 
 // Object config
 const objectSelect = document.getElementById('object-select');
@@ -124,7 +130,9 @@ const commandForm = document.getElementById('command-form');
 const commandLabel = document.getElementById('command-label');
 const commandPayload = document.getElementById('command-payload');
 const commandTopic = document.getElementById('command-topic');
+const commandAdd = document.getElementById('command-add');
 const commandList = document.getElementById('command-list');
+const commandCancel = document.getElementById('command-cancel');
 const configStatus = document.getElementById('object-config-status');
 const keyForm = document.getElementById('key-form');
 const keyIdInput = document.getElementById('key-id');
@@ -160,6 +168,7 @@ const GRAPH_LIMIT = 1000;
 const GRAPH_TAIL = GRAPH_LIMIT;
 let currentCommands = [];
 let topicsCache = [];
+let editingCommandIndex = null;
 
 function setObjectStatus(text, isError = false) {
   if (!objectStatus) return;
@@ -177,6 +186,128 @@ function setReadingsStatus(text, isError = false) {
   if (!readingsStatus) return;
   readingsStatus.textContent = text;
   readingsStatus.style.color = isError ? 'crimson' : 'green';
+}
+
+function getThresholdKey() {
+  const obj = getSelectedObject();
+  const key = getSelectedKey();
+  if (!obj || !key) return null;
+  return `hydro-threshold-${obj.id}-${key}`;
+}
+
+function loadThresholdSettings() {
+  const storageKey = getThresholdKey();
+  if (!storageKey) return { min: null, max: null };
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) return { min: null, max: null };
+    const parsed = JSON.parse(stored);
+    return { min: parsed.min ?? null, max: parsed.max ?? null };
+  } catch {
+    return { min: null, max: null };
+  }
+}
+
+function saveThresholdSettings() {
+  const storageKey = getThresholdKey();
+  if (!storageKey) return;
+  const minValue = thresholdMin?.value.trim();
+  const maxValue = thresholdMax?.value.trim();
+  const payload = {
+    min: minValue === '' ? null : parseFloat(minValue.replace(',', '.')),
+    max: maxValue === '' ? null : parseFloat(maxValue.replace(',', '.'))
+  };
+  localStorage.setItem(storageKey, JSON.stringify(payload));
+  displayThresholdStatus(payload);
+  setReadingsStatus('Schwellenwerte gespeichert.');
+}
+
+function displayThresholdStatus(payload) {
+  if (!thresholdStatus) return;
+  const min = payload?.min;
+  const max = payload?.max;
+  if (min === null && max === null) {
+    thresholdStatus.textContent = 'Noch keine Grenzwerte gesetzt.';
+    thresholdStatus.style.color = 'var(--text-muted)';
+    thresholdStatus.style.background = 'rgba(255,255,255,0.04)';
+    return;
+  }
+
+  const parts = [];
+  if (min !== null) parts.push(`Min: ${min}`);
+  if (max !== null) parts.push(`Max: ${max}`);
+  thresholdStatus.textContent = `Gesetzt: ${parts.join(' / ')}`;
+  thresholdStatus.style.color = 'var(--accent)';
+  thresholdStatus.style.background = 'rgba(56, 189, 248, 0.08)';
+}
+
+function checkThresholds(readings) {
+  if (!thresholdStatus) return;
+  const { min, max } = loadThresholdSettings();
+  const valueKey = getSelectedKey();
+  if ((!Number.isFinite(min) && !Number.isFinite(max)) || !valueKey) {
+    displayThresholdStatus({ min, max });
+    return;
+  }
+
+  const violations = readings
+    .map((r) => ({
+      value: parseNumber(r.value_text),
+      ts: r.created_at,
+      topic: r.topic,
+      key: r.value_key
+    }))
+    .filter((row) => Number.isFinite(row.value))
+    .filter((row) => (Number.isFinite(min) && row.value < min) || (Number.isFinite(max) && row.value > max));
+
+  if (violations.length === 0) {
+    displayThresholdStatus({ min, max });
+    thresholdStatus.textContent = `Ok: Keine Abweichungen`;
+    thresholdStatus.style.color = 'var(--success)';
+    thresholdStatus.style.background = 'rgba(16, 185, 129, 0.08)';
+    return;
+  }
+
+  const first = violations[0];
+  thresholdStatus.textContent = `Alarm: ${violations.length} Abweichung(en), zuletzt ${first.value} ${getSelectedKeyUnit()} um ${new Date(first.ts).toLocaleString()}`;
+  thresholdStatus.style.color = 'var(--danger)';
+  thresholdStatus.style.background = 'rgba(239, 68, 68, 0.12)';
+}
+
+function populateThresholdInputs() {
+  if (!thresholdMin || !thresholdMax) return;
+  const settings = loadThresholdSettings();
+  thresholdMin.value = Number.isFinite(settings.min) ? settings.min : '';
+  thresholdMax.value = Number.isFinite(settings.max) ? settings.max : '';
+  displayThresholdStatus(settings);
+}
+
+async function loadHydroponicBrokerSummary() {
+  if (!brokerSummary) return;
+  try {
+    const [clients, topics] = await Promise.all([
+      fetch('/api/mqtt/clients').then((res) => res.json()),
+      fetch('/api/mqtt/topics').then((res) => res.json())
+    ]);
+    const online = Array.isArray(clients) ? clients.filter((c) => c.connected).length : 0;
+    const topicCount = Array.isArray(topics) ? topics.length : 0;
+    brokerSummary.innerHTML = `
+      <div class="stats-card">
+        <h3>MQTT Broker</h3>
+        <div class="stats-val">${online > 0 ? 'ONLINE' : 'OFFLINE'}</div>
+        <p>${online} aktive Clients</p>
+      </div>
+      <div class="stats-card">
+        <h3>Topics</h3>
+        <div class="stats-val">${topicCount}</div>
+        <p>Empfangene Topics</p>
+      </div>
+    `;
+  } catch (err) {
+    if (brokerSummary) {
+      brokerSummary.innerHTML = '<div class="error-msg">MQTT-Status konnte nicht geladen werden.</div>';
+    }
+  }
 }
 
 function escapeHtml(value) {
@@ -460,16 +591,39 @@ function drawChart(readings) {
     ctx.fillText(label, 6, y + 4);
   }
 
-  // X labels (first/middle/last)
+  // X labels: choose up to 4 evenly spaced points
   const len = readings.length;
-  const idxs = [0, Math.floor(len / 2), len - 1].filter((v, i, a) => a.indexOf(v) === i);
+  const targetLabels = Math.min(4, len);
+  const idxs = [];
+  if (targetLabels <= 1) {
+    idxs.push(0);
+  } else {
+    for (let i = 0; i < targetLabels; i++) {
+      idxs.push(Math.floor((len - 1) * (i / (targetLabels - 1))));
+    }
+  }
+  const labelFont = '12px system-ui, sans-serif';
   ctx.fillStyle = '#94a3b8';
+  ctx.font = labelFont;
+  ctx.textAlign = 'center';
   idxs.forEach((i) => {
     const x = pad + (i / xSpan) * (w - pad * 2);
     const ts = readings[i]?.created_at ? new Date(readings[i].created_at) : null;
-    const label = ts ? ts.toLocaleTimeString() : String(i);
-    ctx.fillText(label, x - 20, h - 10);
+    let label;
+    if (ts) {
+      const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const date = ts.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+      label = i === 0 || i === len - 1 ? `${time}
+${date}` : time;
+    } else {
+      label = String(i);
+    }
+    const lines = label.split('\n');
+    lines.forEach((line, lineIndex) => {
+      ctx.fillText(line, x, h - 12 + lineIndex * 14);
+    });
   });
+  ctx.textAlign = 'left';
 
   // Line
   const drawLine = (indices, color) => {
@@ -741,13 +895,36 @@ function renderCommands(commands) {
     const topic = c.topic ? ` [${escapeHtml(c.topic)}]` : '';
     return `
       <li data-index="${idx}">
-        <span class="cmd-label">${escapeHtml(c.label)}${topic}</span>
-        <span class="cmd-payload">${escapeHtml(c.payload)}</span>
+        <div class="cmd-meta" style="display: grid; gap: 0.5rem; min-width: 0;">
+          <span class="cmd-label">${escapeHtml(c.label)}${topic}</span>
+          <span class="cmd-payload">${escapeHtml(c.payload)}</span>
+        </div>
         <button class="cmd-send" type="button">Senden</button>
-        <button class="cmd-delete" type="button">Loeschen</button>
+        <div class="cmd-action-group" style="display: flex; gap: 0.5rem; min-width: 0; justify-content: flex-end;">
+          <button class="cmd-edit" type="button">Bearbeiten</button>
+          <button class="cmd-delete" type="button">Loeschen</button>
+        </div>
       </li>
     `;
   }).join('');
+}
+
+function setCommandFormMode(editing, command = null) {
+  if (!commandAdd) return;
+  if (editing && command) {
+    if (commandLabel) commandLabel.value = command.label || '';
+    if (commandTopic) commandTopic.value = command.topic || '';
+    if (commandPayload) commandPayload.value = command.payload || '';
+    commandAdd.textContent = 'Befehl speichern';
+    if (commandCancel) commandCancel.style.display = 'inline-flex';
+  } else {
+    if (commandLabel) commandLabel.value = '';
+    if (commandTopic) commandTopic.value = '';
+    if (commandPayload) commandPayload.value = '';
+    commandAdd.textContent = 'Befehl hinzufügen';
+    if (commandCancel) commandCancel.style.display = 'none';
+    editingCommandIndex = null;
+  }
 }
 
 function renderSelectedObject() {
@@ -781,6 +958,8 @@ async function loadObjects(preserveSelection = true) {
 
     renderSelectedObject();
     await loadKeys();
+    populateThresholdInputs();
+    loadHydroponicBrokerSummary();
   } catch (err) {
     if (objectList) objectList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
   }
@@ -941,6 +1120,8 @@ objectSelect?.addEventListener('change', () => {
   setConfigStatus('');
   renderSelectedObject();
   loadKeys(false);
+  populateThresholdInputs();
+  loadHydroponicBrokerSummary();
 });
 
 readingsRefresh?.addEventListener('click', () => {
@@ -1017,9 +1198,13 @@ chartCanvas?.addEventListener('mouseleave', () => {
 });
 
 keySelect?.addEventListener('change', () => {
+  populateThresholdInputs();
   loadReadings();
 });
 
+thresholdSave?.addEventListener('click', () => {
+  saveThresholdSettings();
+});
 
 exportCsvBtn?.addEventListener('click', () => {
   if (!lastReadingsCache.length) {
@@ -1120,7 +1305,7 @@ keyList?.addEventListener('click', async (e) => {
   }
 });
 
-// Command hinzufÃ¼gen
+// Command hinzufügen / speichern
 commandForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const obj = getSelectedObject();
@@ -1139,7 +1324,13 @@ commandForm?.addEventListener('submit', async (e) => {
     return;
   }
 
-  const nextCommands = [...currentCommands, { label, payload, topic }];
+  const nextCommands = [...currentCommands];
+  if (editingCommandIndex !== null && editingCommandIndex >= 0 && editingCommandIndex < nextCommands.length) {
+    nextCommands[editingCommandIndex] = { label, payload, topic };
+  } else {
+    nextCommands.push({ label, payload, topic });
+  }
+
   setConfigStatus('Speichere Befehle ...');
 
   const addBtn = document.getElementById('command-add');
@@ -1147,12 +1338,10 @@ commandForm?.addEventListener('submit', async (e) => {
 
   try {
     await saveTopicCommands(obj.id, nextCommands);
-    if (commandLabel) commandLabel.value = '';
-    if (commandPayload) commandPayload.value = '';
-    if (commandTopic) commandTopic.value = '';
-    setConfigStatus('Befehl hinzugefügt.');
     currentCommands = nextCommands;
     renderCommands(currentCommands);
+    setConfigStatus(editingCommandIndex !== null ? 'Befehl aktualisiert.' : 'Befehl hinzugefügt.');
+    setCommandFormMode(false);
   } catch (err) {
     setConfigStatus(`Fehler: ${err.message || err}`, true);
   } finally {
@@ -1160,18 +1349,27 @@ commandForm?.addEventListener('submit', async (e) => {
   }
 });
 
-// Command senden / lÃ¶schen
+// Command senden / bearbeiten / löschen
 commandList?.addEventListener('click', async (e) => {
   const obj = getSelectedObject();
   if (!obj) return;
 
+  const editBtn = e.target?.closest('.cmd-edit');
   const sendBtn = e.target?.closest('.cmd-send');
   const delBtn = e.target?.closest('.cmd-delete');
-  if (!sendBtn && !delBtn) return;
+  if (!editBtn && !sendBtn && !delBtn) return;
 
   const li = e.target.closest('li');
   const idx = Number(li?.getAttribute('data-index'));
   if (!Number.isFinite(idx)) return;
+
+  if (editBtn) {
+    const cmd = currentCommands?.[idx];
+    if (!cmd) return;
+    setCommandFormMode(true, cmd);
+    editingCommandIndex = idx;
+    return;
+  }
 
   if (sendBtn) {
     const cmd = currentCommands?.[idx];
@@ -1190,6 +1388,7 @@ commandList?.addEventListener('click', async (e) => {
     } finally {
       sendBtn.disabled = false;
     }
+    return;
   }
 
   if (delBtn) {
@@ -1198,15 +1397,22 @@ commandList?.addEventListener('click', async (e) => {
     try {
       const nextCommands = (currentCommands || []).filter((_, i) => i !== idx);
       await saveTopicCommands(obj.id, nextCommands);
-      setConfigStatus('Gelöscht.');
       currentCommands = nextCommands;
       renderCommands(currentCommands);
+      setConfigStatus('Gelöscht.');
+      if (editingCommandIndex === idx) {
+        setCommandFormMode(false);
+      }
     } catch (err) {
       setConfigStatus(`Fehler: ${err.message || err}`, true);
     } finally {
       delBtn.disabled = false;
     }
   }
+});
+
+commandCancel?.addEventListener('click', () => {
+  setCommandFormMode(false);
 });
 
 loadObjects();

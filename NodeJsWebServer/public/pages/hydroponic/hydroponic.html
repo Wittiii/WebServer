@@ -3,113 +3,217 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydroponik</title>
-  <link rel="stylesheet" href="pages/style.css">
+  <title>Hydroponik - Steuerung & Monitoring</title>
+  <link rel="stylesheet" href="/pages/style.css">
 </head>
 <body>
   <div id="navbar"></div>
 
-  <main class="container">
+  <header class="hero">
     <h1>Hydroponik Steuerung</h1>
+    <p>Automatisierte Umgebungskontrolle, Datenanalyse und Gerätemanagement</p>
+  </header>
 
-    <section>
-      <h2>MQTT Befehl senden</h2>
-      <form id="mqtt-form">
-        <label for="mqtt-topic">Topic</label>
-        <input id="mqtt-topic" type="text" placeholder="hydroponic/pump" required>
+  <main class="container">
+    <div id="broker-summary" class="grid-2" style="margin-bottom: 1.5rem;"></div>
+    
+    <!-- Top Grid: Send Command & Manage Objects -->
+    <div class="grid-2">
+      
+      <section>
+        <h2>MQTT Befehl senden</h2>
+        <p style="margin-bottom: 1rem; font-size: 0.9rem;">Senden Sie manuelle MQTT-Nachrichten direkt an Ihre IoT-Geräte.</p>
+        <form id="mqtt-form">
+          <div class="form-group">
+            <label for="mqtt-topic">Topic</label>
+            <input id="mqtt-topic" type="text" placeholder="hydroponic/pump" required>
+          </div>
 
-        <label for="mqtt-payload">Payload</label>
-        <input id="mqtt-payload" type="text" placeholder="on | off">
+          <div class="form-group">
+            <label for="mqtt-payload">Payload</label>
+            <input id="mqtt-payload" type="text" placeholder="on | off">
+          </div>
 
-        <button id="mqtt-send" type="submit">Senden</button>
-      </form>
+          <button id="mqtt-send" type="submit">Senden</button>
+        </form>
+        <p id="mqtt-status" style="margin-top: 1rem; font-weight: 600;"></p>
+      </section>
 
-      <p id="mqtt-status"></p>
-    </section>
+      <section>
+        <h2>Objekte verwalten</h2>
+        <p style="margin-bottom: 1rem; font-size: 0.9rem;">Erstellen und organisieren Sie Ihre Sensorstationen oder Aktoren.</p>
+        
+        <form id="object-form" style="margin-bottom: 1rem;">
+          <div class="form-group">
+            <label for="object-name">Name des neuen Objekts</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input id="object-name" type="text" placeholder="z. B. Sensorbox Balkon" required>
+              <button id="object-create" type="submit">Erstellen</button>
+            </div>
+          </div>
+        </form>
 
-    <section>
-      <h2>Objekte verwalten</h2>
+        <div class="flex-row-center" style="margin-top: 1.5rem;">
+          <button id="object-refresh" type="button" class="btn" style="background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); box-shadow: none;">Liste aktualisieren</button>
+          <span id="object-status" style="font-weight: 600;"></span>
+        </div>
 
-      <form id="object-form" class="row">
-        <input id="object-name" type="text" placeholder="Neues Objekt (Name)" required>
-        <button id="object-create" type="submit">Erstellen</button>
-      </form>
+        <ul id="object-list" class="object-list"></ul>
+      </section>
 
-      <div class="row">
-        <button id="object-refresh" type="button">Liste aktualisieren</button>
-        <span id="object-status"></span>
-      </div>
+    </div>
 
-      <ul id="object-list" class="object-list"></ul>
-    </section>
-
+    <!-- Mapping & Commands Section -->
     <section>
       <h2>Objekt-Zuordnung & Befehle</h2>
+      <p style="margin-bottom: 1.5rem; font-size: 0.9rem;">Ordnen Sie Messwerte zu und konfigurieren Sie Schnellstart-Aktionsknöpfe.</p>
 
-      <div class="row">
-        <label for="object-select">Objekt</label>
-        <select id="object-select"></select>
+      <div class="grid-2" style="margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label for="object-select">Gewähltes Objekt</label>
+          <select id="object-select"></select>
+        </div>
+        <div style="display: flex; align-items: center; background: rgba(56, 189, 248, 0.05); padding: 1rem; border-radius: 0.75rem; border: 1px dashed rgba(56, 189, 248, 0.25);">
+          <p style="font-size: 0.85rem; color: var(--accent); margin-bottom: 0;">
+            💡 <strong>Tipp:</strong> Jeder konfigurierte Befehl oder Datenpunkt kann mit einem individuellen Topic betrieben werden.
+          </p>
+        </div>
       </div>
 
-      <div class="row">
-        <label>MQTT Topic</label>
-        <span>Jeder Befehl kann sein eigenes Topic haben.</span>
+      <div class="grid-2">
+        <div>
+          <h3 style="margin-bottom: 1rem; font-size: 1.15rem; color: var(--accent);">Messwert-Keys</h3>
+          <form id="key-form" style="background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05);">
+            <input id="key-id" type="hidden">
+            <div class="form-group">
+              <label>Key Name *</label>
+              <input id="key-input" type="text" placeholder="z. B. EC_comp" required>
+            </div>
+            <div class="form-group">
+              <label>Topic (optional)</label>
+              <input id="key-topic" type="text" placeholder="Echtzeit-Datenquelle">
+            </div>
+            <div class="grid-2" style="margin-bottom: 0;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Label</label>
+                <input id="key-label" type="text" placeholder="Anzeigename">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Einheit</label>
+                <input id="key-unit" type="text" placeholder="z. B. mS">
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+              <button id="key-save" type="submit" style="flex: 1;">Speichern</button>
+              <button id="key-cancel" type="button" style="flex: 1; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.1); box-shadow: none;">Abbrechen</button>
+            </div>
+          </form>
+          <ul id="key-list" class="key-list"></ul>
+        </div>
+
+        <div>
+          <h3 style="margin-bottom: 1rem; font-size: 1.15rem; color: var(--accent);">Vordefinierte Schnellbefehle</h3>
+          <form id="command-form" style="background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05);">
+            <div class="form-group">
+              <label>Button-Name *</label>
+              <input id="command-label" type="text" placeholder="z. B. Pumpe einschalten" required>
+            </div>
+            <div class="form-group">
+              <label>Ziel-Topic *</label>
+              <input id="command-topic" type="text" placeholder="z. B. hydroponic/pump" required>
+            </div>
+            <div class="form-group">
+              <label>Payload</label>
+              <input id="command-payload" type="text" placeholder="z. B. on">
+            </div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem;">
+              <button id="command-add" type="submit" style="flex: 1; min-width: 120px;">Befehl hinzufügen</button>
+              <button id="command-cancel" type="button" style="flex: 1; min-width: 120px; display: none; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.12); box-shadow: none;">Abbrechen</button>
+            </div>
+          </form>
+          <ul id="command-list" class="command-list"></ul>
+          <p id="object-config-status" style="margin-top: 1rem; font-weight: 600;"></p>
+        </div>
       </div>
-
-      <h3>Messwert-Keys</h3>
-      <form id="key-form" class="row">
-        <input id="key-id" type="hidden">
-        <input id="key-input" type="text" placeholder="Key (z. B. EC_comp)" required>
-        <input id="key-topic" type="text" placeholder="Topic (optional)">
-        <input id="key-label" type="text" placeholder="Label (optional)">
-        <input id="key-unit" type="text" placeholder="Einheit (z. B. mS)">
-        <button id="key-save" type="submit">Hinzufuegen</button>
-        <button id="key-cancel" type="button">Abbrechen</button>
-      </form>
-      <ul id="key-list" class="key-list"></ul>
-
-      <h3>Vordefinierte Befehle</h3>
-      <form id="command-form" class="row">
-        <input id="command-label" type="text" placeholder="Button-Name (z. B. Pumpe an)" required>
-        <input id="command-payload" type="text" placeholder="Payload (z. B. on)">
-        <input id="command-topic" type="text" placeholder="Topic (z. B. hydroponic/pump)" required>
-        <button id="command-add" type="submit">Hinzufuegen</button>
-      </form>
-
-      <ul id="command-list" class="command-list"></ul>
-      <p id="object-config-status"></p>
     </section>
 
+    <!-- Graph / Analysis Section -->
     <section>
-      <h2>Graph</h2>
-      <div class="row">
-        <label for="key-select">Key</label>
-        <select id="key-select"></select>
-        <button id="graph-refresh" type="button">Aktualisieren</button>
-        <button id="export-csv" type="button">CSV Export</button>
+      <h2>Messwert-Verlauf & Graph</h2>
+      <p style="margin-bottom: 1.5rem; font-size: 0.9rem;">Analysieren Sie Sensordaten über frei definierbare Zeiträume.</p>
+
+      <div class="grid-2" style="background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1rem;">
+        <div class="form-group">
+          <label for="key-select">Daten-Key wählen</label>
+          <select id="key-select"></select>
+        </div>
+        <div class="form-group">
+          <label>Aktionen</label>
+          <div style="display: flex; gap: 0.5rem; width: 100%;">
+            <button id="graph-refresh" type="button" style="flex: 1;">Aktualisieren</button>
+            <button id="export-csv" type="button" style="flex: 1; background: rgba(56, 189, 248, 0.1); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.2); box-shadow: none;">CSV Export</button>
+          </div>
+        </div>
       </div>
-      <div class="row">
-        <label for="date-from">Von</label>
-        <input id="date-from" type="datetime-local">
-        <label for="date-to">Bis</label>
-        <input id="date-to" type="datetime-local">
+
+      <div class="grid-2" style="background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1.5rem;">
+        <div class="form-group">
+          <label for="date-from">Von (Startzeitpunkt)</label>
+          <input id="date-from" type="datetime-local">
+        </div>
+        <div class="form-group">
+          <label for="date-to">Bis (Endzeitpunkt)</label>
+          <input id="date-to" type="datetime-local">
+        </div>
       </div>
-      <canvas id="readings-chart" class="readings-chart" width="900" height="260"></canvas>
-      <div class="row">
-        <label for="auto-refresh">Auto</label>
-        <input id="auto-refresh" type="checkbox">
-        <label for="auto-refresh-sec">Sekunden</label>
-        <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
+
+      <canvas id="readings-chart" class="readings-chart" width="900" height="300"></canvas>
+      
+      <div style="display: flex; align-items: center; justify-content: flex-end; gap: 1.5rem; background: rgba(255,255,255,0.02); padding: 0.75rem 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.04); margin-bottom: 1rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <input id="auto-refresh" type="checkbox" style="width: auto; cursor: pointer;">
+          <label for="auto-refresh" style="margin-bottom: 0; cursor: pointer;">Auto-Refresh aktivieren</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <label for="auto-refresh-sec" style="margin-bottom: 0;">Intervall (Sekunden):</label>
+          <input id="auto-refresh-sec" type="number" min="2" max="300" value="10" style="width: 80px; padding: 0.4rem 0.6rem;">
+        </div>
+      </div>
+      <div class="grid-2" style="gap: 1rem; background: rgba(255,255,255,0.02); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 1.5rem;">
+        <div>
+          <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--accent);">Alarm-Schwellen</h3>
+          <div class="form-group">
+            <label for="threshold-min">Min. Schwelle</label>
+            <input id="threshold-min" type="number" step="any" placeholder="z. B. 10.0">
+          </div>
+          <div class="form-group">
+            <label for="threshold-max">Max. Schwelle</label>
+            <input id="threshold-max" type="number" step="any" placeholder="z. B. 25.0">
+          </div>
+          <button id="threshold-save" type="button" style="width: 100%;">Schwellen speichern</button>
+        </div>
+        <div>
+          <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--accent);">Alarmstatus</h3>
+          <div id="threshold-status" style="padding: 1rem; border-radius: 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); min-height: 124px; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--text-muted);">
+            Noch keine Grenzwerte gesetzt.
+          </div>
+        </div>
       </div>
     </section>
 
+    <!-- Readings Logs Section -->
     <section>
-      <h2>Letzte Messwerte</h2>
-      <div class="row">
-        <button id="readings-refresh" type="button">Aktualisieren</button>
-        <button id="delete-readings" type="button">Messwerte löschen</button>
-        <span id="readings-status"></span>
+      <h2>Echtzeit Messwerte-Log</h2>
+      <p style="margin-bottom: 1.5rem; font-size: 0.9rem;">Protokoll der letzten Sensoreingänge des ausgewählten Objekts.</p>
+      
+      <div style="display: flex; gap: 0.5rem; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="readings-refresh" type="button">Aktualisieren</button>
+          <button id="delete-readings" type="button" class="obj-delete">Datenbank leeren</button>
+        </div>
+        <span id="readings-status" style="font-weight: 600;"></span>
       </div>
+      
       <ul id="readings-list" class="readings-list"></ul>
     </section>
   </main>
@@ -118,5 +222,3 @@
   <script src="/pages/hydroponic/hydroponic.js"></script>
 </body>
 </html>
-
-
