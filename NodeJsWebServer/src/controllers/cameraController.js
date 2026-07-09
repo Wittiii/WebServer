@@ -40,6 +40,7 @@ function collectCameraTopics(topicBase) {
     .filter(([topic]) => topic.startsWith(prefix))
     .map(([topic, data]) => ({
       topic,
+      suffix: topic.slice(prefix.length),
       value: data.lastMessage,
       timestamp: data.timestamp,
     }))
@@ -47,7 +48,7 @@ function collectCameraTopics(topicBase) {
 }
 
 function getLatestTopicValue(entries, suffix) {
-  const match = entries.find((entry) => entry.topic.endsWith(`/${suffix}`));
+  const match = entries.find((entry) => entry.suffix === suffix);
   return match ? match.value : "";
 }
 
