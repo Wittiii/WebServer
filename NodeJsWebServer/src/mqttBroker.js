@@ -8,6 +8,7 @@ const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
 const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
 const USER = process.env.MQTT_USER;
 const PASS = process.env.MQTT_PASS;
+const DEFAULT_CLIENT_STALE_MS = Math.max(15000, Number(process.env.MQTT_CLIENT_STALE_MS || 120000));
 
 // Auth: nur wenn USER/PASS gesetzt
 aedes.authenticate = (client, username, password, done) => {
@@ -99,18 +100,91 @@ function storeReading(topic, payload) {
 const clients = new Map();
 const topics = new Map();
 
+function getKeepaliveMs(client) {
+  const value = Number(client?._keepaliveInterval || 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function touchClient(client, patch = {}) {
+  if (!client?.id) return;
+  const entry = clients.get(client.id) || {};
+  clients.set(client.id, {
+    ...entry,
+    id: client.id,
+    connected: patch.connected ?? true,
+    last: Date.now(),
+    keepaliveMs: patch.keepaliveMs ?? entry.keepaliveMs ?? getKeepaliveMs(client),
+    lastTopic: patch.lastTopic ?? entry.lastTopic ?? null,
+    disconnectReason: patch.disconnectReason ?? entry.disconnectReason ?? null
+  });
+}
+
+function markClientDisconnected(client, reason = null) {
+  if (!client?.id) return;
+  const entry = clients.get(client.id) || {};
+  clients.set(client.id, {
+    ...entry,
+    id: client.id,
+    connected: false,
+    last: Date.now(),
+    disconnectReason: reason || entry.disconnectReason || null
+  });
+}
+
+function isClientConnected(data, now = Date.now()) {
+  if (!data?.connected) return false;
+
+  const last = Number(data.last || 0);
+  if (!Number.isFinite(last) || last <= 0) return false;
+
+  const keepaliveMs = Number(data.keepaliveMs || 0);
+  const staleMs = keepaliveMs > 0
+    ? keepaliveMs + 10000
+    : DEFAULT_CLIENT_STALE_MS;
+
+  return now - last <= staleMs;
+}
+
+function getClientSnapshot(id) {
+  const entry = clients.get(id);
+  if (!entry) return null;
+
+  return {
+    id,
+    connected: isClientConnected(entry),
+    last: entry.last || null,
+    lastTopic: entry.lastTopic || null,
+    keepaliveMs: entry.keepaliveMs || 0,
+    disconnectReason: entry.disconnectReason || null
+  };
+}
+
+function listClientSnapshots() {
+  return [...clients.keys()].map((id) => getClientSnapshot(id)).filter(Boolean);
+}
+
 aedes.on('client', (c) => {
-  clients.set(c.id, { connected: true, last: Date.now() });
+  touchClient(c, { connected: true, keepaliveMs: getKeepaliveMs(c), disconnectReason: null });
   console.log('[MQTT] client connected', c.id);
 });
+aedes.on('clientReady', (c) => {
+  touchClient(c, { connected: true, keepaliveMs: getKeepaliveMs(c), disconnectReason: null });
+  console.log('[MQTT] client ready', c.id);
+});
 aedes.on('clientDisconnect', (c) => {
-  const entry = clients.get(c.id) || {};
-  clients.set(c.id, { ...entry, connected: false, last: Date.now() });
+  markClientDisconnected(c, 'disconnect');
   console.log('[MQTT] client disconnected', c.id);
+});
+aedes.on('keepaliveTimeout', (c) => {
+  markClientDisconnected(c, 'keepalive_timeout');
+  console.log('[MQTT] client keepalive timeout', c.id);
+});
+aedes.on('ping', (_packet, c) => {
+  touchClient(c, { connected: true, disconnectReason: null });
 });
 aedes.on('publish', (p, c) => {
   if (c) {
-    clients.set(c.id, { connected: true, last: Date.now(), lastTopic: p.topic });
+    touchClient(c, { connected: true, lastTopic: p.topic, disconnectReason: null });
     console.log(`[MQTT] ${c.id} -> ${p.topic}: ${p.payload.toString()}`);
   }
   const payloadStr = p.payload.toString();
@@ -138,4 +212,4 @@ function publish(topic, payload, opts = {}) {
   });
 }
 
-module.exports = { clients, publish, topics };
+module.exports = { clients, publish, topics, getClientSnapshot, listClientSnapshots, isClientConnected };

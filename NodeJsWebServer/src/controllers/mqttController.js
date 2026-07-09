@@ -1,13 +1,8 @@
-const { clients, publish, topics } = require('../mqttBroker');
+const { listClientSnapshots, publish, topics } = require('../mqttBroker');
 const db = require('../database/db');
 
 function getClients(req, res) {
-  const list = [...clients.entries()].map(([id, data]) => ({
-    id,
-    connected: data.connected,
-    last: data.last,
-    lastTopic: data.lastTopic || null
-  }));
+  const list = listClientSnapshots();
   res.json(list);
 }
 

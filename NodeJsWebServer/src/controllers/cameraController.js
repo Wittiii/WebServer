@@ -1,6 +1,6 @@
 const path = require("path");
 
-const { clients, publish, topics } = require("../mqttBroker");
+const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
 
 function getCameraPage(req, res) {
@@ -58,7 +58,7 @@ function buildCameraOverview(config) {
   const rtspUrlValue = getLatestTopicValue(statusTopics, "rtsp_url");
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
 
-  const mqttClient = clients.get(config.mqttClientId) || null;
+  const mqttClient = getClientSnapshot(config.mqttClientId);
   const streamConfig = parseJson(configValue);
 
   return {
