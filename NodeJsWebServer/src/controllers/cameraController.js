@@ -2,6 +2,7 @@ const path = require("path");
 
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
+const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
 
 function getCameraPage(req, res) {
   const filePath = path.join(__dirname, "..", "..", "public", "pages", "camera", "camera.html");
@@ -60,6 +61,7 @@ function buildCameraOverview(config) {
 
   const mqttClient = getClientSnapshot(config.mqttClientId);
   const streamConfig = parseJson(configValue);
+  const bridge = config.kind === "esp32" ? getEsp32BridgeSnapshot(config.cameraId) : null;
 
   return {
     cameraId: config.cameraId,
@@ -79,8 +81,10 @@ function buildCameraOverview(config) {
       mediaHost: config.mediaHost,
       urls: config.urls,
       currentConfig: streamConfig,
+      sourceRtspUrl: rtspUrlValue || "",
     },
     mediamtx: config.mediaMTX,
+    bridge,
     status: {
       online: parseBoolean(onlineValue),
       state: stateValue || "unknown",

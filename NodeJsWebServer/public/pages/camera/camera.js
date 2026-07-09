@@ -19,6 +19,9 @@ const heroStreamingEl = document.getElementById("camera-hero-streaming");
 
 let overviewState = null;
 let activeCameraId = null;
+let settingsDraftState = { cameraId: null, dirty: false, values: {} };
+const pendingCameraSettings = new Map();
+const CAMERA_CONFIG_PENDING_MS = 30000;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -32,6 +35,23 @@ function escapeHtml(value) {
 function formatTimestamp(value) {
   if (!value) return "-";
   return new Date(value).toLocaleString();
+}
+
+function normalizeFieldValue(value, field = {}) {
+  if (field.type === "checkbox") {
+    return Boolean(value);
+  }
+
+  if (value == null || value === "") {
+    return "";
+  }
+
+  if (field.type === "number" || field.type === "select") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : String(value).trim();
+  }
+
+  return String(value).trim();
 }
 
 function setStatusLine(element, text, isError = false) {
@@ -48,6 +68,116 @@ function getActiveCamera() {
   const cameras = getCameras();
   if (!cameras.length) return null;
   return cameras.find((camera) => camera.cameraId === activeCameraId) || cameras[0];
+}
+
+function getFieldByKey(camera, key) {
+  return (camera?.controls?.fields || []).find((field) => field.key === key) || null;
+}
+
+function getReportedFieldValue(camera, field) {
+  const config = camera?.stream?.currentConfig || {};
+  if (Object.prototype.hasOwnProperty.call(config, field.key)) {
+    return config[field.key];
+  }
+
+  if (field.type === "select" && Array.isArray(field.options)) {
+    const namedValue = config[`${field.key}_name`];
+    if (namedValue != null) {
+      const option = field.options.find(
+        (entry) => String(entry.label).trim().toLowerCase() === String(namedValue).trim().toLowerCase()
+      );
+      if (option) return option.value;
+    }
+  }
+
+  return "";
+}
+
+function resetSettingsDraft(cameraId = null) {
+  settingsDraftState = { cameraId, dirty: false, values: {} };
+}
+
+function captureSettingsDraft() {
+  const camera = getActiveCamera();
+  if (!settingsForm || !camera) return;
+
+  const values = {};
+  for (const field of camera.controls?.fields || []) {
+    const input = settingsForm.elements.namedItem(field.key);
+    if (!input) continue;
+    values[field.key] = field.type === "checkbox" ? Boolean(input.checked) : input.value;
+  }
+
+  settingsDraftState = {
+    cameraId: camera.cameraId,
+    dirty: true,
+    values,
+  };
+}
+
+function setPendingCameraSettings(cameraId, settings) {
+  if (!cameraId || !settings || typeof settings !== "object") return;
+  pendingCameraSettings.set(cameraId, {
+    settings: { ...settings },
+    requestedAt: Date.now(),
+  });
+}
+
+function cameraConfigMatchesPending(camera, pendingEntry) {
+  if (!camera || !pendingEntry?.settings) return true;
+
+  return Object.entries(pendingEntry.settings).every(([key, expectedValue]) => {
+    const field = getFieldByKey(camera, key) || { key, type: typeof expectedValue === "boolean" ? "checkbox" : "number" };
+    const actualValue = getReportedFieldValue(camera, field);
+    return normalizeFieldValue(actualValue, field) === normalizeFieldValue(expectedValue, field);
+  });
+}
+
+function applyPendingSettingsToCamera(camera) {
+  const pendingEntry = pendingCameraSettings.get(camera?.cameraId);
+  if (!pendingEntry) return camera;
+
+  const expired = Date.now() - pendingEntry.requestedAt > CAMERA_CONFIG_PENDING_MS;
+  if (expired || cameraConfigMatchesPending(camera, pendingEntry)) {
+    pendingCameraSettings.delete(camera.cameraId);
+    return camera;
+  }
+
+  return {
+    ...camera,
+    stream: {
+      ...camera.stream,
+      currentConfig: {
+        ...(camera.stream?.currentConfig || {}),
+        ...pendingEntry.settings,
+      },
+    },
+  };
+}
+
+function applyPendingSettingsToOverview(overview) {
+  if (!overview || !Array.isArray(overview.cameras)) return overview;
+
+  return {
+    ...overview,
+    cameras: overview.cameras.map((camera) => applyPendingSettingsToCamera({
+      ...camera,
+      mqtt: { ...(camera.mqtt || {}) },
+      stream: {
+        ...(camera.stream || {}),
+        urls: { ...(camera.stream?.urls || {}) },
+        currentConfig: { ...(camera.stream?.currentConfig || {}) },
+      },
+      status: {
+        ...(camera.status || {}),
+        recentTopics: Array.isArray(camera.status?.recentTopics) ? camera.status.recentTopics.slice() : [],
+      },
+    })),
+  };
+}
+
+function setOverviewState(nextOverview) {
+  overviewState = applyPendingSettingsToOverview(nextOverview);
 }
 
 function getStateColor(camera) {
@@ -126,7 +256,8 @@ function renderPicker() {
   pickerEl.querySelectorAll("[data-camera-id]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCameraId = button.dataset.cameraId;
-      renderActiveCamera();
+      resetSettingsDraft(activeCameraId);
+      renderActiveCamera({ forceSettings: true });
     });
   });
 }
@@ -135,6 +266,7 @@ function renderState(camera) {
   if (!stateCardEl || !camera) return;
 
   const config = camera.stream.currentConfig || {};
+  const bridge = camera.bridge || null;
   const stateBadge =
     camera.status.online === true && (camera.status.state === "streaming" || camera.status.state === "running" || camera.status.state === "ready")
       ? "status-online"
@@ -166,9 +298,11 @@ function renderState(camera) {
       <div><strong>RTSP Quelle</strong><span>${escapeHtml(camera.status.rtspUrl || "-")}</span></div>
       <div><strong>MQTT zuletzt</strong><span>${escapeHtml(camera.mqtt.lastTopic || "-")}</span></div>
       <div><strong>Clients</strong><span>${escapeHtml(camera.status.clients || "-")}</span></div>
+      <div><strong>Bridge Status</strong><span>${escapeHtml(bridge?.state || "-")}</span></div>
+      <div><strong>Bridge PID</strong><span>${escapeHtml(bridge?.pid || "-")}</span></div>
     </div>
     <div class="camera-error-box ${camera.status.error ? "camera-error-active" : ""}">
-      ${escapeHtml(camera.status.error || camera.status.lastStatus || "Kein gemeldeter Fehler.")}
+      ${escapeHtml(camera.status.error || bridge?.lastError || bridge?.lastMessage || camera.status.lastStatus || "Kein gemeldeter Fehler.")}
     </div>
   `;
 }
@@ -205,6 +339,8 @@ function renderTargets(camera) {
     ["RTSP", urls.rtsp],
     ["MediaMTX API", urls.apiBase || "deaktiviert"],
     ["Direkte Kamera RTSP", camera.status.rtspUrl || "-"],
+    ["Bridge Ziel RTSP", camera.bridge?.destinationRtspUrl || "-"],
+    ["Bridge Status", camera.bridge?.state || "-"],
   ];
 
   targetsEl.innerHTML = rows
@@ -240,22 +376,31 @@ function renderStream(camera) {
   if (streamHintEl) {
     streamHintEl.textContent =
       camera.kind === "esp32"
-        ? "ESP32-CAM liefert direkt RTSP und wird von MediaMTX im LAN uebernommen. Falls das IFrame leer bleibt, WebRTC oder HLS direkt oeffnen."
+        ? "ESP32-CAM liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen."
         : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
   }
 }
 
 function fieldCurrentValue(camera, field) {
-  const config = camera.stream.currentConfig || {};
-  if (Object.prototype.hasOwnProperty.call(config, field.key)) {
-    return config[field.key];
+  if (
+    settingsDraftState.dirty &&
+    settingsDraftState.cameraId === camera.cameraId &&
+    Object.prototype.hasOwnProperty.call(settingsDraftState.values, field.key)
+  ) {
+    return settingsDraftState.values[field.key];
   }
-  return "";
+
+  return getReportedFieldValue(camera, field);
 }
 
-function renderSettingsForm(camera) {
+function renderSettingsForm(camera, { force = false } = {}) {
   if (!settingsForm || !camera) return;
+  if (settingsForm.dataset.cameraId === camera.cameraId && settingsDraftState.dirty && !force) {
+    return;
+  }
+
   const fields = camera.controls?.fields || [];
+  settingsForm.dataset.cameraId = camera.cameraId;
 
   settingsForm.innerHTML = fields
     .map((field) => {
@@ -342,7 +487,7 @@ function readSettingsFromForm(camera) {
   return settings;
 }
 
-function renderActiveCamera() {
+function renderActiveCamera(options = {}) {
   renderHeroSummary();
   renderSummaryCards();
   renderPicker();
@@ -355,7 +500,7 @@ function renderActiveCamera() {
   renderTopics(activeCamera);
   renderTargets(activeCamera);
   renderStream(activeCamera);
-  renderSettingsForm(activeCamera);
+  renderSettingsForm(activeCamera, { force: Boolean(options.forceSettings) });
 }
 
 async function loadOverview() {
@@ -364,7 +509,7 @@ async function loadOverview() {
     throw new Error(`HTTP ${response.status}`);
   }
 
-  overviewState = await response.json();
+  setOverviewState(await response.json());
   if (!activeCameraId) {
     activeCameraId = overviewState.primaryCameraId;
   }
@@ -384,7 +529,7 @@ async function sendCommand(cameraId, action, body = {}) {
   if (!response.ok || !data.ok) {
     throw new Error(data.error || `HTTP ${response.status}`);
   }
-  overviewState = data.overview;
+  setOverviewState(data.overview);
   return overviewState;
 }
 
@@ -419,12 +564,23 @@ settingsForm?.addEventListener("submit", async (event) => {
 
   try {
     setStatusLine(settingsStatusEl, `Sende Einstellungen an ${activeCamera.label}...`);
+    setPendingCameraSettings(activeCamera.cameraId, settings);
     await sendCommand(activeCamera.cameraId, "set", { settings });
-    renderActiveCamera();
-    setStatusLine(settingsStatusEl, `${activeCamera.label} Einstellungen uebernommen.`);
+    resetSettingsDraft(activeCamera.cameraId);
+    renderActiveCamera({ forceSettings: true });
+    setStatusLine(settingsStatusEl, `${activeCamera.label} Einstellungen gesendet. Warte auf Rueckmeldung...`);
   } catch (error) {
+    pendingCameraSettings.delete(activeCamera.cameraId);
     setStatusLine(settingsStatusEl, `Parameter konnten nicht gesetzt werden: ${error.message}`, true);
   }
+});
+
+settingsForm?.addEventListener("input", () => {
+  captureSettingsDraft();
+});
+
+settingsForm?.addEventListener("change", () => {
+  captureSettingsDraft();
 });
 
 loadOverview().catch((error) => {
