@@ -1,61 +1,53 @@
-const path = require('path');
-const express = require('express');
-const session = require('express-session');
+const path = require("path");
+const express = require("express");
+const session = require("express-session");
 
-
-require('dotenv').config({ path: path.join(__dirname, 'config', '.env') });
-require('./database/db')
+require("dotenv").config({ path: path.join(__dirname, "config", ".env") });
+require("./database/db");
+const { startAutomationEngine } = require("./services/automationService");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Statische Dateien aus /public bedienen
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
+app.use(express.static(path.join(__dirname, "..", "public")));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-//Session für Admin Login
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {maxAge: 60 * 60 * 1000 } // 1 Stunde
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 60 * 60 * 1000 },
+  })
+);
 
-// Routen mounten
-const authGuard = require('./middlewares/authGuard.js');
-const homeRoutes = require('./routes/home/home');
-app.use('/', homeRoutes);
+const authGuard = require("./middlewares/authGuard.js");
 
-//Dashboard-Route mit AuthGuard schützen
-const dashboardRoutes = require('./routes/dashboard/dashboard.js');
-app.use('/dashboard', authGuard, dashboardRoutes);
+const homeRoutes = require("./routes/home/home");
+const dashboardRoutes = require("./routes/dashboard/dashboard.js");
+const cameraRoutes = require("./routes/camera/camera.js");
+const hydroponicRoutes = require("./routes/Hydroponic/hydroponic.js");
+const authRoutes = require("./routes/auth/auth");
+const objectsRoutes = require("./routes/database/database.js");
+const mqttRoutes = require("./routes/mqtt/mqtt");
+const cameraApiRoutes = require("./routes/camera/cameraApi");
 
-//Hydroponic-Route mit AuthGuard schützen
-const hydroponicRoutes = require('./routes/Hydroponic/hydroponic.js');
-app.use('/hydroponic', authGuard, hydroponicRoutes);
+app.use("/", homeRoutes);
+app.use("/dashboard", authGuard, dashboardRoutes);
+app.use("/camera", authGuard, cameraRoutes);
+app.use("/hydroponic", authGuard, hydroponicRoutes);
+app.use("/login", authRoutes);
 
-//Admin-Login-Route
-const authRoutes = require('./routes/auth/auth');
-app.use('/login', authRoutes);
+app.use("/api/objects", authGuard, objectsRoutes);
+app.use("/api/mqtt", mqttRoutes);
+app.use("/api/camera", cameraApiRoutes);
 
-//Objetcs API Datenbank-Route
-const objectsRoutes = require('./routes/database/database.js');
-app.use('/api/objects',authGuard, objectsRoutes);
-
-//MQTT API Route
-const mqttRoutes = require('./routes/mqtt/mqtt');
-app.use('/api/mqtt', mqttRoutes);
-
-
-// 404-Fallback
 app.use((req, res) => {
-  res.status(404).send('Seite nicht gefunden');
+  res.status(404).send("Seite nicht gefunden");
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server läuft auf Port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server laeuft auf Port ${PORT}`);
 });
 
-
-
+startAutomationEngine();

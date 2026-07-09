@@ -1,151 +1,195 @@
-const btn = document.getElementById('hello-btn');
-const messages = document.getElementById('messages');
+const btn = document.getElementById("hello-btn");
+const messages = document.getElementById("messages");
+const clockEl = document.getElementById("clock");
 
-btn?.addEventListener('click', () => {
-  const p = document.createElement('p');
-  p.textContent = 'Hallo! Schön, dass du klickst.';
-  messages.appendChild(p);
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getSectionContentHost(section) {
+  return section?.querySelector(":scope > .section-body") || section;
+}
+
+btn?.addEventListener("click", () => {
+  const target = getSectionContentHost(messages);
+  if (!target) return;
+
+  const item = document.createElement("p");
+  item.textContent = `Systemgruss um ${new Date().toLocaleTimeString()}: Bedienung bestaetigt.`;
+  target.appendChild(item);
 });
 
-
-const clockEl = document.getElementById('clock');
-
 function updateClock() {
+  if (!clockEl) return;
   const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  if (clockEl) clockEl.textContent = timeStr;
+  const pad = (n) => String(n).padStart(2, "0");
+  clockEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 }
 
 updateClock();
 setInterval(updateClock, 1000);
 
-
-(async function loadNavbar() {
-  const host = document.getElementById('navbar');
-  if (!host) return;
-
-  const html = await fetch('/pages/navbar.html').then((res) => res.text());
-  host.innerHTML = html;
-
-  const status = await fetch('/login/status').then((res) => res.json());
-  const navLinks = host.querySelector('.nav-links');
-
-  if (status.loggedIn) {
-    navLinks.innerHTML = `
-      <li><a href="/">Home</a></li>
-      <li><a href="/dashboard">Dashboard</a></li>
-      <li><a href="/hydroponic">Hydroponik</a></li>
-      <li class="logout">
-        <form method="post" action="/login/logout">
-          <button type="submit">Logout</button>
-        </form>
-      </li>`;
-  } else {
-    navLinks.innerHTML = `
-      <li><a href="/">Home</a></li>
-      <li><a href="/login">Login</a></li>`;
+function buildNavItems(loggedIn) {
+  if (loggedIn) {
+    return [
+      '<li><a href="/">Home</a></li>',
+      '<li><a href="/dashboard">Dashboard</a></li>',
+      '<li><a href="/camera">Kamera</a></li>',
+      '<li><a href="/hydroponic">Hydroponik</a></li>',
+      '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Logout</button></form></li>',
+    ].join("");
   }
 
-  const navbar = host.querySelector('.navbar');
-  if (navbar) {
-    const toggle = document.createElement('button');
-    toggle.className = 'navbar-toggle';
-    toggle.type = 'button';
+  return [
+    '<li><a href="/">Home</a></li>',
+    '<li><a href="/login">Login</a></li>',
+  ].join("");
+}
+
+function markActiveNav(navLinks) {
+  const current = window.location.pathname.replace(/\/$/, "") || "/";
+  navLinks.querySelectorAll("a").forEach((link) => {
+    const href = (link.getAttribute("href") || "").replace(/\/$/, "") || "/";
+    const active = href === "/" ? current === "/" : current.startsWith(href);
+    if (active) {
+      link.classList.add("is-active");
+      link.setAttribute("aria-current", "page");
+    }
+  });
+}
+
+(async function loadNavbar() {
+  const host = document.getElementById("navbar");
+  if (!host) return;
+
+  try {
+    const html = await fetch("/pages/navbar.html").then((res) => {
+      if (!res.ok) throw new Error("navbar");
+      return res.text();
+    });
+    host.innerHTML = html;
+
+    let loggedIn = false;
+    try {
+      const status = await fetch("/login/status").then((res) => res.json());
+      loggedIn = !!status.loggedIn;
+    } catch {}
+
+    const navbar = host.querySelector(".navbar");
+    const navLinks = host.querySelector(".nav-links");
+    if (!navbar || !navLinks) return;
+
+    navLinks.innerHTML = buildNavItems(loggedIn);
+    markActiveNav(navLinks);
+
+    const toggle = document.createElement("button");
+    toggle.className = "navbar-toggle";
+    toggle.type = "button";
     toggle.innerHTML = '<span class="nav-toggle-icon"></span>';
     navbar.appendChild(toggle);
 
-    toggle.addEventListener('click', () => {
-      navLinks.classList.toggle('open');
+    toggle.addEventListener("click", () => {
+      navLinks.classList.toggle("open");
     });
 
-    window.addEventListener('click', (event) => {
-      if (!navbar.contains(event.target) && navLinks.classList.contains('open')) {
-        navLinks.classList.remove('open');
+    navLinks.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => navLinks.classList.remove("open"));
+    });
+
+    window.addEventListener("click", (event) => {
+      if (!navbar.contains(event.target)) {
+        navLinks.classList.remove("open");
       }
     });
+  } catch {
+    host.innerHTML = "";
   }
-
-  navLinks.querySelectorAll('a').forEach((link) => {
-    link.addEventListener('click', () => {
-      if (navLinks.classList.contains('open')) {
-        navLinks.classList.remove('open');
-      }
-    });
-  });
 
   await initBrokerOverview();
 })();
 
 async function initBrokerOverview() {
-  const summaryEl = document.getElementById('broker-summary');
+  const summaryEl = document.getElementById("broker-summary");
   if (!summaryEl) return;
 
   try {
     const [clients, topics] = await Promise.all([
-      fetch('/api/mqtt/clients').then((r) => r.json()),
-      fetch('/api/mqtt/topics').then((r) => r.json())
+      fetch("/api/mqtt/clients").then((r) => r.json()),
+      fetch("/api/mqtt/topics").then((r) => r.json()),
     ]);
 
     const onlineCount = Array.isArray(clients) ? clients.filter((c) => c.connected).length : 0;
     const topicCount = Array.isArray(topics) ? topics.length : 0;
-    const lastTopic = Array.isArray(topics) && topics.length ? topics[0].topic : 'Noch keine Nachrichten';
+    const lastTopic = Array.isArray(topics) && topics.length ? topics[0].topic : "Noch keine Nachrichten";
 
-    summaryEl.innerHTML = `
-      <div class="stats-card">
-        <h3>Broker</h3>
-        <div class="stats-val">${onlineCount > 0 ? 'ONLINE' : 'KEIN CLIENT'}</div>
-        <p>${onlineCount} aktive Clients</p>
-      </div>
-      <div class="stats-card">
-        <h3>Topics</h3>
-        <div class="stats-val">${topicCount}</div>
-        <p>Neuester Kanal: ${lastTopic}</p>
-      </div>
-    `;
-  } catch (err) {
-    summaryEl.innerHTML = '<div class="error-msg">MQTT-Status konnte nicht geladen werden.</div>';
+    summaryEl.innerHTML = [
+      `<div class="stats-card"><h3>Broker</h3><div class="stats-val">${onlineCount > 0 ? "ONLINE" : "WARTET"}</div><p>${onlineCount} aktive Clients</p></div>`,
+      `<div class="stats-card"><h3>Topics</h3><div class="stats-val">${topicCount}</div><p>${escapeHtml(lastTopic)}</p></div>`,
+    ].join("");
+  } catch {
+    summaryEl.innerHTML = '<div class="error-msg">MQTT Status konnte nicht geladen werden.</div>';
   }
 }
 
-// Collapsible sections
 (function setupSectionToggles() {
-  const sections = document.querySelectorAll('section');
-  sections.forEach((section, index) => {
-    const heading = section.querySelector('h2, h3');
-    if (!heading || section.querySelector(':scope > .section-header')) return;
+  const pageKey = (window.location.pathname || "/").replace(/[^\w-]+/g, "_");
 
-    section.classList.add('collapsible-section');
+  document.querySelectorAll("section").forEach((section, index) => {
+    if (section.dataset.collapsibleReady === "true") return;
 
-    const header = document.createElement('div');
-    header.className = 'section-header';
+    const heading = section.querySelector("h2, h3");
+    if (!heading) return;
 
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'section-toggle';
-    toggle.setAttribute('aria-expanded', 'true');
+    section.dataset.collapsibleReady = "true";
+    section.classList.add("collapsible-section");
 
-    const headingParent = heading.parentNode;
-    headingParent.insertBefore(header, heading);
-    header.appendChild(heading);
+    const originalTag = heading.tagName.toLowerCase();
+    const title = document.createElement(originalTag);
+    title.textContent = heading.textContent.trim();
+    title.className = heading.className;
+
+    heading.remove();
+
+    const body = document.createElement("div");
+    body.className = "section-body";
+
+    while (section.firstChild) {
+      body.appendChild(section.firstChild);
+    }
+
+    const header = document.createElement("div");
+    header.className = "section-header";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "section-toggle";
+
+    header.appendChild(title);
     header.appendChild(toggle);
+    section.appendChild(header);
+    section.appendChild(body);
 
-    const storageKey = `section-${section.id || index}-collapsed`;
-    const setCollapsed = (collapsed) => {
-      section.classList.toggle('collapsed', collapsed);
-      toggle.textContent = collapsed ? 'Einblenden' : 'Ausblenden';
-      toggle.setAttribute('aria-expanded', String(!collapsed));
+    const storageKey = `${pageKey}-section-${section.id || index}-collapsed`;
+    const applyState = (collapsed) => {
+      section.classList.toggle("collapsed", collapsed);
+      body.hidden = collapsed;
+      toggle.textContent = collapsed ? "Einblenden" : "Ausblenden";
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      localStorage.setItem(storageKey, String(collapsed));
     };
 
-    setCollapsed(localStorage.getItem(storageKey) === 'true');
+    const stored = localStorage.getItem(storageKey);
+    const prefersOpenByDefault = section.id === "dashboard-quick-board";
+    const initialCollapsed = stored === null ? !prefersOpenByDefault : stored === "true";
+    applyState(initialCollapsed);
 
-    toggle.addEventListener('click', () => {
-      const collapsed = !section.classList.contains('collapsed');
-      setCollapsed(collapsed);
-      localStorage.setItem(storageKey, String(collapsed));
+    toggle.addEventListener("click", () => {
+      applyState(!section.classList.contains("collapsed"));
     });
   });
 })();
-
-
-

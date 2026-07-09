@@ -3,45 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart IoT - Web Control Server</title>
+  <title>Operations Deck - Smart IoT</title>
   <link rel="stylesheet" href="/pages/style.css">
 </head>
-<body>
+<body class="theme-operations page-home">
   <div id="navbar"></div>
-  
+
   <header class="hero">
-    <h1>Smart IoT Node Server</h1>
-    <p>Willkommen auf Ihrer zentralen Verwaltungsplattform für IoT-Geräte und Sensor-Überwachung</p>
-    <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; align-items: center;">
-      <button id="hello-btn">Sag Hallo 👋</button>
-      <div style="background: rgba(255,255,255,0.06); padding: 0.6rem 1.2rem; border-radius: 0.75rem; border: 1px solid rgba(255,255,255,0.1); font-size: 0.95rem;">
-        🕒 Aktuelle Zeit: <span id="clock"></span>
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <h1>Operations Deck</h1>
+        <div class="hero-actions">
+          <a class="btn" href="/dashboard">Dashboard oeffnen</a>
+          <a class="btn btn-secondary" href="/hydroponic">Hydroponik</a>
+          <div class="clock-pill">Systemzeit <span id="clock"></span></div>
+        </div>
       </div>
+    </div>
+    <div class="container badge-strip">
+      <span class="status-badge status-online"><span class="pulse-online"></span>MQTT Broker</span>
+      <span class="status-badge status-online"><span class="pulse-online"></span>SQLite Logging</span>
+      <span class="status-badge status-online"><span class="pulse-online"></span>Geschuetzter Zugriff</span>
     </div>
   </header>
 
-  <main class="container" style="max-width: 800px;">
-    
-    <section>
-      <h2>Über dieses System</h2>
-      <p style="margin-bottom: 1rem;">
-        Diese Plattform kombiniert einen vollwertigen, lokalen <strong>MQTT-Broker (Aedes)</strong> mit einer interaktiven Web-Steuerung und einer automatischen Daten-Logging-Datenbank (SQLite).
-      </p>
-      <p style="margin-bottom: 1rem;">
-        Sie können Sensordaten abrufen, Aktionen per MQTT-Befehle triggern und zeitliche Verläufe als interaktive Diagramme ausgeben. Schützen Sie Ihren Zugang über das Administrations-Login.
-      </p>
-      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.5rem;">
-        <span class="status-badge status-online" style="font-size: 0.8rem;"><span class="pulse-online"></span>Aedes Broker</span>
-        <span class="status-badge status-online" style="font-size: 0.8rem;"><span class="pulse-online"></span>SQLite Logger</span>
-        <span class="status-badge status-online" style="font-size: 0.8rem;"><span class="pulse-online"></span>Express APIs</span>
-      </div>
-    </section>
+  <main class="container page-shell">
+    <div id="broker-summary" class="grid-2 summary-grid"></div>
 
-    <section id="messages">
+    <div class="grid-2 feature-grid">
+      <section class="panel">
+        <h2>Schnellzugriff</h2>
+        <div class="action-card-grid">
+          <a class="action-card" href="/dashboard">
+            <strong>Broker Monitor</strong>
+          </a>
+          <a class="action-card" href="/camera">
+            <strong>Kamera Leitstand</strong>
+          </a>
+          <a class="action-card" href="/hydroponic">
+            <strong>Hydroponik Hub</strong>
+          </a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Interaktion</h2>
+        <div class="hero-actions compact-actions">
+          <button id="hello-btn" type="button">Systemgruss anzeigen</button>
+          <a class="btn btn-secondary" href="/login">Zum Login</a>
+        </div>
+      </section>
+    </div>
+
+    <section id="messages" class="panel">
       <h2>System-Nachrichten</h2>
-      <p style="font-size: 0.9rem; margin-bottom: 1rem;">Nachrichten und Antworten des Systems werden hier ausgegeben:</p>
     </section>
-
   </main>
 
   <script src="/pages/main.js"></script>

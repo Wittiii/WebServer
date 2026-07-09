@@ -3,57 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard - Smart IoT</title>
+  <title>Dashboard - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
 </head>
-<body>
-    <div id="navbar"></div>
-    
-    <header class="hero">
-        <h1>IoT Command Center</h1>
-        <p>Live-Überwachung Ihres MQTT-Brokers und Systemstatus</p>
-    </header>
+<body class="theme-operations page-dashboard">
+  <div id="navbar"></div>
 
-    <main class="container">
-      <div id="broker-summary" class="grid-2" style="margin-bottom: 1.5rem;"></div>
-        <!-- Stats Row -->
-        <div class="grid-3" style="margin-bottom: 2rem;">
-            <div class="stats-card">
-                <h3>Broker-Status</h3>
-                <div class="stats-val" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #10b981;">
-                    <span class="pulse-online"></span> ONLINE
-                </div>
-            </div>
-            <div class="stats-card">
-                <h3>Aktive Clients</h3>
-                <div class="stats-val" id="stats-clients-count">0</div>
-            </div>
-            <div class="stats-card">
-                <h3>Erfasste Topics</h3>
-                <div class="stats-val" id="stats-topics-count">0</div>
-            </div>
+  <header class="hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <h1>IoT Dashboard</h1>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page-shell dashboard-shell">
+    <div class="dashboard-main">
+      <div id="broker-summary" class="grid-2 summary-grid"></div>
+
+      <div class="grid-3">
+        <div class="stats-card">
+          <h3>Broker Status</h3>
+          <div class="stats-val"><span class="pulse-online"></span>ONLINE</div>
         </div>
+        <div class="stats-card">
+          <h3>Aktive Clients</h3>
+          <div class="stats-val" id="stats-clients-count">0</div>
+        </div>
+        <div class="stats-card">
+          <h3>Erfasste Topics</h3>
+          <div class="stats-val" id="stats-topics-count">0</div>
+        </div>
+      </div>
 
-        <section id="mqtt-clients">
-            <h2>Verbundene MQTT-Clients</h2>
-            <p style="margin-bottom: 1rem;">Aktive TCP und WebSocket Verbindungen zum lokalen Broker</p>
-            <ul id="client-list" class="readings-list"></ul>
-        </section>  
-
-        <section id="mqtt-topics">
-            <h2>Verbundene MQTT-Topics</h2>
-            <p style="margin-bottom: 1rem;">Zuletzt empfangene Nachrichten auf den abonnierten Kanälen</p>
-            <ul id="topic-list" class="readings-list"></ul>
+      <div class="grid-2 dashboard-columns">
+        <section id="mqtt-clients" class="panel">
+          <h2>MQTT Clients</h2>
+          <ul id="client-list" class="readings-list"></ul>
         </section>
 
-        <section>
-            <h2>Trenddiagramm</h2>
-            <p style="margin-bottom: 1rem;">Aktive Clients und Topics im zeitlichen Verlauf</p>
-            <canvas id="dashboard-trend-chart" width="900" height="260" class="readings-chart"></canvas>
+        <section id="mqtt-topics" class="panel">
+          <h2>MQTT Topics</h2>
+          <ul id="topic-list" class="readings-list"></ul>
         </section>
-    </main>
+      </div>
 
-    <script src="/pages/main.js"></script>
-    <script src="/pages/dashboard/dashboard.js"></script>
+      <section id="dashboard-trend" class="panel">
+        <h2>Trenddiagramm</h2>
+        <canvas id="dashboard-trend-chart" width="900" height="260" class="readings-chart"></canvas>
+      </section>
+    </div>
+
+    <aside class="dashboard-rail">
+      <section id="dashboard-quick-board" class="panel">
+        <h2>Schnellzugriff</h2>
+        <ul id="quick-widget-list" class="quick-widget-list"></ul>
+      </section>
+
+      <section id="dashboard-quick-builder" class="panel">
+        <h2>Karte anlegen</h2>
+        <form id="quick-widget-form" class="quick-builder-form">
+          <div class="form-group">
+            <label for="quick-widget-type">Typ</label>
+            <select id="quick-widget-type">
+              <option value="value">Letzten Wert anzeigen</option>
+              <option value="command">Befehl senden</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="quick-widget-object">Objekt</label>
+            <select id="quick-widget-object"></select>
+          </div>
+
+          <div class="form-group">
+            <label for="quick-widget-detail" id="quick-widget-detail-label">Messwert</label>
+            <select id="quick-widget-detail"></select>
+          </div>
+
+          <div class="form-group">
+            <label for="quick-widget-title">Eigener Titel</label>
+            <input id="quick-widget-title" type="text" placeholder="Optional">
+          </div>
+
+          <div class="inline-actions">
+            <button id="quick-widget-save" type="submit">Speichern</button>
+            <button id="quick-widget-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
+          </div>
+        </form>
+
+        <p id="quick-widget-status" class="status-line"></p>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/pages/main.js"></script>
+  <script src="/pages/dashboard/dashboard.js"></script>
 </body>
 </html>

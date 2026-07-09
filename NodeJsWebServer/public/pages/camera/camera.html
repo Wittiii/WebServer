@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kamera - Operations Deck</title>
+  <link rel="stylesheet" href="/pages/style.css">
+</head>
+<body class="theme-operations page-camera">
+  <div id="navbar"></div>
+
+  <header class="hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <h1>Kamera Leitstand</h1>
+        <p class="hero-text">
+          Getrennter Bereich fuer Raspberry Pi Kamera und ESP32-CAM. Beide Quellen laufen ueber MediaMTX,
+          werden per MQTT gesteuert und koennen hier separat beobachtet und bedient werden.
+        </p>
+      </div>
+      <div class="hero-side">
+        <div class="info-card">
+          <strong>Quellen</strong>
+          <span id="camera-hero-count">-</span>
+        </div>
+        <div class="info-card">
+          <strong>Online</strong>
+          <span id="camera-hero-online">-</span>
+        </div>
+        <div class="info-card">
+          <strong>Streaming</strong>
+          <span id="camera-hero-streaming">-</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page-shell">
+    <section class="panel">
+      <div class="section-header">
+        <h2>Kamera Auswahl</h2>
+      </div>
+      <div id="camera-summary" class="grid-2 camera-summary-grid"></div>
+      <div id="camera-picker" class="camera-picker"></div>
+    </section>
+
+    <section class="panel">
+      <div class="camera-stream-header">
+        <div>
+          <h2 id="camera-active-title">Live Stream</h2>
+          <p id="camera-active-subtitle" class="camera-muted-line"></p>
+        </div>
+        <div class="camera-link-row">
+          <a id="camera-open-webrtc" class="btn camera-link-btn" target="_blank" rel="noreferrer">WebRTC</a>
+          <a id="camera-open-hls" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">HLS</a>
+          <a id="camera-open-rtsp" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">RTSP</a>
+        </div>
+      </div>
+      <div class="camera-stream-shell">
+        <iframe id="camera-stream-frame" class="camera-stream-frame" title="MediaMTX Stream"></iframe>
+      </div>
+      <p id="camera-stream-hint" class="camera-muted-line"></p>
+    </section>
+
+    <div class="grid-2 dashboard-columns">
+      <section class="panel">
+        <h2>Kamera Befehle</h2>
+        <div class="camera-action-grid">
+          <button type="button" data-camera-action="start">Stream starten</button>
+          <button type="button" data-camera-action="stop">Stream stoppen</button>
+          <button type="button" data-camera-action="restart">Neu starten</button>
+          <button type="button" data-camera-action="ping">Ping senden</button>
+        </div>
+        <p id="camera-command-status" class="status-line"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Aktueller Zustand</h2>
+        <div id="camera-state-card" class="camera-state-card"></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Steuerung</h2>
+      <form id="camera-settings-form" class="camera-settings-grid"></form>
+      <p id="camera-settings-status" class="status-line"></p>
+    </section>
+
+    <div class="grid-2 dashboard-columns">
+      <section class="panel">
+        <h2>Letzte Status Topics</h2>
+        <ul id="camera-topic-log" class="readings-list"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Stream Ziele</h2>
+        <div id="camera-targets" class="camera-target-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/pages/main.js"></script>
+  <script src="/pages/camera/camera.js"></script>
+</body>
+</html>

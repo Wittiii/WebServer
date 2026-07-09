@@ -12,7 +12,12 @@ const {
   updateValueKey,
   listTopicCommands,
   updateTopicCommands,
-  listTopics
+  listTopics,
+  listAutomationRules,
+  createAutomationRule,
+  updateAutomationRule,
+  deleteAutomationRule,
+  testAutomationRule
 } = require('../../controllers/objectsController.js');
 
 const router = Router();
@@ -30,5 +35,10 @@ router.delete('/:id/keys/:keyId', deleteValueKey);
 router.get('/:id/commands', listTopicCommands);
 router.put('/:id/commands', updateTopicCommands);
 router.get('/:id/topics', listTopics);
+router.get('/:id/automations', listAutomationRules);
+router.post('/:id/automations', createAutomationRule);
+router.put('/:id/automations/:ruleId', updateAutomationRule);
+router.delete('/:id/automations/:ruleId', deleteAutomationRule);
+router.post('/:id/automations/:ruleId/test', testAutomationRule);
 
 module.exports = router;

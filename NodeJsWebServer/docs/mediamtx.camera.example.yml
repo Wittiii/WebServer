@@ -1,0 +1,18 @@
+rtsp: true
+rtspAddress: :8554
+
+hls: true
+hlsAddress: :8888
+hlsAlwaysRemux: true
+
+webrtc: true
+webrtcAddress: :8889
+
+api: true
+apiAddress: :9997
+
+
+
+
+paths:
+  pi-zero-01: {}

@@ -155,6 +155,33 @@ const readingsRefresh = document.getElementById('readings-refresh');
 const deleteReadingsBtn = document.getElementById('delete-readings');
 const readingsStatus = document.getElementById('readings-status');
 const readingsList = document.getElementById('readings-list');
+const automationForm = document.getElementById('automation-form');
+const automationIdInput = document.getElementById('automation-id');
+const automationNameInput = document.getElementById('automation-name');
+const automationTriggerType = document.getElementById('automation-trigger-type');
+const automationEnabled = document.getElementById('automation-enabled');
+const automationValueFields = document.getElementById('automation-value-fields');
+const automationKeySelect = document.getElementById('automation-key');
+const automationOperator = document.getElementById('automation-operator');
+const automationCompareInput = document.getElementById('automation-compare');
+const automationHysteresisInput = document.getElementById('automation-hysteresis');
+const automationTimeFields = document.getElementById('automation-time-fields');
+const automationTimeInput = document.getElementById('automation-time');
+const automationWeekdayInputs = Array.from(document.querySelectorAll('input[name="automation-weekday"]'));
+const automationWindowStartInput = document.getElementById('automation-window-start');
+const automationWindowEndInput = document.getElementById('automation-window-end');
+const automationCooldownInput = document.getElementById('automation-cooldown');
+const automationActionType = document.getElementById('automation-action-type');
+const automationCommandFields = document.getElementById('automation-command-fields');
+const automationCommandSelect = document.getElementById('automation-command');
+const automationCustomFields = document.getElementById('automation-custom-fields');
+const automationTopicInput = document.getElementById('automation-topic');
+const automationPayloadInput = document.getElementById('automation-payload');
+const automationActionAdd = document.getElementById('automation-action-add');
+const automationActionList = document.getElementById('automation-action-list');
+const automationCancel = document.getElementById('automation-cancel');
+const automationStatus = document.getElementById('automation-status');
+const automationList = document.getElementById('automation-list');
 
 let objectsCache = [];
 let keysCache = [];
@@ -169,6 +196,18 @@ const GRAPH_TAIL = GRAPH_LIMIT;
 let currentCommands = [];
 let topicsCache = [];
 let editingCommandIndex = null;
+let automationRulesCache = [];
+let automationDraftActions = [];
+const AUTOMATION_WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const AUTOMATION_WEEKDAY_LABELS = {
+  0: 'So',
+  1: 'Mo',
+  2: 'Di',
+  3: 'Mi',
+  4: 'Do',
+  5: 'Fr',
+  6: 'Sa'
+};
 
 function setObjectStatus(text, isError = false) {
   if (!objectStatus) return;
@@ -186,6 +225,12 @@ function setReadingsStatus(text, isError = false) {
   if (!readingsStatus) return;
   readingsStatus.textContent = text;
   readingsStatus.style.color = isError ? 'crimson' : 'green';
+}
+
+function setAutomationStatus(text, isError = false) {
+  if (!automationStatus) return;
+  automationStatus.textContent = text;
+  automationStatus.style.color = isError ? 'crimson' : 'green';
 }
 
 function getThresholdKey() {
@@ -803,6 +848,7 @@ async function loadKeys(preserveSelection = true) {
     keysCache = [];
     renderKeyList([]);
     renderKeySelect([], '');
+    renderAutomationKeyOptions('');
     drawChart([]);
     setKeyFormMode(false);
     return;
@@ -822,6 +868,7 @@ async function loadKeys(preserveSelection = true) {
     if (keySelect && nextKey) keySelect.value = nextKey;
 
     setKeyFormMode(false);
+    renderAutomationKeyOptions();
     await loadReadings();
   } catch (err) {
     if (keyList) keyList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
@@ -909,6 +956,242 @@ function renderCommands(commands) {
   }).join('');
 }
 
+function renderAutomationKeyOptions(selectedValue = '') {
+  if (!automationKeySelect) return;
+  if (!keysCache.length) {
+    automationKeySelect.innerHTML = '<option value="">Keine Keys definiert</option>';
+    return;
+  }
+
+  automationKeySelect.innerHTML = keysCache.map((key) => {
+    const selected = key.value_key === selectedValue ? 'selected' : '';
+    const label = key.label ? ` (${key.label})` : '';
+    const unit = key.unit ? ` [${key.unit}]` : '';
+    return `<option value="${escapeHtml(key.value_key)}" ${selected}>${escapeHtml(key.value_key + label + unit)}</option>`;
+  }).join('');
+}
+
+function renderAutomationCommandOptions(selectedRule = null) {
+  if (!automationCommandSelect) return;
+  if (!currentCommands.length) {
+    automationCommandSelect.innerHTML = '<option value="">Keine Befehle definiert</option>';
+    return;
+  }
+
+  automationCommandSelect.innerHTML = currentCommands.map((command, index) => {
+    const isSelected = selectedRule &&
+      selectedRule.actionType === 'command' &&
+      command.label === selectedRule.actionLabel &&
+      command.topic === selectedRule.actionTopic &&
+      command.payload === selectedRule.actionPayload;
+    const selected = isSelected ? 'selected' : '';
+    return `
+      <option
+        value="${index}"
+        data-label="${escapeHtml(command.label)}"
+        data-topic="${escapeHtml(command.topic)}"
+        data-payload="${escapeHtml(command.payload)}"
+        ${selected}
+      >
+        ${escapeHtml(command.label)}
+      </option>
+    `;
+  }).join('');
+}
+
+function cloneAutomationAction(action) {
+  return {
+    actionType: action?.actionType === 'command' ? 'command' : 'custom',
+    actionLabel: String(action?.actionLabel ?? '').trim(),
+    actionTopic: String(action?.actionTopic ?? '').trim(),
+    actionPayload: String(action?.actionPayload ?? '')
+  };
+}
+
+function normalizeAutomationWeekdays(input) {
+  if (!Array.isArray(input)) return [];
+  return Array.from(new Set(
+    input
+      .map((entry) => Number(entry))
+      .filter((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 6)
+  )).sort((a, b) => a - b);
+}
+
+function getSelectedAutomationWeekdays() {
+  return normalizeAutomationWeekdays(
+    automationWeekdayInputs
+      .filter((input) => input.checked)
+      .map((input) => Number(input.value))
+  );
+}
+
+function setSelectedAutomationWeekdays(weekdays = AUTOMATION_WEEKDAY_ORDER) {
+  const normalized = normalizeAutomationWeekdays(weekdays);
+  const selected = new Set(normalized.length ? normalized : AUTOMATION_WEEKDAY_ORDER);
+  automationWeekdayInputs.forEach((input) => {
+    input.checked = selected.has(Number(input.value));
+  });
+}
+
+function buildAutomationWeekdayText(weekdays) {
+  const normalized = normalizeAutomationWeekdays(weekdays);
+  if (!normalized.length || normalized.length === 7) {
+    return 'Taeglich';
+  }
+
+  return AUTOMATION_WEEKDAY_ORDER
+    .filter((day) => normalized.includes(day))
+    .map((day) => AUTOMATION_WEEKDAY_LABELS[day])
+    .join(', ');
+}
+
+function renderAutomationDraftActions() {
+  if (!automationActionList) return;
+
+  if (!automationDraftActions.length) {
+    automationActionList.innerHTML = '<li>Keine Aktionen hinzugefuegt</li>';
+    return;
+  }
+
+  automationActionList.innerHTML = automationDraftActions.map((action, index) => {
+    const label = action.actionLabel || (action.actionType === 'command' ? 'Befehl' : 'Eigene Aktion');
+    const topic = action.actionTopic ? ` -> ${action.actionTopic}` : '';
+    return `
+      <li data-index="${index}">
+        <div class="cmd-meta" style="display:grid; gap:0.5rem; min-width:0;">
+          <span class="cmd-label">${escapeHtml(label)}</span>
+          <span class="cmd-payload">${escapeHtml(topic)}</span>
+          <span class="cmd-payload">${escapeHtml(action.actionPayload || '')}</span>
+        </div>
+        <button class="cmd-delete" type="button" data-action="delete-draft-action">Loeschen</button>
+      </li>
+    `;
+  }).join('');
+}
+
+function syncAutomationFieldVisibility() {
+  const triggerType = automationTriggerType?.value || 'value';
+  const actionType = automationActionType?.value || 'command';
+
+  if (automationValueFields) automationValueFields.hidden = triggerType !== 'value';
+  if (automationTimeFields) automationTimeFields.hidden = triggerType !== 'time';
+  if (automationCommandFields) automationCommandFields.hidden = actionType !== 'command';
+  if (automationCustomFields) automationCustomFields.hidden = actionType !== 'custom';
+}
+
+function resetAutomationForm() {
+  if (!automationForm) return;
+  automationForm.reset();
+  if (automationIdInput) automationIdInput.value = '';
+  if (automationEnabled) automationEnabled.checked = true;
+  if (automationTriggerType) automationTriggerType.value = 'value';
+  if (automationActionType) automationActionType.value = 'command';
+  if (automationCooldownInput) automationCooldownInput.value = '0';
+  if (automationHysteresisInput) automationHysteresisInput.value = '';
+  if (automationWindowStartInput) automationWindowStartInput.value = '';
+  if (automationWindowEndInput) automationWindowEndInput.value = '';
+  setSelectedAutomationWeekdays();
+  automationDraftActions = [];
+  renderAutomationKeyOptions('');
+  renderAutomationCommandOptions();
+  renderAutomationDraftActions();
+  syncAutomationFieldVisibility();
+}
+
+function buildAutomationTriggerText(rule) {
+  if (rule.triggerType === 'time') {
+    return `Um ${rule.scheduleTime}`;
+  }
+  return `Wenn ${rule.valueKey} ${rule.operator} ${rule.compareValue}`;
+}
+
+function buildAutomationActionText(rule) {
+  const actions = Array.isArray(rule.actions) ? rule.actions : [];
+  if (!actions.length) return 'Keine Aktion';
+  if (actions.length === 1) {
+    const first = actions[0];
+    const label = first.actionLabel ? first.actionLabel : 'Eigener MQTT-Befehl';
+    return `${label} -> ${first.actionTopic}`;
+  }
+  return `${actions.length} Aktionen`;
+}
+
+function buildAutomationScheduleText(rule) {
+  const parts = [];
+  const weekdaysText = buildAutomationWeekdayText(rule.weekdays);
+  if (weekdaysText !== 'Taeglich') {
+    parts.push(weekdaysText);
+  }
+  if (rule.windowStart && rule.windowEnd) {
+    parts.push(`${rule.windowStart}-${rule.windowEnd}`);
+  }
+  return parts.join(' | ');
+}
+
+function renderAutomationRules(list) {
+  if (!automationList) return;
+
+  if (!Array.isArray(list) || list.length === 0) {
+    automationList.innerHTML = '<li>Keine Automatisierungen angelegt</li>';
+    return;
+  }
+
+  automationList.innerHTML = list.map((rule) => {
+    const stateLabel = rule.enabled ? 'Aktiv' : 'Pausiert';
+    const stateClass = rule.enabled ? 'status-online' : 'status-offline';
+    const lastFired = rule.lastFiredAt ? ` | Zuletzt: ${new Date(rule.lastFiredAt).toLocaleString()}` : '';
+    const extras = [];
+    if (Number(rule.cooldownSeconds) > 0) extras.push(`Cooldown ${rule.cooldownSeconds}s`);
+    if (rule.hysteresisValue !== '' && rule.hysteresisValue != null) extras.push(`Hysterese ${rule.hysteresisValue}`);
+    const scheduleText = buildAutomationScheduleText(rule);
+    if (scheduleText) extras.push(scheduleText);
+    const extraText = extras.length ? ` | ${extras.join(' | ')}` : '';
+    return `
+      <li data-id="${rule.id}">
+        <div class="cmd-meta" style="display:grid; gap:0.5rem; min-width:0;">
+          <span class="cmd-label">${escapeHtml(rule.name)}</span>
+          <span class="cmd-payload">${escapeHtml(buildAutomationTriggerText(rule))}</span>
+          <span class="cmd-payload">${escapeHtml(buildAutomationActionText(rule) + extraText + lastFired)}</span>
+        </div>
+        <button class="cmd-send ${stateClass}" type="button" data-action="toggle">${stateLabel}</button>
+        <div class="cmd-action-group" style="display:flex; gap:0.5rem; min-width:0; justify-content:flex-end;">
+          <button class="key-edit" type="button" data-action="test">Test</button>
+          <button class="cmd-edit" type="button" data-action="edit">Bearbeiten</button>
+          <button class="cmd-delete" type="button" data-action="delete">Loeschen</button>
+        </div>
+      </li>
+    `;
+  }).join('');
+}
+
+function setAutomationFormMode(rule = null) {
+  if (!rule) {
+    resetAutomationForm();
+    return;
+  }
+
+  if (automationIdInput) automationIdInput.value = String(rule.id);
+  if (automationNameInput) automationNameInput.value = rule.name || '';
+  if (automationTriggerType) automationTriggerType.value = rule.triggerType || 'value';
+  if (automationEnabled) automationEnabled.checked = Boolean(rule.enabled);
+  if (automationCooldownInput) automationCooldownInput.value = String(rule.cooldownSeconds || 0);
+  if (automationHysteresisInput) automationHysteresisInput.value = rule.hysteresisValue ?? '';
+  if (automationWindowStartInput) automationWindowStartInput.value = rule.windowStart || '';
+  if (automationWindowEndInput) automationWindowEndInput.value = rule.windowEnd || '';
+  setSelectedAutomationWeekdays(rule.weekdays);
+  if (automationActionType) automationActionType.value = 'command';
+  renderAutomationKeyOptions(rule.valueKey || '');
+  renderAutomationCommandOptions();
+  if (automationOperator) automationOperator.value = rule.operator || '>';
+  if (automationCompareInput) automationCompareInput.value = rule.compareValue || '';
+  if (automationTimeInput) automationTimeInput.value = rule.scheduleTime || '';
+  if (automationTopicInput) automationTopicInput.value = '';
+  if (automationPayloadInput) automationPayloadInput.value = '';
+  automationDraftActions = Array.isArray(rule.actions) ? rule.actions.map(cloneAutomationAction) : [];
+  renderAutomationDraftActions();
+  syncAutomationFieldVisibility();
+}
+
 function setCommandFormMode(editing, command = null) {
   if (!commandAdd) return;
   if (editing && command) {
@@ -958,6 +1241,7 @@ async function loadObjects(preserveSelection = true) {
 
     renderSelectedObject();
     await loadKeys();
+    await loadAutomations();
     populateThresholdInputs();
     loadHydroponicBrokerSummary();
   } catch (err) {
@@ -1045,6 +1329,68 @@ async function saveTopicCommands(objectId, commands) {
   return data;
 }
 
+async function fetchAutomationRules(objectId) {
+  const res = await fetch(`/api/objects/${objectId}/automations`);
+  const data = await res.json().catch(() => ([]));
+  if (!res.ok) throw new Error(data.error || 'Automatisierungen laden fehlgeschlagen');
+  return Array.isArray(data) ? data : [];
+}
+
+async function saveAutomationRule(objectId, payload, ruleId = null) {
+  const url = ruleId
+    ? `/api/objects/${objectId}/automations/${ruleId}`
+    : `/api/objects/${objectId}/automations`;
+  const method = ruleId ? 'PUT' : 'POST';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Automatisierung speichern fehlgeschlagen');
+  return data;
+}
+
+async function deleteAutomationRuleForObject(objectId, ruleId) {
+  const res = await fetch(`/api/objects/${objectId}/automations/${ruleId}`, {
+    method: 'DELETE'
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Automatisierung loeschen fehlgeschlagen');
+  return data;
+}
+
+async function testAutomationRuleForObject(objectId, ruleId) {
+  const res = await fetch(`/api/objects/${objectId}/automations/${ruleId}/test`, {
+    method: 'POST'
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Automatisierung testen fehlgeschlagen');
+  return data;
+}
+
+async function loadAutomations() {
+  const obj = getSelectedObject();
+  if (!obj) {
+    automationRulesCache = [];
+    renderAutomationRules([]);
+    resetAutomationForm();
+    return;
+  }
+
+  try {
+    const list = await fetchAutomationRules(obj.id);
+    automationRulesCache = list;
+    renderAutomationRules(list);
+    renderAutomationKeyOptions('');
+    renderAutomationCommandOptions();
+    syncAutomationFieldVisibility();
+  } catch (err) {
+    automationRulesCache = [];
+    if (automationList) automationList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
+  }
+}
+
 async function loadTopicCommands() {
   const obj = getSelectedObject();
   if (!obj) return;
@@ -1053,9 +1399,11 @@ async function loadTopicCommands() {
     const data = await fetchTopicCommands(obj.id);
     currentCommands = Array.isArray(data.commands) ? data.commands : [];
     renderCommands(currentCommands);
+    renderAutomationCommandOptions();
   } catch (err) {
     currentCommands = [];
     renderCommands([]);
+    renderAutomationCommandOptions();
   }
 }
 
@@ -1118,8 +1466,10 @@ objectList?.addEventListener('click', async (e) => {
 // Objekt-Auswahl
 objectSelect?.addEventListener('change', () => {
   setConfigStatus('');
+  setAutomationStatus('');
   renderSelectedObject();
   loadKeys(false);
+  loadAutomations();
   populateThresholdInputs();
   loadHydroponicBrokerSummary();
 });
@@ -1260,6 +1610,7 @@ keyForm?.addEventListener('submit', async (e) => {
     }
     setKeyFormMode(false);
     await loadKeys(false);
+    await loadAutomations();
   } catch (err) {
     setConfigStatus(`Fehler: ${err.message || err}`, true);
   } finally {
@@ -1269,6 +1620,182 @@ keyForm?.addEventListener('submit', async (e) => {
 
 keyCancel?.addEventListener('click', () => {
   setKeyFormMode(false);
+});
+
+automationTriggerType?.addEventListener('change', () => {
+  syncAutomationFieldVisibility();
+});
+
+automationActionType?.addEventListener('change', () => {
+  syncAutomationFieldVisibility();
+});
+
+automationActionAdd?.addEventListener('click', () => {
+  const actionType = automationActionType?.value || 'command';
+
+  if (actionType === 'command') {
+    const selected = automationCommandSelect?.selectedOptions?.[0];
+    if (!selected || !selected.value) {
+      setAutomationStatus('Bitte zuerst einen Befehl waehlen.', true);
+      return;
+    }
+    automationDraftActions.push({
+      actionType: 'command',
+      actionLabel: selected.dataset.label || selected.textContent.trim(),
+      actionTopic: selected.dataset.topic || '',
+      actionPayload: selected.dataset.payload || ''
+    });
+  } else {
+    const topic = (automationTopicInput?.value || '').trim();
+    const payload = automationPayloadInput?.value || '';
+    if (!topic) {
+      setAutomationStatus('Bitte ein Topic fuer die Aktion angeben.', true);
+      return;
+    }
+    automationDraftActions.push({
+      actionType: 'custom',
+      actionLabel: 'Eigener MQTT-Befehl',
+      actionTopic: topic,
+      actionPayload: payload
+    });
+    if (automationTopicInput) automationTopicInput.value = '';
+    if (automationPayloadInput) automationPayloadInput.value = '';
+  }
+
+  setAutomationStatus('');
+  renderAutomationDraftActions();
+});
+
+automationCancel?.addEventListener('click', () => {
+  resetAutomationForm();
+  setAutomationStatus('');
+});
+
+automationForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const obj = getSelectedObject();
+  if (!obj) return;
+
+  const triggerType = automationTriggerType?.value || 'value';
+  const ruleId = Number(automationIdInput?.value);
+  const isEdit = Number.isFinite(ruleId) && ruleId > 0;
+  const payload = {
+    name: (automationNameInput?.value || '').trim(),
+    enabled: Boolean(automationEnabled?.checked),
+    triggerType,
+    valueKey: triggerType === 'value' ? (automationKeySelect?.value || '').trim() : '',
+    operator: triggerType === 'value' ? (automationOperator?.value || '').trim() : '',
+    compareValue: triggerType === 'value' ? (automationCompareInput?.value || '').trim() : '',
+    scheduleTime: triggerType === 'time' ? (automationTimeInput?.value || '').trim() : '',
+    weekdays: getSelectedAutomationWeekdays(),
+    windowStart: (automationWindowStartInput?.value || '').trim(),
+    windowEnd: (automationWindowEndInput?.value || '').trim(),
+    cooldownSeconds: (automationCooldownInput?.value || '0').trim(),
+    hysteresisValue: triggerType === 'value' ? (automationHysteresisInput?.value || '').trim() : '',
+    actions: automationDraftActions.map(cloneAutomationAction)
+  };
+
+  if (!payload.name) {
+    setAutomationStatus('Name fehlt.', true);
+    return;
+  }
+
+  if (!payload.actions.length) {
+    setAutomationStatus('Bitte mindestens eine Aktion hinzufuegen.', true);
+    return;
+  }
+
+  if (!payload.weekdays.length) {
+    setAutomationStatus('Bitte mindestens einen Wochentag auswaehlen.', true);
+    return;
+  }
+
+  if ((payload.windowStart && !payload.windowEnd) || (!payload.windowStart && payload.windowEnd)) {
+    setAutomationStatus('Bitte Start und Ende fuer das Zeitfenster angeben.', true);
+    return;
+  }
+
+  setAutomationStatus(isEdit ? 'Speichere Regel ...' : 'Lege Regel an ...');
+  try {
+    await saveAutomationRule(obj.id, payload, isEdit ? ruleId : null);
+    setAutomationStatus(isEdit ? 'Regel gespeichert.' : 'Regel angelegt.');
+    resetAutomationForm();
+    await loadAutomations();
+  } catch (err) {
+    setAutomationStatus(`Fehler: ${err.message || err}`, true);
+  }
+});
+
+automationList?.addEventListener('click', async (e) => {
+  const button = e.target?.closest('button[data-action]');
+  if (!button) return;
+
+  const obj = getSelectedObject();
+  if (!obj) return;
+
+  const li = button.closest('li');
+  const ruleId = Number(li?.getAttribute('data-id'));
+  if (!Number.isFinite(ruleId)) return;
+
+  const rule = automationRulesCache.find((entry) => Number(entry.id) === ruleId);
+  if (!rule) return;
+
+  const action = button.dataset.action;
+  if (action === 'edit') {
+    setAutomationFormMode(rule);
+    setAutomationStatus('');
+    return;
+  }
+
+  if (action === 'toggle') {
+    try {
+      await saveAutomationRule(obj.id, { ...rule, enabled: !rule.enabled }, rule.id);
+      await loadAutomations();
+      setAutomationStatus(rule.enabled ? 'Regel pausiert.' : 'Regel aktiviert.');
+    } catch (err) {
+      setAutomationStatus(`Fehler: ${err.message || err}`, true);
+    }
+    return;
+  }
+
+  if (action === 'test') {
+    button.disabled = true;
+    try {
+      const result = await testAutomationRuleForObject(obj.id, rule.id);
+      const failedText = Number(result.failedCount) > 0 ? `, ${result.failedCount} fehlgeschlagen` : '';
+      setAutomationStatus(`Test gesendet: ${result.sentCount} Aktion(en)${failedText}.`);
+    } catch (err) {
+      setAutomationStatus(`Fehler: ${err.message || err}`, true);
+    } finally {
+      button.disabled = false;
+    }
+    return;
+  }
+
+  if (action === 'delete') {
+    try {
+      await deleteAutomationRuleForObject(obj.id, rule.id);
+      if (Number(automationIdInput?.value) === rule.id) {
+        resetAutomationForm();
+      }
+      await loadAutomations();
+      setAutomationStatus('Regel geloescht.');
+    } catch (err) {
+      setAutomationStatus(`Fehler: ${err.message || err}`, true);
+    }
+  }
+});
+
+automationActionList?.addEventListener('click', (e) => {
+  const button = e.target?.closest('button[data-action="delete-draft-action"]');
+  if (!button) return;
+
+  const li = button.closest('li');
+  const index = Number(li?.getAttribute('data-index'));
+  if (!Number.isFinite(index)) return;
+
+  automationDraftActions = automationDraftActions.filter((_, i) => i !== index);
+  renderAutomationDraftActions();
 });
 
 keyList?.addEventListener('click', async (e) => {
@@ -1297,6 +1824,7 @@ keyList?.addEventListener('click', async (e) => {
       await deleteValueKeyForObject(obj.id, keyId);
       setConfigStatus('Key gelöscht.');
       await loadKeys();
+      await loadAutomations();
     } catch (err) {
       setConfigStatus(`Fehler: ${err.message || err}`, true);
     } finally {
@@ -1340,8 +1868,10 @@ commandForm?.addEventListener('submit', async (e) => {
     await saveTopicCommands(obj.id, nextCommands);
     currentCommands = nextCommands;
     renderCommands(currentCommands);
+    renderAutomationCommandOptions();
     setConfigStatus(editingCommandIndex !== null ? 'Befehl aktualisiert.' : 'Befehl hinzugefügt.');
     setCommandFormMode(false);
+    await loadAutomations();
   } catch (err) {
     setConfigStatus(`Fehler: ${err.message || err}`, true);
   } finally {
@@ -1399,10 +1929,12 @@ commandList?.addEventListener('click', async (e) => {
       await saveTopicCommands(obj.id, nextCommands);
       currentCommands = nextCommands;
       renderCommands(currentCommands);
+      renderAutomationCommandOptions();
       setConfigStatus('Gelöscht.');
       if (editingCommandIndex === idx) {
         setCommandFormMode(false);
       }
+      await loadAutomations();
     } catch (err) {
       setConfigStatus(`Fehler: ${err.message || err}`, true);
     } finally {
@@ -1415,6 +1947,6 @@ commandCancel?.addEventListener('click', () => {
   setCommandFormMode(false);
 });
 
+resetAutomationForm();
 loadObjects();
 setupAutoRefresh();
-
