@@ -55,6 +55,9 @@ function buildCameraOverview(config) {
   const configValue = getLatestTopicValue(statusTopics, "config");
   const pongValue = getLatestTopicValue(statusTopics, "pong");
   const clientsValue = getLatestTopicValue(statusTopics, "clients");
+  const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
+  const directStreamingClientsValue = getLatestTopicValue(statusTopics, "direct_streaming_clients");
+  const frameFpsValue = getLatestTopicValue(statusTopics, "frame_fps");
   const ipValue = getLatestTopicValue(statusTopics, "ip");
   const rtspUrlValue = getLatestTopicValue(statusTopics, "rtsp_url");
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
@@ -91,6 +94,9 @@ function buildCameraOverview(config) {
       error: errorValue || "",
       pong: pongValue || "",
       clients: clientsValue || "",
+      directSessions: directSessionsValue || "",
+      directStreamingClients: directStreamingClientsValue || "",
+      frameFps: frameFpsValue || "",
       ip: ipValue || "",
       rtspUrl: rtspUrlValue || config.urls.rtsp,
       lastStatus: lastStatusValue || "",

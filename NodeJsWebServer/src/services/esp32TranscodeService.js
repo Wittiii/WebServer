@@ -84,39 +84,59 @@ function getBridgeDestinationUrl(camera) {
   return `rtsp://${getInternalRtspHost()}:${getInternalRtspPort()}/${camera.streamPath}`;
 }
 
-function getBridgeArgs(sourceRtspUrl, destinationRtspUrl) {
+function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}) {
+  const detectedSourceFps = toNumber(sourceConfig.stream_fps, 0);
+  const outputFps = toNumber(process.env.ESP32_TRANSCODE_OUTPUT_FPS, 0) || detectedSourceFps;
+  const gopSize = toNumber(process.env.ESP32_TRANSCODE_GOP, 0) || (outputFps > 0 ? outputFps * 2 : 24);
+  const crf = toNumber(process.env.ESP32_TRANSCODE_CRF, 23);
+  const bitrate = String(process.env.ESP32_TRANSCODE_BITRATE || "").trim();
+
   const args = [
     "-nostdin",
     "-hide_banner",
     "-loglevel",
     process.env.ESP32_TRANSCODE_LOGLEVEL || "warning",
-    "-rtsp_transport",
-    process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
+    "-use_wallclock_as_timestamps",
+    "1",
     "-fflags",
-    "+genpts+nobuffer",
+    "+genpts+nobuffer+discardcorrupt",
     "-flags",
     "low_delay",
+    "-analyzeduration",
+    "0",
+    "-probesize",
+    "32768",
+    "-rtsp_transport",
+    process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
     "-i",
     sourceRtspUrl,
     "-an",
     "-c:v",
     process.env.ESP32_TRANSCODE_CODEC || "libx264",
     "-preset",
-    process.env.ESP32_TRANSCODE_PRESET || "ultrafast",
+    process.env.ESP32_TRANSCODE_PRESET || "superfast",
     "-tune",
     process.env.ESP32_TRANSCODE_TUNE || "zerolatency",
     "-pix_fmt",
     process.env.ESP32_TRANSCODE_PIXEL_FORMAT || "yuv420p",
+    "-profile:v",
+    process.env.ESP32_TRANSCODE_PROFILE || "baseline",
+    "-bf",
+    "0",
+    "-crf",
+    String(crf),
   ];
 
-  const outputFps = toNumber(process.env.ESP32_TRANSCODE_OUTPUT_FPS, 0);
   if (outputFps > 0) {
     args.push("-r", String(outputFps));
   }
 
-  const gopSize = toNumber(process.env.ESP32_TRANSCODE_GOP, 0);
   if (gopSize > 0) {
     args.push("-g", String(gopSize));
+  }
+
+  if (bitrate) {
+    args.push("-b:v", bitrate);
   }
 
   args.push(
@@ -196,7 +216,8 @@ function stopBridgeProcess(bridge, reason) {
 
 function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   const ffmpegPath = getFfmpegPath();
-  const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl);
+  const sourceConfig = parseJson(getCameraTopicValue(camera, "config")) || {};
+  const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig);
   const signature = JSON.stringify({ sourceRtspUrl, destinationRtspUrl, args });
 
   if (bridge.process && bridge.desiredSignature === signature) {

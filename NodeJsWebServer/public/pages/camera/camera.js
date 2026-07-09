@@ -22,6 +22,7 @@ let activeCameraId = null;
 let settingsDraftState = { cameraId: null, dirty: false, values: {} };
 const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
+let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -123,6 +124,15 @@ function setPendingCameraSettings(cameraId, settings) {
   });
 }
 
+function setSettingsFeedback(cameraId, text, isError = false, durationMs = 8000) {
+  settingsFeedbackState = {
+    cameraId: cameraId || null,
+    text: text || "",
+    isError: Boolean(isError),
+    expiresAt: durationMs > 0 ? Date.now() + durationMs : 0,
+  };
+}
+
 function cameraConfigMatchesPending(camera, pendingEntry) {
   if (!camera || !pendingEntry?.settings) return true;
 
@@ -138,8 +148,15 @@ function applyPendingSettingsToCamera(camera) {
   if (!pendingEntry) return camera;
 
   const expired = Date.now() - pendingEntry.requestedAt > CAMERA_CONFIG_PENDING_MS;
-  if (expired || cameraConfigMatchesPending(camera, pendingEntry)) {
+  if (expired) {
     pendingCameraSettings.delete(camera.cameraId);
+    setSettingsFeedback(camera.cameraId, "Rueckmeldung der Kamera steht noch aus.", true, 10000);
+    return camera;
+  }
+
+  if (cameraConfigMatchesPending(camera, pendingEntry)) {
+    pendingCameraSettings.delete(camera.cameraId);
+    setSettingsFeedback(camera.cameraId, "Einstellungen uebernommen.", false, 6000);
     return camera;
   }
 
@@ -178,6 +195,35 @@ function applyPendingSettingsToOverview(overview) {
 
 function setOverviewState(nextOverview) {
   overviewState = applyPendingSettingsToOverview(nextOverview);
+}
+
+function syncSettingsStatus(camera) {
+  if (!settingsStatusEl) return;
+  if (!camera) {
+    setStatusLine(settingsStatusEl, "");
+    return;
+  }
+
+  const pendingEntry = pendingCameraSettings.get(camera.cameraId);
+  if (pendingEntry) {
+    setStatusLine(settingsStatusEl, `${camera.label} Einstellungen gesendet. Warte auf Rueckmeldung...`);
+    return;
+  }
+
+  if (
+    settingsFeedbackState.cameraId === camera.cameraId &&
+    settingsFeedbackState.text &&
+    (settingsFeedbackState.expiresAt === 0 || settingsFeedbackState.expiresAt > Date.now())
+  ) {
+    setStatusLine(settingsStatusEl, settingsFeedbackState.text, settingsFeedbackState.isError);
+    return;
+  }
+
+  if (settingsFeedbackState.expiresAt && settingsFeedbackState.expiresAt <= Date.now()) {
+    settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
+  }
+
+  setStatusLine(settingsStatusEl, "");
 }
 
 function getStateColor(camera) {
@@ -297,7 +343,9 @@ function renderState(camera) {
       <div><strong>Letzter Ping</strong><span>${escapeHtml(camera.status.pong || "-")}</span></div>
       <div><strong>RTSP Quelle</strong><span>${escapeHtml(camera.status.rtspUrl || "-")}</span></div>
       <div><strong>MQTT zuletzt</strong><span>${escapeHtml(camera.mqtt.lastTopic || "-")}</span></div>
-      <div><strong>Clients</strong><span>${escapeHtml(camera.status.clients || "-")}</span></div>
+      <div><strong>Direkte Sessions</strong><span>${escapeHtml(camera.status.directSessions || camera.status.clients || "-")}</span></div>
+      <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients || camera.status.clients || "-")}</span></div>
+      <div><strong>Quell-FPS</strong><span>${escapeHtml(camera.status.frameFps || "-")}</span></div>
       <div><strong>Bridge Status</strong><span>${escapeHtml(bridge?.state || "-")}</span></div>
       <div><strong>Bridge PID</strong><span>${escapeHtml(bridge?.pid || "-")}</span></div>
     </div>
@@ -501,6 +549,7 @@ function renderActiveCamera(options = {}) {
   renderTargets(activeCamera);
   renderStream(activeCamera);
   renderSettingsForm(activeCamera, { force: Boolean(options.forceSettings) });
+  syncSettingsStatus(activeCamera);
 }
 
 async function loadOverview() {
@@ -565,12 +614,13 @@ settingsForm?.addEventListener("submit", async (event) => {
   try {
     setStatusLine(settingsStatusEl, `Sende Einstellungen an ${activeCamera.label}...`);
     setPendingCameraSettings(activeCamera.cameraId, settings);
+    setSettingsFeedback(activeCamera.cameraId, "", false, 0);
     await sendCommand(activeCamera.cameraId, "set", { settings });
     resetSettingsDraft(activeCamera.cameraId);
     renderActiveCamera({ forceSettings: true });
-    setStatusLine(settingsStatusEl, `${activeCamera.label} Einstellungen gesendet. Warte auf Rueckmeldung...`);
   } catch (error) {
     pendingCameraSettings.delete(activeCamera.cameraId);
+    setSettingsFeedback(activeCamera.cameraId, "", false, 0);
     setStatusLine(settingsStatusEl, `Parameter konnten nicht gesetzt werden: ${error.message}`, true);
   }
 });
