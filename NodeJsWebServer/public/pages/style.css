@@ -724,6 +724,34 @@ section::before {
   color: var(--danger);
 }
 
+.camera-timelapse-video-shell {
+  margin-top: 1rem;
+  border-radius: 1.1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #000;
+  min-height: 18rem;
+}
+
+.camera-timelapse-video {
+  display: block;
+  width: 100%;
+  min-height: 18rem;
+  background: #000;
+}
+
+.camera-timelapse-file-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.camera-timelapse-file-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .readings-chart {
   width: 100%;
   min-height: 18rem;

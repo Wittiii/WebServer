@@ -1,8 +1,16 @@
+const fs = require("fs/promises");
 const path = require("path");
 
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
 const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
+const {
+  buildTimelapseVideo,
+  deleteTimelapseByType,
+  deleteTimelapseFile,
+  listTimelapseFiles,
+  resolveTimelapseFilePath,
+} = require("../services/timelapseService");
 
 function getCameraPage(req, res) {
   const filePath = path.join(__dirname, "..", "..", "public", "pages", "camera", "camera.html");
@@ -58,6 +66,14 @@ function buildCameraOverview(config) {
   const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
   const directStreamingClientsValue = getLatestTopicValue(statusTopics, "direct_streaming_clients");
   const frameFpsValue = getLatestTopicValue(statusTopics, "frame_fps");
+  const timelapseStateValue = getLatestTopicValue(statusTopics, "timelapse/state");
+  const timelapseErrorValue = getLatestTopicValue(statusTopics, "timelapse/error");
+  const timelapseStorageBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_bytes");
+  const timelapseStorageLimitBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_limit_bytes");
+  const timelapseLastImageValue = getLatestTopicValue(statusTopics, "timelapse/last_image");
+  const timelapseOutputDirValue = getLatestTopicValue(statusTopics, "timelapse/output_dir");
+  const timelapseEnabledValue = getLatestTopicValue(statusTopics, "timelapse/enabled");
+  const timelapseIntervalValue = getLatestTopicValue(statusTopics, "timelapse/interval_seconds");
   const ipValue = getLatestTopicValue(statusTopics, "ip");
   const rtspUrlValue = getLatestTopicValue(statusTopics, "rtsp_url");
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
@@ -86,6 +102,18 @@ function buildCameraOverview(config) {
       currentConfig: streamConfig,
       sourceRtspUrl: rtspUrlValue || "",
     },
+    timelapse: config.capabilities.timelapse
+      ? {
+          state: timelapseStateValue || "unknown",
+          error: timelapseErrorValue || "",
+          storageBytes: Number(timelapseStorageBytesValue || 0),
+          storageLimitBytes: Number(timelapseStorageLimitBytesValue || 0),
+          lastImage: timelapseLastImageValue || "",
+          outputDir: timelapseOutputDirValue || "",
+          enabled: parseBoolean(timelapseEnabledValue),
+          intervalSeconds: Number(timelapseIntervalValue || 0),
+        }
+      : null,
     mediamtx: config.mediaMTX,
     bridge,
     status: {
@@ -129,6 +157,109 @@ function getOverview(req, res) {
   res.json(buildOverview(req));
 }
 
+async function getTimelapse(req, res) {
+  const cameraId = String(req.query.cameraId || "");
+  const config = getCameraConfigById(cameraId, req.hostname);
+  if (!config || !config.capabilities.timelapse) {
+    return res.status(400).json({ ok: false, error: "invalid_timelapse_camera" });
+  }
+
+  try {
+    const overview = buildCameraOverview(config);
+    const listing = await listTimelapseFiles(overview);
+    res.json({
+      ok: true,
+      cameraId,
+      timelapse: overview.timelapse,
+      files: listing.safeFiles,
+      latestVideo: listing.latestVideo,
+      latestImage: listing.latestImage,
+      totals: {
+        totalBytes: listing.totalBytes,
+        imageCount: listing.imageFiles.length,
+        videoCount: listing.videoFiles.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
+}
+
+async function buildTimelapse(req, res) {
+  const { cameraId } = req.body || {};
+  const config = getCameraConfigById(cameraId, req.hostname);
+  if (!config || !config.capabilities.timelapse) {
+    return res.status(400).json({ ok: false, error: "invalid_timelapse_camera" });
+  }
+
+  try {
+    const overview = buildCameraOverview(config);
+    await buildTimelapseVideo(overview);
+    const listing = await listTimelapseFiles(overview);
+    res.json({
+      ok: true,
+      latestVideo: listing.latestVideo,
+      totals: {
+        totalBytes: listing.totalBytes,
+        imageCount: listing.imageFiles.length,
+        videoCount: listing.videoFiles.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
+}
+
+async function deleteTimelapse(req, res) {
+  const { cameraId, name, type } = req.body || {};
+  const config = getCameraConfigById(cameraId, req.hostname);
+  if (!config || !config.capabilities.timelapse) {
+    return res.status(400).json({ ok: false, error: "invalid_timelapse_camera" });
+  }
+
+  try {
+    const overview = buildCameraOverview(config);
+    if (name) {
+      await deleteTimelapseFile(overview, name);
+    } else if (type === "video" || type === "image") {
+      await deleteTimelapseByType(overview, type);
+    } else {
+      return res.status(400).json({ ok: false, error: "invalid_delete_target" });
+    }
+
+    const listing = await listTimelapseFiles(overview);
+    res.json({
+      ok: true,
+      latestVideo: listing.latestVideo,
+      totals: {
+        totalBytes: listing.totalBytes,
+        imageCount: listing.imageFiles.length,
+        videoCount: listing.videoFiles.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
+}
+
+async function getTimelapseFile(req, res) {
+  const cameraId = String(req.query.cameraId || "");
+  const name = String(req.query.name || "");
+  const config = getCameraConfigById(cameraId, req.hostname);
+  if (!config || !config.capabilities.timelapse) {
+    return res.status(400).json({ ok: false, error: "invalid_timelapse_camera" });
+  }
+
+  try {
+    const overview = buildCameraOverview(config);
+    const filePath = await resolveTimelapseFilePath(overview, name);
+    await fs.access(filePath);
+    res.sendFile(filePath);
+  } catch (error) {
+    res.status(404).json({ ok: false, error: String(error?.message || error) });
+  }
+}
+
 async function sendCommand(req, res) {
   const { cameraId, action, settings, payload } = req.body || {};
   const config = getCameraConfigById(cameraId, req.hostname);
@@ -166,7 +297,11 @@ async function sendCommand(req, res) {
 }
 
 module.exports = {
+  buildTimelapse,
+  deleteTimelapse,
   getCameraPage,
   getOverview,
+  getTimelapse,
+  getTimelapseFile,
   sendCommand,
 };

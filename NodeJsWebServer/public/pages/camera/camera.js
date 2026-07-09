@@ -16,6 +16,17 @@ const activeSubtitleEl = document.getElementById("camera-active-subtitle");
 const heroCountEl = document.getElementById("camera-hero-count");
 const heroOnlineEl = document.getElementById("camera-hero-online");
 const heroStreamingEl = document.getElementById("camera-hero-streaming");
+const timelapsePanelEl = document.getElementById("timelapse-panel");
+const timelapseToggleEl = document.getElementById("timelapse-toggle");
+const timelapseRefreshEl = document.getElementById("timelapse-refresh");
+const timelapseBuildEl = document.getElementById("timelapse-build");
+const timelapseDeleteVideoEl = document.getElementById("timelapse-delete-video");
+const timelapseDeleteImagesEl = document.getElementById("timelapse-delete-images");
+const timelapseSummaryEl = document.getElementById("timelapse-summary");
+const timelapseStatusEl = document.getElementById("timelapse-status");
+const timelapseFileListEl = document.getElementById("timelapse-file-list");
+const timelapseVideoEl = document.getElementById("timelapse-video");
+const timelapseVideoHintEl = document.getElementById("timelapse-video-hint");
 
 let overviewState = null;
 let activeCameraId = null;
@@ -23,6 +34,7 @@ let settingsDraftState = { cameraId: null, dirty: false, values: {} };
 const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
+let timelapseState = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -36,6 +48,22 @@ function escapeHtml(value) {
 function formatTimestamp(value) {
   if (!value) return "-";
   return new Date(value).toLocaleString();
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 function normalizeFieldValue(value, field = {}) {
@@ -429,6 +457,128 @@ function renderStream(camera) {
   }
 }
 
+function setTimelapsePanelCollapsed(isCollapsed) {
+  if (!timelapsePanelEl || !timelapseToggleEl) return;
+  timelapsePanelEl.classList.toggle("collapsed", isCollapsed);
+  timelapseToggleEl.textContent = isCollapsed ? "Einblenden" : "Ausblenden";
+}
+
+function renderTimelapseData() {
+  if (!timelapsePanelEl || timelapsePanelEl.hidden) return;
+
+  if (!timelapseState) {
+    if (timelapseFileListEl) {
+      timelapseFileListEl.innerHTML = '<li style="justify-content:center; color: var(--muted);">Zeitrafferdaten werden geladen</li>';
+    }
+    if (timelapseVideoHintEl) {
+      timelapseVideoHintEl.textContent = "Noch keine Zeitrafferdaten geladen.";
+    }
+    return;
+  }
+
+  const latestVideo = timelapseState.latestVideo;
+  if (timelapseVideoEl) {
+    if (latestVideo?.url) {
+      if (timelapseVideoEl.dataset.src !== latestVideo.url) {
+        timelapseVideoEl.src = latestVideo.url;
+        timelapseVideoEl.dataset.src = latestVideo.url;
+      }
+    } else {
+      timelapseVideoEl.removeAttribute("src");
+      timelapseVideoEl.dataset.src = "";
+      timelapseVideoEl.load();
+    }
+  }
+
+  if (timelapseVideoHintEl) {
+    timelapseVideoHintEl.textContent = latestVideo
+      ? `Letztes Video: ${latestVideo.name} | ${formatBytes(latestVideo.sizeBytes)} | ${formatTimestamp(latestVideo.modifiedAt)}`
+      : "Noch kein MP4 vorhanden. Erzeuge zuerst ein Video aus den JPEG-Bildern.";
+  }
+
+  if (!timelapseFileListEl) return;
+
+  const files = timelapseState.files || [];
+  if (!files.length) {
+    timelapseFileListEl.innerHTML = '<li style="justify-content:center; color: var(--muted);">Keine Zeitrafferdateien vorhanden</li>';
+    return;
+  }
+
+  timelapseFileListEl.innerHTML = files
+    .map(
+      (file) => `
+        <li class="camera-timelapse-file-row">
+          <div>
+            <strong class="obj-name">${escapeHtml(file.name)}</strong>
+            <div class="obj-date">${escapeHtml(file.type.toUpperCase())} | ${escapeHtml(formatBytes(file.sizeBytes))}</div>
+            <div class="obj-topic">${escapeHtml(formatTimestamp(file.modifiedAt))}</div>
+          </div>
+          <div class="camera-timelapse-file-actions">
+            ${file.type === "video" ? `<a class="btn btn-secondary" href="${escapeHtml(file.url)}" target="_blank" rel="noreferrer">Oeffnen</a>` : ""}
+            <button type="button" class="btn-secondary" data-timelapse-delete="${escapeHtml(file.name)}">Loeschen</button>
+          </div>
+        </li>
+      `
+    )
+    .join("");
+
+  timelapseFileListEl.querySelectorAll("[data-timelapse-delete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const activeCamera = getActiveCamera();
+      if (!activeCamera) return;
+
+      try {
+        setStatusLine(timelapseStatusEl, `Loesche ${button.dataset.timelapseDelete}...`);
+        await postTimelapseDelete({ cameraId: activeCamera.cameraId, name: button.dataset.timelapseDelete });
+        await loadTimelapse(activeCamera.cameraId);
+        renderTimelapseData();
+        setStatusLine(timelapseStatusEl, `${button.dataset.timelapseDelete} geloescht.`);
+      } catch (error) {
+        setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);
+      }
+    });
+  });
+}
+
+function renderTimelapseSection(camera) {
+  if (!timelapsePanelEl) return;
+
+  if (!camera || !camera.capabilities?.timelapse) {
+    timelapsePanelEl.hidden = true;
+    timelapseState = null;
+    return;
+  }
+
+  timelapsePanelEl.hidden = false;
+  if (!timelapseState) {
+    setTimelapsePanelCollapsed(true);
+  }
+
+  if (timelapseSummaryEl) {
+    const timelapse = camera.timelapse || {};
+    const rows = [
+      ["Status", timelapse.state || "-"],
+      ["Intervall", timelapse.intervalSeconds ? `${timelapse.intervalSeconds} s` : "-"],
+      ["Speicher", `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`],
+      ["Ordner", timelapse.outputDir || "-"],
+      ["Letztes Bild", timelapse.lastImage || "-"],
+    ];
+
+    timelapseSummaryEl.innerHTML = rows
+      .map(
+        ([label, value]) => `
+          <div class="camera-target-item">
+            <strong>${escapeHtml(label)}</strong>
+            <span>${escapeHtml(value)}</span>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  renderTimelapseData();
+}
+
 function fieldCurrentValue(camera, field) {
   if (
     settingsDraftState.dirty &&
@@ -550,6 +700,7 @@ function renderActiveCamera(options = {}) {
   renderStream(activeCamera);
   renderSettingsForm(activeCamera, { force: Boolean(options.forceSettings) });
   syncSettingsStatus(activeCamera);
+  renderTimelapseSection(activeCamera);
 }
 
 async function loadOverview() {
@@ -580,6 +731,42 @@ async function sendCommand(cameraId, action, body = {}) {
   }
   setOverviewState(data.overview);
   return overviewState;
+}
+
+async function loadTimelapse(cameraId) {
+  const response = await fetch(`/api/camera/timelapse?cameraId=${encodeURIComponent(cameraId)}`);
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  timelapseState = data;
+  return data;
+}
+
+async function postTimelapseBuild(cameraId) {
+  const response = await fetch("/api/camera/timelapse/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cameraId }),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  return data;
+}
+
+async function postTimelapseDelete(payload) {
+  const response = await fetch("/api/camera/timelapse/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `HTTP ${response.status}`);
+  }
+  return data;
 }
 
 document.querySelectorAll("[data-camera-action]").forEach((button) => {
@@ -635,6 +822,82 @@ settingsForm?.addEventListener("change", () => {
 
 loadOverview().catch((error) => {
   setStatusLine(commandStatusEl, `Kamera-Uebersicht konnte nicht geladen werden: ${error.message}`, true);
+});
+
+timelapseToggleEl?.addEventListener("click", async () => {
+  const wasCollapsed = timelapsePanelEl?.classList.contains("collapsed");
+  setTimelapsePanelCollapsed(!wasCollapsed);
+
+  const activeCamera = getActiveCamera();
+  if (!wasCollapsed || !activeCamera?.capabilities?.timelapse) return;
+
+  try {
+    setStatusLine(timelapseStatusEl, `Lade Zeitraffer fuer ${activeCamera.label}...`);
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseData();
+    setStatusLine(timelapseStatusEl, "Zeitrafferdaten geladen.");
+  } catch (error) {
+    setStatusLine(timelapseStatusEl, `Zeitraffer konnte nicht geladen werden: ${error.message}`, true);
+  }
+});
+
+timelapseRefreshEl?.addEventListener("click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera?.capabilities?.timelapse) return;
+
+  try {
+    setStatusLine(timelapseStatusEl, "Aktualisiere Zeitrafferdateien...");
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseData();
+    setStatusLine(timelapseStatusEl, "Zeitrafferdateien aktualisiert.");
+  } catch (error) {
+    setStatusLine(timelapseStatusEl, `Aktualisierung fehlgeschlagen: ${error.message}`, true);
+  }
+});
+
+timelapseBuildEl?.addEventListener("click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera?.capabilities?.timelapse) return;
+
+  try {
+    setStatusLine(timelapseStatusEl, "Erzeuge MP4 aus den JPEG-Bildern...");
+    await postTimelapseBuild(activeCamera.cameraId);
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseData();
+    setStatusLine(timelapseStatusEl, "Zeitraffer-Video erstellt.");
+  } catch (error) {
+    setStatusLine(timelapseStatusEl, `Video konnte nicht erzeugt werden: ${error.message}`, true);
+  }
+});
+
+timelapseDeleteVideoEl?.addEventListener("click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera?.capabilities?.timelapse) return;
+
+  try {
+    setStatusLine(timelapseStatusEl, "Loesche alle Zeitraffer-MP4...");
+    await postTimelapseDelete({ cameraId: activeCamera.cameraId, type: "video" });
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseData();
+    setStatusLine(timelapseStatusEl, "Alle MP4 geloescht.");
+  } catch (error) {
+    setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);
+  }
+});
+
+timelapseDeleteImagesEl?.addEventListener("click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera?.capabilities?.timelapse) return;
+
+  try {
+    setStatusLine(timelapseStatusEl, "Loesche alle Zeitraffer-JPG...");
+    await postTimelapseDelete({ cameraId: activeCamera.cameraId, type: "image" });
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseData();
+    setStatusLine(timelapseStatusEl, "Alle JPG geloescht.");
+  } catch (error) {
+    setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);
+  }
 });
 
 setInterval(() => {

@@ -49,6 +49,9 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
 - `ESP32_TRANSCODE_PRESET=ultrafast`
 - `ESP32_TRANSCODE_TUNE=zerolatency`
+- `CAMERA_PI_TIMELAPSE_DIR=/home/witti/ESp32cam/timelapse` optional fallback if no MQTT timelapse path is available
+- `TIMELAPSE_FFMPEG_PATH=ffmpeg`
+- `TIMELAPSE_VIDEO_FPS=20`
 
 ## Beispiel MediaMTX
 
@@ -70,3 +73,15 @@ ESP32 RTSP (MJPEG) -> FFmpeg -> MediaMTX RTSP (H264)
 ```
 
 Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
+
+## Zeitraffer im Webserver
+
+Fuer die Pi-Kamera gibt es auf `/camera` einen eigenen einklappbaren Bereich:
+
+- listet JPEG- und MP4-Dateien aus dem Zeitrafferordner
+- erzeugt auf Wunsch eine MP4 aus den vorhandenen JPEG-Bildern
+- zeigt das neueste MP4 direkt im Browser an
+- kann einzelne Dateien oder alle JPG/MP4-Dateien loeschen
+
+Die API verwendet bevorzugt den von `pi_streamer` gemeldeten MQTT-Wert `status/timelapse/output_dir`.
+Wenn dieser noch nicht vorhanden ist, kann alternativ `CAMERA_PI_TIMELAPSE_DIR` gesetzt werden.

@@ -97,6 +97,46 @@
         <div id="camera-targets" class="camera-target-list"></div>
       </section>
     </div>
+
+    <section id="timelapse-panel" class="panel collapsed" hidden>
+      <div class="section-header">
+        <div>
+          <h2>Zeitraffer Archiv</h2>
+          <p class="camera-muted-line">Nur fuer die Raspberry Pi Kamera. Hier kannst du MP4 aus den gespeicherten JPEGs erzeugen, ansehen und wieder loeschen.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="timelapse-toggle" type="button" class="btn-secondary section-toggle">Einblenden</button>
+          <button id="timelapse-refresh" type="button" class="btn-secondary">Neu laden</button>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="grid-2 dashboard-columns">
+          <section class="subpanel">
+            <h3>Uebersicht</h3>
+            <div id="timelapse-summary" class="camera-target-list"></div>
+            <div class="camera-action-grid">
+              <button id="timelapse-build" type="button">MP4 erzeugen</button>
+              <button id="timelapse-delete-video" type="button" class="btn-secondary">Alle MP4 loeschen</button>
+              <button id="timelapse-delete-images" type="button" class="btn-secondary">Alle JPG loeschen</button>
+            </div>
+            <p id="timelapse-status" class="status-line"></p>
+          </section>
+
+          <section class="subpanel">
+            <h3>Video Vorschau</h3>
+            <div class="camera-timelapse-video-shell">
+              <video id="timelapse-video" class="camera-timelapse-video" controls preload="metadata"></video>
+            </div>
+            <p id="timelapse-video-hint" class="camera-muted-line"></p>
+          </section>
+        </div>
+
+        <section class="subpanel">
+          <h3>Dateien</h3>
+          <ul id="timelapse-file-list" class="readings-list"></ul>
+        </section>
+      </div>
+    </section>
   </main>
 
   <script src="/pages/main.js"></script>
