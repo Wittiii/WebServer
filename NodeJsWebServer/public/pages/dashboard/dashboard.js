@@ -3,6 +3,18 @@ const topicList = document.getElementById("topic-list");
 const clientsCountEl = document.getElementById("stats-clients-count");
 const topicsCountEl = document.getElementById("stats-topics-count");
 const trendCanvas = document.getElementById("dashboard-trend-chart");
+const serverCpuUsageEl = document.getElementById("server-cpu-usage");
+const serverCpuMetaEl = document.getElementById("server-cpu-meta");
+const serverRamUsageEl = document.getElementById("server-ram-usage");
+const serverRamMetaEl = document.getElementById("server-ram-meta");
+const serverStorageFreeEl = document.getElementById("server-storage-free");
+const serverStorageMetaEl = document.getElementById("server-storage-meta");
+const serverDbSizeEl = document.getElementById("server-db-size");
+const serverDbMetaEl = document.getElementById("server-db-meta");
+const serverCpuCardEl = serverCpuUsageEl?.closest(".stats-card") || null;
+const serverRamCardEl = serverRamUsageEl?.closest(".stats-card") || null;
+const serverStorageCardEl = serverStorageFreeEl?.closest(".stats-card") || null;
+const serverDbCardEl = serverDbSizeEl?.closest(".stats-card") || null;
 
 const widgetForm = document.getElementById("quick-widget-form");
 const widgetTypeEl = document.getElementById("quick-widget-type");
@@ -39,6 +51,47 @@ function setWidgetStatus(text, isError = false) {
   if (!widgetStatusEl) return;
   widgetStatusEl.textContent = text;
   widgetStatusEl.style.color = isError ? "var(--danger)" : "var(--muted)";
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const decimals = size >= 100 || unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function formatPercent(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return "-";
+  return `${numeric.toFixed(1)}%`;
+}
+
+function getUsageSeverity(usagePercent, warnAt, criticalAt) {
+  const numeric = Number(usagePercent || 0);
+  if (!Number.isFinite(numeric)) return "normal";
+  if (numeric >= criticalAt) return "critical";
+  if (numeric >= warnAt) return "warn";
+  return "normal";
+}
+
+function applyHealthClass(cardElement, severity) {
+  if (!cardElement) return;
+  cardElement.classList.remove("health-warn", "health-critical");
+  if (severity === "warn") {
+    cardElement.classList.add("health-warn");
+  } else if (severity === "critical") {
+    cardElement.classList.add("health-critical");
+  }
 }
 
 function createWidgetId() {
@@ -216,8 +269,70 @@ async function loadMqttTopics() {
   }
 }
 
+async function loadSystemStats() {
+  try {
+    const data = await fetch("/dashboard/system").then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
+
+    const cpuUsage = Number(data?.cpu?.usagePercent || 0);
+    const cpuCores = Number(data?.cpu?.cores || 0);
+    const cpuLoad = Array.isArray(data?.cpu?.loadAverage) ? data.cpu.loadAverage[0] : null;
+    applyHealthClass(serverCpuCardEl, getUsageSeverity(cpuUsage, 65, 85));
+    if (serverCpuUsageEl) serverCpuUsageEl.textContent = formatPercent(cpuUsage);
+    if (serverCpuMetaEl) {
+      const loadText = Number.isFinite(cpuLoad) ? ` | Load 1m ${cpuLoad.toFixed(2)}` : "";
+      serverCpuMetaEl.textContent = `${cpuCores || "-"} Kerne${loadText}`;
+    }
+
+    const ramUsed = Number(data?.memory?.usedBytes || 0);
+    const ramTotal = Number(data?.memory?.totalBytes || 0);
+    const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal) * 100 : 0;
+    applyHealthClass(serverRamCardEl, getUsageSeverity(ramPercent, 75, 90));
+    if (serverRamUsageEl) serverRamUsageEl.textContent = formatPercent(ramPercent);
+    if (serverRamMetaEl) serverRamMetaEl.textContent = `${formatBytes(ramUsed)} von ${formatBytes(ramTotal)} belegt`;
+
+    const storageFree = Number(data?.storage?.freeBytes || 0);
+    const storageUsed = Number(data?.storage?.usedBytes || 0);
+    const storageTotal = Number(data?.storage?.totalBytes || 0);
+    const storageUsedPercent = storageTotal > 0 ? (storageUsed / storageTotal) * 100 : 0;
+    applyHealthClass(serverStorageCardEl, getUsageSeverity(storageUsedPercent, 80, 92));
+    if (serverStorageFreeEl) serverStorageFreeEl.textContent = formatBytes(storageFree);
+    if (serverStorageMetaEl) {
+      serverStorageMetaEl.textContent = `${formatBytes(storageUsed)} von ${formatBytes(storageTotal)} belegt (${formatPercent(storageUsedPercent)})`;
+    }
+
+    const dbSize = Number(data?.database?.sizeBytes || 0);
+    const dbUsagePercent = storageTotal > 0 ? (dbSize / storageTotal) * 100 : 0;
+    const dbSeverity = storageTotal > 0
+      ? getUsageSeverity(dbUsagePercent, 10, 20)
+      : getUsageSeverity(dbSize / (1024 * 1024), 512, 2048);
+    applyHealthClass(serverDbCardEl, dbSeverity);
+    if (serverDbSizeEl) serverDbSizeEl.textContent = formatBytes(dbSize);
+    if (serverDbMetaEl) {
+      const dbPercentText = storageTotal > 0 ? ` | ${formatPercent(dbUsagePercent)} vom Storage` : "";
+      serverDbMetaEl.textContent = `${formatBytes(storageFree)} frei auf dem Server${dbPercentText}`;
+    }
+  } catch (error) {
+    const message = `Fehler: ${error.message || error}`;
+    applyHealthClass(serverCpuCardEl, "normal");
+    applyHealthClass(serverRamCardEl, "normal");
+    applyHealthClass(serverStorageCardEl, "normal");
+    applyHealthClass(serverDbCardEl, "normal");
+    if (serverCpuUsageEl) serverCpuUsageEl.textContent = "-";
+    if (serverRamUsageEl) serverRamUsageEl.textContent = "-";
+    if (serverStorageFreeEl) serverStorageFreeEl.textContent = "-";
+    if (serverDbSizeEl) serverDbSizeEl.textContent = "-";
+    if (serverCpuMetaEl) serverCpuMetaEl.textContent = message;
+    if (serverRamMetaEl) serverRamMetaEl.textContent = message;
+    if (serverStorageMetaEl) serverStorageMetaEl.textContent = message;
+    if (serverDbMetaEl) serverDbMetaEl.textContent = message;
+  }
+}
+
 async function refreshDashboard() {
-  await Promise.all([loadMqttClients(), loadMqttTopics()]);
+  await Promise.all([loadMqttClients(), loadMqttTopics(), loadSystemStats()]);
   updateTrendHistory(Number(clientsCountEl?.textContent || 0), Number(topicsCountEl?.textContent || 0));
 }
 

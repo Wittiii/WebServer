@@ -36,6 +36,32 @@
         </div>
       </div>
 
+      <section id="dashboard-server-health" class="panel">
+        <h2>Server Status</h2>
+        <div class="grid-2 server-health-grid">
+          <div class="stats-card">
+            <h3>CPU</h3>
+            <div class="stats-val" id="server-cpu-usage">-</div>
+            <p id="server-cpu-meta">Lade...</p>
+          </div>
+          <div class="stats-card">
+            <h3>RAM</h3>
+            <div class="stats-val" id="server-ram-usage">-</div>
+            <p id="server-ram-meta">Lade...</p>
+          </div>
+          <div class="stats-card">
+            <h3>Storage</h3>
+            <div class="stats-val" id="server-storage-free">-</div>
+            <p id="server-storage-meta">Lade...</p>
+          </div>
+          <div class="stats-card">
+            <h3>Datenbank</h3>
+            <div class="stats-val" id="server-db-size">-</div>
+            <p id="server-db-meta">Lade...</p>
+          </div>
+        </div>
+      </section>
+
       <div class="grid-2 dashboard-columns">
         <section id="mqtt-clients" class="panel">
           <h2>MQTT Clients</h2>

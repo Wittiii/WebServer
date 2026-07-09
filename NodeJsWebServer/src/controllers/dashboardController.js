@@ -1,5 +1,86 @@
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const db = require('../database/db');
+
+const execFileAsync = promisify(execFile);
+const DB_FILE_PATH = path.join(__dirname, '..', 'database', 'app.db');
+
+function readCpuSnapshot() {
+  return os.cpus().map((cpu) => {
+    const total = Object.values(cpu.times).reduce((sum, value) => sum + value, 0);
+    return {
+      idle: cpu.times.idle,
+      total,
+    };
+  });
+}
+
+function calculateCpuUsage(previous, current) {
+  if (!Array.isArray(previous) || !Array.isArray(current) || previous.length !== current.length || previous.length === 0) {
+    return 0;
+  }
+
+  let idleDiff = 0;
+  let totalDiff = 0;
+
+  for (let index = 0; index < current.length; index += 1) {
+    idleDiff += Math.max(0, current[index].idle - previous[index].idle);
+    totalDiff += Math.max(0, current[index].total - previous[index].total);
+  }
+
+  if (totalDiff <= 0) return 0;
+  return Math.max(0, Math.min(100, (1 - idleDiff / totalDiff) * 100));
+}
+
+let lastCpuSnapshot = readCpuSnapshot();
+let cpuUsagePercent = 0;
+
+function refreshCpuUsage() {
+  const nextSnapshot = readCpuSnapshot();
+  cpuUsagePercent = calculateCpuUsage(lastCpuSnapshot, nextSnapshot);
+  lastCpuSnapshot = nextSnapshot;
+}
+
+const cpuSampler = setInterval(refreshCpuUsage, 1000);
+cpuSampler.unref?.();
+
+async function getStorageStats(targetPath) {
+  if (typeof fs.promises.statfs === 'function') {
+    const stats = await fs.promises.statfs(targetPath);
+    const blockSize = Number(stats.bsize || stats.frsize || 0);
+    const totalBytes = Number(stats.blocks || 0) * blockSize;
+    const freeBytes = Number(stats.bavail ?? stats.bfree ?? 0) * blockSize;
+    return {
+      totalBytes,
+      freeBytes,
+      usedBytes: Math.max(0, totalBytes - freeBytes),
+    };
+  }
+
+  if (process.platform !== 'win32') {
+    const { stdout } = await execFileAsync('df', ['-kP', targetPath]);
+    const lines = String(stdout || '').trim().split(/\r?\n/);
+    if (lines.length < 2) {
+      throw new Error('df output invalid');
+    }
+
+    const parts = lines[1].trim().split(/\s+/);
+    const totalBytes = Number(parts[1] || 0) * 1024;
+    const usedBytes = Number(parts[2] || 0) * 1024;
+    const freeBytes = Number(parts[3] || 0) * 1024;
+
+    return { totalBytes, usedBytes, freeBytes };
+  }
+
+  return {
+    totalBytes: 0,
+    freeBytes: 0,
+    usedBytes: 0,
+  };
+}
 
 const getDashboard = (req, res) => {
   const filePath = path.join(__dirname, '..', '..', 'public','pages','dashboard','dashboard.html');
@@ -87,4 +168,46 @@ const saveDashboardWidgets = (req, res) => {
   }
 };
 
-module.exports = { getDashboard, getDashboardWidgets, saveDashboardWidgets };
+const getDashboardSystem = async (req, res) => {
+  try {
+    const [dbFile, storage] = await Promise.all([
+      fs.promises.stat(DB_FILE_PATH).catch(() => null),
+      getStorageStats(DB_FILE_PATH).catch(() => null),
+    ]);
+
+    const totalMemoryBytes = os.totalmem();
+    const freeMemoryBytes = os.freemem();
+    const usedMemoryBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
+
+    res.json({
+      cpu: {
+        usagePercent: Number(cpuUsagePercent.toFixed(1)),
+        cores: os.cpus().length,
+        loadAverage: os.loadavg(),
+      },
+      memory: {
+        totalBytes: totalMemoryBytes,
+        freeBytes: freeMemoryBytes,
+        usedBytes: usedMemoryBytes,
+      },
+      storage: storage || {
+        totalBytes: 0,
+        freeBytes: 0,
+        usedBytes: 0,
+      },
+      database: {
+        sizeBytes: Number(dbFile?.size || 0),
+        path: DB_FILE_PATH,
+      },
+      system: {
+        hostname: os.hostname(),
+        platform: os.platform(),
+        uptimeSeconds: os.uptime(),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getDashboard, getDashboardWidgets, saveDashboardWidgets, getDashboardSystem };
