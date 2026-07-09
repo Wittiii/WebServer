@@ -35,7 +35,7 @@ function isWithinRoot(rootDir, candidatePath) {
 }
 
 function normalizeTimelapseRoot(cameraOverview) {
-  const rawDir = cameraOverview?.timelapse?.outputDir || process.env.CAMERA_PI_TIMELAPSE_DIR || "";
+  const rawDir = process.env.CAMERA_PI_TIMELAPSE_DIR || cameraOverview?.timelapse?.outputDir || "";
   if (!rawDir) {
     throw new Error("timelapse_dir_unavailable");
   }
