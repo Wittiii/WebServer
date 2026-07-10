@@ -99,6 +99,10 @@ function getRemoteSyncJob(cameraId) {
       error: "",
       updatedAt: 0,
       promise: null,
+      queue: [],
+      nextOffset: 0,
+      hasMore: true,
+      lastCompletedAt: 0,
     };
     remoteSyncJobs.set(key, job);
   }
@@ -113,6 +117,9 @@ function buildRemoteSyncSnapshot(job, overrides = {}) {
     remoteCount: job.remoteCount,
     downloaded: job.downloaded,
     pending: job.pending,
+    scanned: job.remoteCount,
+    queued: job.queue.length,
+    scanning: job.hasMore,
     error: job.error,
     updatedAt: job.updatedAt,
     ...overrides,
@@ -125,17 +132,28 @@ function buildRemoteSyncSnapshot(job, overrides = {}) {
     remoteCount: Math.max(0, toNumber(merged.remoteCount, 0)),
     downloaded: Math.max(0, toNumber(merged.downloaded, 0)),
     pending: Math.max(0, toNumber(merged.pending, 0)),
+    scanned: Math.max(0, toNumber(merged.scanned, 0)),
+    queued: Math.max(0, toNumber(merged.queued, 0)),
+    scanning: Boolean(merged.scanning),
     error: merged.error || "",
     updatedAt: merged.updatedAt ? new Date(merged.updatedAt).toISOString() : null,
   };
 }
 
 function getRemoteSyncLimit() {
-  return Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 20));
+  return Math.min(5, Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 3)));
 }
 
 function getRemoteDownloadPauseMs() {
-  return Math.max(0, toNumber(process.env.CAMERA_DFR1154_SYNC_PAUSE_MS, 150));
+  return Math.max(500, toNumber(process.env.CAMERA_DFR1154_SYNC_PAUSE_MS, 1000));
+}
+
+function getRemoteListPageSize() {
+  return Math.min(100, Math.max(10, toNumber(process.env.CAMERA_DFR1154_LIST_PAGE_SIZE, 50)));
+}
+
+function getRemoteRescanIntervalMs() {
+  return Math.max(10000, toNumber(process.env.CAMERA_DFR1154_RESCAN_INTERVAL_MS, 60000));
 }
 
 function validRemoteImageName(name) {
@@ -218,51 +236,67 @@ async function downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig) {
 
 async function syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job) {
   const baseUrl = getRemoteArchiveBaseUrl(cameraOverview, cameraConfig);
-  const response = await fetchRemote(`${baseUrl}/api/timelapse`, cameraConfig);
-  const payload = await response.json();
-  if (!payload?.ok || !Array.isArray(payload.files)) {
-    throw new Error("remote_archive_invalid_listing");
-  }
+  job.baseUrl = baseUrl;
 
-  const remoteFiles = payload.files
-    .filter((file) => validRemoteImageName(file?.name))
-    .map((file) => ({
-      name: String(file.name),
-      sizeBytes: Math.max(0, toNumber(file.sizeBytes, 0)),
-      modifiedEpoch: Math.max(0, toNumber(file.modifiedEpoch, 0)),
-    }))
-    .sort((a, b) => b.name.localeCompare(a.name));
-
-  const pending = [];
-  for (const remoteFile of remoteFiles) {
-    if (!(await localFileMatches(path.join(rootDir, remoteFile.name), remoteFile.sizeBytes))) {
-      pending.push(remoteFile);
+  if (job.queue.length === 0 && job.hasMore) {
+    const pageSize = getRemoteListPageSize();
+    const listingUrl = new URL(`${baseUrl}/api/timelapse`);
+    listingUrl.searchParams.set("offset", String(job.nextOffset));
+    listingUrl.searchParams.set("limit", String(pageSize));
+    const response = await fetchRemote(listingUrl.toString(), cameraConfig);
+    const payload = await response.json();
+    if (!payload?.ok || !Array.isArray(payload.files)) {
+      throw new Error("remote_archive_invalid_listing");
     }
+
+    const remoteFiles = payload.files
+      .filter((file) => validRemoteImageName(file?.name))
+      .map((file) => ({
+        name: String(file.name),
+        sizeBytes: Math.max(0, toNumber(file.sizeBytes, 0)),
+        modifiedEpoch: Math.max(0, toNumber(file.modifiedEpoch, 0)),
+      }));
+
+    for (const remoteFile of remoteFiles) {
+      if (!(await localFileMatches(path.join(rootDir, remoteFile.name), remoteFile.sizeBytes))) {
+        job.queue.push(remoteFile);
+      }
+    }
+
+    job.remoteCount += remoteFiles.length;
+    job.nextOffset = Math.max(
+      job.nextOffset + remoteFiles.length,
+      toNumber(payload.nextOffset, job.nextOffset + remoteFiles.length)
+    );
+    job.hasMore = payload.hasMore === true;
+    console.log(
+      `[TimelapseSync:${job.cameraId}] scanned=${job.remoteCount} queued=${job.queue.length} hasMore=${job.hasMore}`
+    );
   }
 
-  const selected = pending.slice(0, getRemoteSyncLimit());
+  const selected = job.queue.slice(0, getRemoteSyncLimit());
   let downloaded = 0;
   for (const remoteFile of selected) {
     await downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig);
+    job.queue.shift();
     downloaded += 1;
+    job.downloaded += 1;
     if (getRemoteDownloadPauseMs() > 0) {
       await sleep(getRemoteDownloadPauseMs());
     }
   }
 
-  job.baseUrl = baseUrl;
-  job.remoteCount = remoteFiles.length;
-  job.downloaded = downloaded;
-  job.pending = Math.max(0, pending.length - downloaded);
+  job.pending = job.queue.length;
   job.error = "";
   job.updatedAt = Date.now();
 
   return {
     ok: true,
     baseUrl,
-    remoteCount: remoteFiles.length,
+    remoteCount: job.remoteCount,
     downloaded,
-    pending: Math.max(0, pending.length - downloaded),
+    pending: job.pending,
+    hasMore: job.hasMore,
   };
 }
 
@@ -271,17 +305,29 @@ function startRemoteSyncLoop(cameraOverview, cameraConfig, rootDir, job) {
 
   job.running = true;
   job.error = "";
+  job.remoteCount = 0;
+  job.downloaded = 0;
+  job.pending = 0;
+  job.queue = [];
+  job.nextOffset = 0;
+  job.hasMore = true;
   job.updatedAt = Date.now();
+  console.log(`[TimelapseSync:${job.cameraId}] started`);
   job.promise = (async () => {
     try {
       while (true) {
         const result = await syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job);
-        if (result.pending <= 0) break;
-        await sleep(Math.max(250, getRemoteDownloadPauseMs()));
+        if (result.pending <= 0 && !result.hasMore) break;
+        await sleep(getRemoteDownloadPauseMs());
       }
+      job.lastCompletedAt = Date.now();
+      console.log(
+        `[TimelapseSync:${job.cameraId}] complete scanned=${job.remoteCount} downloaded=${job.downloaded}`
+      );
     } catch (error) {
       job.error = String(error?.message || error);
       job.updatedAt = Date.now();
+      console.error(`[TimelapseSync:${job.cameraId}] failed: ${job.error}`);
     } finally {
       job.running = false;
       job.updatedAt = Date.now();
@@ -296,21 +342,12 @@ async function ensureRemoteArchiveSync(cameraOverview, cameraConfig, rootDir) {
   const job = getRemoteSyncJob(cameraOverview.cameraId);
   if (job.running) return buildRemoteSyncSnapshot(job);
 
-  try {
-    const firstPass = await syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job);
-    if (firstPass.pending > 0) {
-      startRemoteSyncLoop(cameraOverview, cameraConfig, rootDir, job);
-    }
-    return buildRemoteSyncSnapshot(job, {
-      ok: true,
-      running: firstPass.pending > 0,
-    });
-  } catch (error) {
-    job.running = false;
-    job.error = String(error?.message || error);
-    job.updatedAt = Date.now();
-    return buildRemoteSyncSnapshot(job, { ok: false });
+  if (job.lastCompletedAt && Date.now() - job.lastCompletedAt < getRemoteRescanIntervalMs()) {
+    return buildRemoteSyncSnapshot(job, { ok: true, running: false });
   }
+
+  startRemoteSyncLoop(cameraOverview, cameraConfig, rootDir, job);
+  return buildRemoteSyncSnapshot(job, { ok: true, running: true, error: "" });
 }
 
 function sanitizeFileEntry(cameraId, file) {
@@ -389,6 +426,9 @@ async function buildTimelapseVideo(cameraOverview, cameraConfig) {
   const listing = await listTimelapseFiles(cameraOverview, cameraConfig);
   if (isRemoteArchive(cameraConfig) && listing.sync?.ok === false) {
     throw new Error(`remote_archive_sync_failed: ${listing.sync.error}`);
+  }
+  if (isRemoteArchive(cameraConfig) && (listing.sync?.running || listing.sync?.scanning)) {
+    throw new Error("remote_archive_sync_incomplete: synchronization is still running");
   }
   if (isRemoteArchive(cameraConfig) && listing.sync?.pending > 0) {
     throw new Error(`remote_archive_sync_incomplete: ${listing.sync.pending} files pending`);

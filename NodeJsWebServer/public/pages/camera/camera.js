@@ -619,9 +619,9 @@ function renderTimelapseSection(camera) {
         sync?.ok === false
           ? `Fehler: ${sync.error}`
           : sync?.running
-            ? `${sync.downloaded} neu | ${sync.pending} ausstehend | laeuft`
+            ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | laeuft`
           : sync?.ok === true
-            ? `${sync.downloaded} neu | ${sync.pending} ausstehend`
+            ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | fertig`
             : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
       ],
       ["Ordner", timelapse.outputDir || "-"],
