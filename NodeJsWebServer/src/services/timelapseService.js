@@ -72,7 +72,15 @@ function getRemoteArchiveHeaders(cameraConfig) {
 }
 
 function getRemoteTimeoutMs() {
-  return Math.max(2000, toNumber(process.env.CAMERA_DFR1154_ARCHIVE_TIMEOUT_MS, 15000));
+  return Math.max(2000, toNumber(process.env.CAMERA_DFR1154_ARCHIVE_TIMEOUT_MS, 45000));
+}
+
+function getRemoteRetryCount() {
+  return Math.max(0, toNumber(process.env.CAMERA_DFR1154_ARCHIVE_RETRIES, 2));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getRemoteSyncLimit() {
@@ -85,18 +93,45 @@ function validRemoteImageName(name) {
 }
 
 async function fetchRemote(url, cameraConfig, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...getRemoteArchiveHeaders(cameraConfig),
-      ...(options.headers || {}),
-    },
-    signal: AbortSignal.timeout(getRemoteTimeoutMs()),
-  });
-  if (!response.ok) {
-    throw new Error(`remote_archive_http_${response.status}`);
+  const maxAttempts = getRemoteRetryCount() + 1;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...getRemoteArchiveHeaders(cameraConfig),
+          ...(options.headers || {}),
+        },
+        signal: AbortSignal.timeout(getRemoteTimeoutMs()),
+      });
+      if (!response.ok) {
+        throw new Error(`remote_archive_http_${response.status}`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const isTimeout =
+        error?.name === "TimeoutError" ||
+        error?.name === "AbortError" ||
+        /aborted due to timeout/i.test(message);
+
+      if (!isTimeout || attempt >= maxAttempts) break;
+      await sleep(500 * attempt);
+    }
   }
-  return response;
+
+  const lastMessage = String(lastError?.message || lastError || "unknown");
+  if (
+    lastError?.name === "TimeoutError" ||
+    lastError?.name === "AbortError" ||
+    /aborted due to timeout/i.test(lastMessage)
+  ) {
+    throw new Error("remote_archive_timeout");
+  }
+  throw lastError;
 }
 
 async function localFileMatches(filePath, expectedSize) {
