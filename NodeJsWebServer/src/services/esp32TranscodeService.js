@@ -195,6 +195,7 @@ function stopBridgeProcess(bridge, reason) {
   bridge.state = "stopping";
   bridge.lastMessage = reason;
   bridge.lastStopAt = Date.now();
+  console.log(`[ESP32-Bridge:${bridge.cameraId}] stopping: ${reason}`);
 
   const child = bridge.process;
   try {
@@ -244,6 +245,9 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   bridge.lastError = "";
   bridge.state = "starting";
   bridge.lastMessage = `starting bridge for ${camera.label}`;
+  console.log(
+    `[ESP32-Bridge:${camera.cameraId}] starting ffmpeg: ${sourceRtspUrl} -> ${destinationRtspUrl}`
+  );
 
   const child = spawn(ffmpegPath, args, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -282,6 +286,7 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
     bridge.lastExitCode = null;
     bridge.lastExitSignal = null;
     bridge.restartAfter = Date.now() + getRestartDelayMs();
+    console.error(`[ESP32-Bridge:${camera.cameraId}] spawn failed: ${bridge.lastError}`);
   });
 
   child.on("exit", (code, signal) => {
@@ -298,12 +303,14 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
       bridge.state = "idle";
       bridge.lastMessage = "bridge stopped";
       bridge.restartAfter = 0;
+      console.log(`[ESP32-Bridge:${camera.cameraId}] stopped`);
       return;
     }
 
     bridge.state = "error";
     bridge.lastMessage = `bridge exited with code=${code ?? "-"} signal=${signal ?? "-"}`;
     bridge.restartAfter = Date.now() + getRestartDelayMs();
+    console.warn(`[ESP32-Bridge:${camera.cameraId}] ${bridge.lastMessage}`);
   });
 }
 
