@@ -84,7 +84,7 @@ function getBridgeDestinationUrl(camera) {
   return `rtsp://${getInternalRtspHost()}:${getInternalRtspPort()}/${camera.streamPath}`;
 }
 
-function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}) {
+function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, options = {}) {
   const detectedSourceFps = toNumber(sourceConfig.stream_fps, 0);
   const outputFps = toNumber(process.env.ESP32_TRANSCODE_OUTPUT_FPS, 0) || detectedSourceFps;
   const gopSize = toNumber(process.env.ESP32_TRANSCODE_GOP, 0) || (outputFps > 0 ? outputFps * 2 : 24);
@@ -95,7 +95,7 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}) {
     "-nostdin",
     "-hide_banner",
     "-loglevel",
-    process.env.ESP32_TRANSCODE_LOGLEVEL || "warning",
+    options.logLevel || process.env.ESP32_TRANSCODE_LOGLEVEL || "warning",
     "-use_wallclock_as_timestamps",
     "1",
     "-fflags",
@@ -103,11 +103,11 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}) {
     "-flags",
     "low_delay",
     "-analyzeduration",
-    "0",
+    String(options.analyzeDuration ?? 0),
     "-probesize",
-    "32768",
+    String(options.probeSize ?? 32768),
     "-rtsp_transport",
-    process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
+    options.sourceTransport || process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
     "-i",
     sourceRtspUrl,
     "-an",
@@ -218,7 +218,15 @@ function stopBridgeProcess(bridge, reason) {
 function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   const ffmpegPath = getFfmpegPath();
   const sourceConfig = parseJson(getCameraTopicValue(camera, "config")) || {};
-  const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig);
+  const dfr1154Options = camera.kind === "dfr1154"
+    ? {
+        sourceTransport: process.env.DFR1154_SOURCE_RTSP_TRANSPORT || "tcp",
+        analyzeDuration: toNumber(process.env.DFR1154_TRANSCODE_ANALYZEDURATION, 1000000),
+        probeSize: toNumber(process.env.DFR1154_TRANSCODE_PROBESIZE, 1000000),
+        logLevel: process.env.DFR1154_TRANSCODE_LOGLEVEL || "error",
+      }
+    : {};
+  const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig, dfr1154Options);
   const signature = JSON.stringify({ sourceRtspUrl, destinationRtspUrl, args });
 
   if (bridge.process && bridge.desiredSignature === signature) {

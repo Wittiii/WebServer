@@ -41,7 +41,9 @@ function isRemoteArchive(cameraConfig) {
 }
 
 function normalizeTimelapseRoot(cameraOverview, cameraConfig) {
-  const rawDir = isRemoteArchive(cameraConfig)
+  const rawDir = cameraConfig?.archive?.localDir
+    ? cameraConfig.archive.localDir
+    : isRemoteArchive(cameraConfig) || cameraConfig?.archive?.type === "server_capture"
     ? cameraConfig.archive.localDir || path.join(process.cwd(), "data", "timelapse", cameraOverview.cameraId)
     : process.env.CAMERA_PI_TIMELAPSE_DIR || cameraOverview?.timelapse?.outputDir || "";
   if (!rawDir) {

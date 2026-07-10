@@ -608,7 +608,10 @@ function renderTimelapseSection(camera) {
     const rows = [
       ["Status", timelapse.state || "-"],
       ["Intervall", timelapse.intervalSeconds ? `${timelapse.intervalSeconds} s` : "-"],
-      ["Geraetespeicher", `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`],
+      [
+        camera.capabilities?.serverTimelapse ? "Serverspeicher" : "Geraetespeicher",
+        `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`,
+      ],
       ["Serverarchiv", archiveTotals ? formatBytes(archiveTotals.totalBytes) : "Archiv noch nicht geladen"],
       [
         "Archivdateien",
@@ -622,7 +625,9 @@ function renderTimelapseSection(camera) {
             ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | laeuft`
           : sync?.ok === true
             ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | fertig`
-            : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
+            : camera.capabilities?.serverTimelapse
+              ? "Direkte Aufnahme auf dem Server"
+              : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
       ],
       ["Ordner", timelapse.outputDir || "-"],
       ["Letztes Bild", timelapse.lastImage || "-"],
@@ -983,7 +988,11 @@ setInterval(async () => {
   }
 
   const currentSync = timelapseState?.cameraId === activeCamera.cameraId ? timelapseState?.sync : null;
-  if (!currentSync?.running && !(Number(currentSync?.pending || 0) > 0)) {
+  if (
+    !activeCamera.capabilities?.serverTimelapse &&
+    !currentSync?.running &&
+    !(Number(currentSync?.pending || 0) > 0)
+  ) {
     return;
   }
 

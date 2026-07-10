@@ -4,6 +4,7 @@ const path = require("path");
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
 const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
+const { getDfrTimelapseCaptureSnapshot } = require("../services/dfrTimelapseCaptureService");
 const {
   buildTimelapseVideo,
   deleteTimelapseByType,
@@ -90,6 +91,9 @@ function buildCameraOverview(config) {
   const bridge = config.kind === "esp32" || config.kind === "dfr1154"
     ? getEsp32BridgeSnapshot(config.cameraId)
     : null;
+  const serverCapture = config.archive?.type === "server_capture"
+    ? getDfrTimelapseCaptureSnapshot(config.cameraId)
+    : null;
 
   return {
     cameraId: config.cameraId,
@@ -114,14 +118,17 @@ function buildCameraOverview(config) {
     },
     timelapse: config.capabilities.timelapse
       ? {
-          state: timelapseStateValue || "unknown",
-          error: timelapseErrorValue || "",
-          storageBytes: Number(timelapseStorageBytesValue || 0),
-          storageLimitBytes: Number(timelapseStorageLimitBytesValue || 0),
-          lastImage: timelapseLastImageValue || "",
-          outputDir: timelapseOutputDirValue || "",
-          enabled: parseBoolean(timelapseEnabledValue),
-          intervalSeconds: Number(timelapseIntervalValue || 0),
+          state: serverCapture?.state || timelapseStateValue || "unknown",
+          error: serverCapture?.error || timelapseErrorValue || "",
+          storageBytes: serverCapture?.storageBytes ?? Number(timelapseStorageBytesValue || 0),
+          storageLimitBytes:
+            serverCapture?.storageLimitBytes ?? Number(timelapseStorageLimitBytesValue || 0),
+          lastImage: serverCapture?.lastImage || timelapseLastImageValue || "",
+          outputDir: serverCapture?.outputDir || timelapseOutputDirValue || "",
+          enabled: serverCapture?.enabled ?? parseBoolean(timelapseEnabledValue),
+          intervalSeconds:
+            serverCapture?.intervalSeconds ?? Number(timelapseIntervalValue || 0),
+          lastCaptureAt: serverCapture?.lastCaptureAt || null,
         }
       : null,
     mediamtx: config.mediaMTX,
