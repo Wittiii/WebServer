@@ -141,11 +141,11 @@ function buildRemoteSyncSnapshot(job, overrides = {}) {
 }
 
 function getRemoteSyncLimit() {
-  return Math.min(5, Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 3)));
+  return Math.min(1, Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 1)));
 }
 
 function getRemoteDownloadPauseMs() {
-  return Math.max(500, toNumber(process.env.CAMERA_DFR1154_SYNC_PAUSE_MS, 1000));
+  return Math.max(2000, toNumber(process.env.CAMERA_DFR1154_SYNC_PAUSE_MS, 2000));
 }
 
 function getRemoteListPageSize() {
