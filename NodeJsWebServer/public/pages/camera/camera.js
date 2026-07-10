@@ -35,6 +35,8 @@ const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
 let timelapseState = null;
+const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
+let timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -265,9 +267,15 @@ function getStateColor(camera) {
   return "#f87171";
 }
 
+function isJpegCamera(camera) {
+  return camera?.kind === "esp32" || camera?.kind === "dfr1154";
+}
+
 function getCapabilityBadges(camera) {
   const badges = [];
   if (camera.capabilities.liveLed) badges.push("LED");
+  if (camera.capabilities.infrared) badges.push("IR Auto");
+  if (camera.capabilities.sdCard) badges.push("SD");
   if (camera.capabilities.timelapse) badges.push("Zeitraffer");
   if (camera.capabilities.directRtsp) badges.push("Direkt RTSP");
   return badges;
@@ -328,10 +336,23 @@ function renderPicker() {
     .join("");
 
   pickerEl.querySelectorAll("[data-camera-id]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       activeCameraId = button.dataset.cameraId;
       resetSettingsDraft(activeCameraId);
+      if (timelapseState?.cameraId !== activeCameraId) timelapseState = null;
       renderActiveCamera({ forceSettings: true });
+
+      const selectedCamera = getActiveCamera();
+      if (!timelapseCollapsed && selectedCamera?.capabilities?.timelapse) {
+        try {
+          setStatusLine(timelapseStatusEl, `Lade Zeitraffer fuer ${selectedCamera.label}...`);
+          await loadTimelapse(selectedCamera.cameraId);
+          renderTimelapseSection(selectedCamera);
+          setStatusLine(timelapseStatusEl, "Zeitrafferdaten geladen.");
+        } catch (error) {
+          setStatusLine(timelapseStatusEl, `Zeitraffer konnte nicht geladen werden: ${error.message}`, true);
+        }
+      }
     });
   });
 }
@@ -347,7 +368,18 @@ function renderState(camera) {
       : "status-offline";
 
   const primaryConfigRows =
-    camera.kind === "esp32"
+    camera.kind === "dfr1154"
+      ? `
+        <div><strong>Aufloesung</strong><span>${escapeHtml(config.framesize_name || "-")}</span></div>
+        <div><strong>JPEG</strong><span>${escapeHtml(config.jpeg_quality ?? "-")}</span></div>
+        <div><strong>RTSP FPS</strong><span>${escapeHtml(config.stream_fps ?? "-")}</span></div>
+        <div><strong>Umgebungslicht</strong><span>${escapeHtml(camera.status.ambientLux || "-")} Lux</span></div>
+        <div><strong>IR Modus</strong><span>${escapeHtml(camera.status.irMode || config.ir_mode_name || "-")}</span></div>
+        <div><strong>IR Zustand</strong><span>${camera.status.irEnabled === true ? "AN" : camera.status.irEnabled === false ? "AUS" : "-"}</span></div>
+        <div><strong>SD-Karte</strong><span>${escapeHtml(camera.status.sd || "-")}</span></div>
+        <div><strong>Lichtsensor</strong><span>${escapeHtml(camera.status.lightSensor || "-")}</span></div>
+      `
+      : camera.kind === "esp32"
       ? `
         <div><strong>Aufloesung</strong><span>${escapeHtml(config.framesize_name || "-")}</span></div>
         <div><strong>JPEG</strong><span>${escapeHtml(config.jpeg_quality ?? "-")}</span></div>
@@ -415,6 +447,7 @@ function renderTargets(camera) {
     ["RTSP", urls.rtsp],
     ["MediaMTX API", urls.apiBase || "deaktiviert"],
     ["Direkte Kamera RTSP", camera.status.rtspUrl || "-"],
+    ["Kamera Archiv", camera.stream.archiveUrl || "-"],
     ["Bridge Ziel RTSP", camera.bridge?.destinationRtspUrl || "-"],
     ["Bridge Status", camera.bridge?.state || "-"],
   ];
@@ -451,22 +484,38 @@ function renderStream(camera) {
 
   if (streamHintEl) {
     streamHintEl.textContent =
-      camera.kind === "esp32"
-        ? "ESP32-CAM liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen."
+      isJpegCamera(camera)
+        ? `${camera.label} liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen.`
         : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
   }
 }
 
-function setTimelapsePanelCollapsed(isCollapsed) {
+function setTimelapsePanelCollapsed(isCollapsed, { persist = true } = {}) {
   if (!timelapsePanelEl || !timelapseToggleEl) return;
-  timelapsePanelEl.classList.toggle("collapsed", isCollapsed);
-  timelapseToggleEl.textContent = isCollapsed ? "Einblenden" : "Ausblenden";
+  timelapseCollapsed = Boolean(isCollapsed);
+  timelapsePanelEl.classList.toggle("collapsed", timelapseCollapsed);
+  const body = timelapsePanelEl.querySelector(":scope > .section-body");
+  if (body) body.hidden = timelapseCollapsed;
+  timelapseToggleEl.textContent = timelapseCollapsed ? "Einblenden" : "Ausblenden";
+  timelapseToggleEl.setAttribute("aria-expanded", String(!timelapseCollapsed));
+  if (persist) {
+    localStorage.setItem(TIMELAPSE_COLLAPSED_STORAGE_KEY, String(timelapseCollapsed));
+  }
 }
 
 function renderTimelapseData() {
   if (!timelapsePanelEl || timelapsePanelEl.hidden) return;
 
-  if (!timelapseState) {
+  const activeCamera = getActiveCamera();
+  const currentTimelapseState =
+    timelapseState?.cameraId === activeCamera?.cameraId ? timelapseState : null;
+
+  if (!currentTimelapseState) {
+    if (timelapseVideoEl) {
+      timelapseVideoEl.removeAttribute("src");
+      timelapseVideoEl.dataset.src = "";
+      timelapseVideoEl.load();
+    }
     if (timelapseFileListEl) {
       timelapseFileListEl.innerHTML = '<li style="justify-content:center; color: var(--muted);">Zeitrafferdaten werden geladen</li>';
     }
@@ -476,7 +525,7 @@ function renderTimelapseData() {
     return;
   }
 
-  const latestVideo = timelapseState.latestVideo;
+  const latestVideo = currentTimelapseState.latestVideo;
   if (timelapseVideoEl) {
     if (latestVideo?.url) {
       if (timelapseVideoEl.dataset.src !== latestVideo.url) {
@@ -498,7 +547,7 @@ function renderTimelapseData() {
 
   if (!timelapseFileListEl) return;
 
-  const files = timelapseState.files || [];
+  const files = currentTimelapseState.files || [];
   if (!files.length) {
     timelapseFileListEl.innerHTML = '<li style="justify-content:center; color: var(--muted);">Keine Zeitrafferdateien vorhanden</li>';
     return;
@@ -531,7 +580,7 @@ function renderTimelapseData() {
         setStatusLine(timelapseStatusEl, `Loesche ${button.dataset.timelapseDelete}...`);
         await postTimelapseDelete({ cameraId: activeCamera.cameraId, name: button.dataset.timelapseDelete });
         await loadTimelapse(activeCamera.cameraId);
-        renderTimelapseData();
+        renderTimelapseSection(activeCamera);
         setStatusLine(timelapseStatusEl, `${button.dataset.timelapseDelete} geloescht.`);
       } catch (error) {
         setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);
@@ -545,21 +594,33 @@ function renderTimelapseSection(camera) {
 
   if (!camera || !camera.capabilities?.timelapse) {
     timelapsePanelEl.hidden = true;
-    timelapseState = null;
     return;
   }
 
   timelapsePanelEl.hidden = false;
-  if (!timelapseState) {
-    setTimelapsePanelCollapsed(true);
-  }
+  setTimelapsePanelCollapsed(timelapseCollapsed, { persist: false });
 
   if (timelapseSummaryEl) {
     const timelapse = camera.timelapse || {};
+    const archiveTotals = timelapseState?.cameraId === camera.cameraId ? timelapseState.totals : null;
+    const sync = timelapseState?.cameraId === camera.cameraId ? timelapseState.sync : null;
     const rows = [
       ["Status", timelapse.state || "-"],
       ["Intervall", timelapse.intervalSeconds ? `${timelapse.intervalSeconds} s` : "-"],
-      ["Speicher", `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`],
+      ["Geraetespeicher", `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`],
+      ["Serverarchiv", archiveTotals ? formatBytes(archiveTotals.totalBytes) : "Archiv noch nicht geladen"],
+      [
+        "Archivdateien",
+        archiveTotals ? `${archiveTotals.imageCount} JPG | ${archiveTotals.videoCount} MP4` : "Archiv noch nicht geladen",
+      ],
+      [
+        "Synchronisierung",
+        sync?.ok === false
+          ? `Fehler: ${sync.error}`
+          : sync?.ok === true
+            ? `${sync.downloaded} neu | ${sync.pending} ausstehend`
+            : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
+      ],
       ["Ordner", timelapse.outputDir || "-"],
       ["Letztes Bild", timelapse.lastImage || "-"],
     ];
@@ -825,7 +886,7 @@ loadOverview().catch((error) => {
 });
 
 timelapseToggleEl?.addEventListener("click", async () => {
-  const wasCollapsed = timelapsePanelEl?.classList.contains("collapsed");
+  const wasCollapsed = timelapseCollapsed;
   setTimelapsePanelCollapsed(!wasCollapsed);
 
   const activeCamera = getActiveCamera();
@@ -834,7 +895,7 @@ timelapseToggleEl?.addEventListener("click", async () => {
   try {
     setStatusLine(timelapseStatusEl, `Lade Zeitraffer fuer ${activeCamera.label}...`);
     await loadTimelapse(activeCamera.cameraId);
-    renderTimelapseData();
+    renderTimelapseSection(activeCamera);
     setStatusLine(timelapseStatusEl, "Zeitrafferdaten geladen.");
   } catch (error) {
     setStatusLine(timelapseStatusEl, `Zeitraffer konnte nicht geladen werden: ${error.message}`, true);
@@ -848,7 +909,7 @@ timelapseRefreshEl?.addEventListener("click", async () => {
   try {
     setStatusLine(timelapseStatusEl, "Aktualisiere Zeitrafferdateien...");
     await loadTimelapse(activeCamera.cameraId);
-    renderTimelapseData();
+    renderTimelapseSection(activeCamera);
     setStatusLine(timelapseStatusEl, "Zeitrafferdateien aktualisiert.");
   } catch (error) {
     setStatusLine(timelapseStatusEl, `Aktualisierung fehlgeschlagen: ${error.message}`, true);
@@ -863,7 +924,7 @@ timelapseBuildEl?.addEventListener("click", async () => {
     setStatusLine(timelapseStatusEl, "Erzeuge MP4 aus den JPEG-Bildern...");
     await postTimelapseBuild(activeCamera.cameraId);
     await loadTimelapse(activeCamera.cameraId);
-    renderTimelapseData();
+    renderTimelapseSection(activeCamera);
     setStatusLine(timelapseStatusEl, "Zeitraffer-Video erstellt.");
   } catch (error) {
     setStatusLine(timelapseStatusEl, `Video konnte nicht erzeugt werden: ${error.message}`, true);
@@ -878,7 +939,7 @@ timelapseDeleteVideoEl?.addEventListener("click", async () => {
     setStatusLine(timelapseStatusEl, "Loesche alle Zeitraffer-MP4...");
     await postTimelapseDelete({ cameraId: activeCamera.cameraId, type: "video" });
     await loadTimelapse(activeCamera.cameraId);
-    renderTimelapseData();
+    renderTimelapseSection(activeCamera);
     setStatusLine(timelapseStatusEl, "Alle MP4 geloescht.");
   } catch (error) {
     setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);
@@ -893,7 +954,7 @@ timelapseDeleteImagesEl?.addEventListener("click", async () => {
     setStatusLine(timelapseStatusEl, "Loesche alle Zeitraffer-JPG...");
     await postTimelapseDelete({ cameraId: activeCamera.cameraId, type: "image" });
     await loadTimelapse(activeCamera.cameraId);
-    renderTimelapseData();
+    renderTimelapseSection(activeCamera);
     setStatusLine(timelapseStatusEl, "Alle JPG geloescht.");
   } catch (error) {
     setStatusLine(timelapseStatusEl, `Loeschen fehlgeschlagen: ${error.message}`, true);

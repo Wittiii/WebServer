@@ -16,3 +16,5 @@ apiAddress: :9997
 
 paths:
   pi-zero-01: {}
+  esp32-cam-01: {}
+  dfr1154-cam-01: {}

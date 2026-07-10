@@ -121,6 +121,88 @@ function createEsp32CameraConfig(hostname, mediaConfig) {
   };
 }
 
+function createDfr1154CameraConfig(hostname, mediaConfig) {
+  const cameraId = process.env.CAMERA_DFR1154_ID || "dfr1154-cam-01";
+  const mqttTopicBase = trimSlashes(
+    process.env.CAMERA_DFR1154_TOPIC_BASE || `camera/${cameraId}`,
+    { trailing: true }
+  );
+  const mqttClientId = process.env.CAMERA_DFR1154_MQTT_CLIENT_ID || cameraId;
+  const streamPath = trimSlashes(process.env.CAMERA_DFR1154_STREAM_PATH || cameraId);
+
+  return {
+    cameraId,
+    label: process.env.CAMERA_DFR1154_LABEL || "DFRobot DFR1154",
+    kind: "dfr1154",
+    mqttClientId,
+    mqttTopicBase,
+    streamPath,
+    mediaHost: mediaConfig.mediaHost || hostname,
+    mediaMTX: mediaConfig,
+    urls: buildUrls({ ...mediaConfig, streamPath }),
+    archive: {
+      type: "remote_http",
+      baseUrl: String(process.env.CAMERA_DFR1154_ARCHIVE_URL || "").replace(/\/+$/, ""),
+      port: toNumber(process.env.CAMERA_DFR1154_ARCHIVE_PORT, 8080),
+      token: process.env.CAMERA_DFR1154_ARCHIVE_TOKEN || "1234",
+      localDir: process.env.CAMERA_DFR1154_TIMELAPSE_DIR || "",
+    },
+    capabilities: {
+      liveLed: true,
+      infrared: true,
+      ambientLight: true,
+      sdCard: true,
+      timelapse: true,
+      directRtsp: true,
+    },
+    controls: {
+      profile: "dfr1154",
+      fields: [
+        {
+          key: "framesize",
+          label: "Aufloesung",
+          type: "select",
+          options: [
+            { value: 0, label: "QVGA" },
+            { value: 1, label: "VGA" },
+            { value: 2, label: "SVGA" },
+            { value: 3, label: "XGA" },
+            { value: 4, label: "HD" },
+            { value: 5, label: "SXGA" },
+            { value: 6, label: "UXGA" },
+            { value: 7, label: "QXGA" },
+          ],
+        },
+        { key: "jpeg_quality", label: "JPEG Qualitaet", type: "number", min: 4, max: 63, step: 1, placeholder: "10" },
+        { key: "stream_fps", label: "RTSP FPS", type: "number", min: 1, max: 20, step: 1, placeholder: "10" },
+        { key: "brightness", label: "Helligkeit", type: "number", min: -2, max: 2, step: 1, placeholder: "1" },
+        { key: "contrast", label: "Kontrast", type: "number", min: -2, max: 2, step: 1, placeholder: "0" },
+        { key: "saturation", label: "Saettigung", type: "number", min: -2, max: 2, step: 1, placeholder: "-2" },
+        { key: "sharpness", label: "Schaerfe", type: "number", min: -2, max: 2, step: 1, placeholder: "0" },
+        {
+          key: "ir_mode",
+          label: "IR Modus",
+          type: "select",
+          options: [
+            { value: 0, label: "Aus" },
+            { value: 1, label: "An" },
+            { value: 2, label: "Automatisch" },
+          ],
+        },
+        { key: "ir_on_lux", label: "IR an unter Lux", type: "number", min: 0, max: 100000, step: 1, placeholder: "5" },
+        { key: "ir_off_lux", label: "IR aus ueber Lux", type: "number", min: 1, max: 100000, step: 1, placeholder: "10" },
+        { key: "timelapse_interval_seconds", label: "Zeitraffer Intervall (s)", type: "number", min: 5, max: 86400, step: 1, placeholder: "60" },
+        { key: "timelapse_limit_gb", label: "Zeitraffer Limit (GB)", type: "number", min: 1, max: 30, step: 1, placeholder: "22" },
+        { key: "hmirror", label: "Horizontal spiegeln", type: "checkbox" },
+        { key: "vflip", label: "Vertikal spiegeln", type: "checkbox" },
+        { key: "led", label: "Status LED", type: "checkbox" },
+        { key: "stream_enabled", label: "RTSP aktiv", type: "checkbox" },
+        { key: "timelapse_enabled", label: "Zeitraffer aktiv", type: "checkbox" },
+      ],
+    },
+  };
+}
+
 function getMediaConfig(hostname = "localhost") {
   const mediaHost = process.env.MEDIA_MTX_PUBLIC_HOST || hostname;
   const webrtcPort = toNumber(process.env.MEDIA_MTX_WEBRTC_PORT, 8889);
@@ -144,6 +226,7 @@ function getCameraConfigs(hostname = "localhost") {
   return [
     createPiCameraConfig(hostname, mediaConfig),
     createEsp32CameraConfig(hostname, mediaConfig),
+    createDfr1154CameraConfig(hostname, mediaConfig),
   ];
 }
 

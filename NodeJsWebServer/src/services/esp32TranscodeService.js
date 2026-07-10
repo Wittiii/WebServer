@@ -339,7 +339,9 @@ function evaluateBridge(camera) {
 }
 
 function supervisorTick() {
-  const cameras = getCameraConfigs("localhost").filter((camera) => camera.kind === "esp32");
+  const cameras = getCameraConfigs("localhost").filter(
+    (camera) => camera.kind === "esp32" || camera.kind === "dfr1154"
+  );
   const activeCameraIds = new Set(cameras.map((camera) => camera.cameraId));
 
   for (const camera of cameras) {

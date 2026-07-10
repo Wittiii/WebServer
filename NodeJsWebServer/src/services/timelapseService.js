@@ -34,18 +34,140 @@ function isWithinRoot(rootDir, candidatePath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function normalizeTimelapseRoot(cameraOverview) {
-  const rawDir = process.env.CAMERA_PI_TIMELAPSE_DIR || cameraOverview?.timelapse?.outputDir || "";
+function isRemoteArchive(cameraConfig) {
+  return cameraConfig?.archive?.type === "remote_http";
+}
+
+function normalizeTimelapseRoot(cameraOverview, cameraConfig) {
+  const rawDir = isRemoteArchive(cameraConfig)
+    ? cameraConfig.archive.localDir || path.join(process.cwd(), "data", "timelapse", cameraOverview.cameraId)
+    : process.env.CAMERA_PI_TIMELAPSE_DIR || cameraOverview?.timelapse?.outputDir || "";
   if (!rawDir) {
     throw new Error("timelapse_dir_unavailable");
   }
   return path.resolve(rawDir);
 }
 
-async function ensureTimelapseRoot(cameraOverview) {
-  const rootDir = normalizeTimelapseRoot(cameraOverview);
+async function ensureTimelapseRoot(cameraOverview, cameraConfig) {
+  const rootDir = normalizeTimelapseRoot(cameraOverview, cameraConfig);
   await fs.mkdir(rootDir, { recursive: true });
   return rootDir;
+}
+
+function getRemoteArchiveBaseUrl(cameraOverview, cameraConfig) {
+  const explicit = String(cameraConfig?.archive?.baseUrl || "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+
+  const reported = String(cameraOverview?.stream?.archiveUrl || "").replace(/\/+$/, "");
+  if (reported) return reported;
+
+  const ip = String(cameraOverview?.status?.ip || "").trim();
+  if (!ip || ip === "-") throw new Error("remote_archive_ip_unavailable");
+  return `http://${ip}:${cameraConfig?.archive?.port || 8080}`;
+}
+
+function getRemoteArchiveHeaders(cameraConfig) {
+  const token = String(cameraConfig?.archive?.token || "");
+  return token ? { "X-Archive-Token": token } : {};
+}
+
+function getRemoteTimeoutMs() {
+  return Math.max(2000, toNumber(process.env.CAMERA_DFR1154_ARCHIVE_TIMEOUT_MS, 15000));
+}
+
+function getRemoteSyncLimit() {
+  return Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 500));
+}
+
+function validRemoteImageName(name) {
+  const normalized = String(name || "");
+  return /^frame-[A-Za-z0-9-]+\.jpe?g$/i.test(normalized);
+}
+
+async function fetchRemote(url, cameraConfig, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...getRemoteArchiveHeaders(cameraConfig),
+      ...(options.headers || {}),
+    },
+    signal: AbortSignal.timeout(getRemoteTimeoutMs()),
+  });
+  if (!response.ok) {
+    throw new Error(`remote_archive_http_${response.status}`);
+  }
+  return response;
+}
+
+async function localFileMatches(filePath, expectedSize) {
+  try {
+    const stats = await fs.stat(filePath);
+    return stats.isFile() && stats.size === expectedSize;
+  } catch {
+    return false;
+  }
+}
+
+async function downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig) {
+  const targetPath = path.join(rootDir, remoteFile.name);
+  const response = await fetchRemote(
+    `${baseUrl}/api/timelapse/file?name=${encodeURIComponent(remoteFile.name)}`,
+    cameraConfig
+  );
+  const data = Buffer.from(await response.arrayBuffer());
+  if (data.length !== remoteFile.sizeBytes) {
+    throw new Error(`remote_archive_size_mismatch_${remoteFile.name}`);
+  }
+
+  const temporaryPath = `${targetPath}.part`;
+  await fs.writeFile(temporaryPath, data);
+  await fs.unlink(targetPath).catch(() => {});
+  await fs.rename(temporaryPath, targetPath);
+
+  if (remoteFile.modifiedEpoch > 0) {
+    const modifiedAt = new Date(remoteFile.modifiedEpoch * 1000);
+    await fs.utimes(targetPath, modifiedAt, modifiedAt).catch(() => {});
+  }
+}
+
+async function syncRemoteArchive(cameraOverview, cameraConfig, rootDir) {
+  const baseUrl = getRemoteArchiveBaseUrl(cameraOverview, cameraConfig);
+  const response = await fetchRemote(`${baseUrl}/api/timelapse`, cameraConfig);
+  const payload = await response.json();
+  if (!payload?.ok || !Array.isArray(payload.files)) {
+    throw new Error("remote_archive_invalid_listing");
+  }
+
+  const remoteFiles = payload.files
+    .filter((file) => validRemoteImageName(file?.name))
+    .map((file) => ({
+      name: String(file.name),
+      sizeBytes: Math.max(0, toNumber(file.sizeBytes, 0)),
+      modifiedEpoch: Math.max(0, toNumber(file.modifiedEpoch, 0)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const pending = [];
+  for (const remoteFile of remoteFiles) {
+    if (!(await localFileMatches(path.join(rootDir, remoteFile.name), remoteFile.sizeBytes))) {
+      pending.push(remoteFile);
+    }
+  }
+
+  const selected = pending.slice(0, getRemoteSyncLimit());
+  let downloaded = 0;
+  for (const remoteFile of selected) {
+    await downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig);
+    downloaded += 1;
+  }
+
+  return {
+    ok: true,
+    baseUrl,
+    remoteCount: remoteFiles.length,
+    downloaded,
+    pending: Math.max(0, pending.length - downloaded),
+  };
 }
 
 function sanitizeFileEntry(cameraId, file) {
@@ -56,8 +178,16 @@ function sanitizeFileEntry(cameraId, file) {
   };
 }
 
-async function listTimelapseFiles(cameraOverview) {
-  const rootDir = await ensureTimelapseRoot(cameraOverview);
+async function listTimelapseFiles(cameraOverview, cameraConfig, options = {}) {
+  const rootDir = await ensureTimelapseRoot(cameraOverview, cameraConfig);
+  let sync = null;
+  if (isRemoteArchive(cameraConfig) && options.syncRemote !== false) {
+    try {
+      sync = await syncRemoteArchive(cameraOverview, cameraConfig, rootDir);
+    } catch (error) {
+      sync = { ok: false, error: String(error?.message || error) };
+    }
+  }
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
   const files = [];
 
@@ -85,6 +215,7 @@ async function listTimelapseFiles(cameraOverview) {
 
   return {
     rootDir,
+    sync,
     files,
     safeFiles: files.map((file) => sanitizeFileEntry(cameraOverview.cameraId, file)),
     videoFiles,
@@ -115,8 +246,14 @@ async function spawnAndWait(command, args) {
   });
 }
 
-async function buildTimelapseVideo(cameraOverview) {
-  const listing = await listTimelapseFiles(cameraOverview);
+async function buildTimelapseVideo(cameraOverview, cameraConfig) {
+  const listing = await listTimelapseFiles(cameraOverview, cameraConfig);
+  if (isRemoteArchive(cameraConfig) && listing.sync?.ok === false) {
+    throw new Error(`remote_archive_sync_failed: ${listing.sync.error}`);
+  }
+  if (isRemoteArchive(cameraConfig) && listing.sync?.pending > 0) {
+    throw new Error(`remote_archive_sync_incomplete: ${listing.sync.pending} files pending`);
+  }
   if (listing.imageFiles.length === 0) {
     throw new Error("no_timelapse_images");
   }
@@ -145,17 +282,37 @@ async function buildTimelapseVideo(cameraOverview) {
   ]);
 }
 
-async function deleteTimelapseFile(cameraOverview, name) {
-  const rootDir = await ensureTimelapseRoot(cameraOverview);
+async function deleteRemoteImage(cameraOverview, cameraConfig, name) {
+  const baseUrl = getRemoteArchiveBaseUrl(cameraOverview, cameraConfig);
+  await fetchRemote(
+    `${baseUrl}/api/timelapse/file?name=${encodeURIComponent(name)}`,
+    cameraConfig,
+    { method: "DELETE" }
+  );
+}
+
+async function deleteAllRemoteImages(cameraOverview, cameraConfig) {
+  const baseUrl = getRemoteArchiveBaseUrl(cameraOverview, cameraConfig);
+  await fetchRemote(`${baseUrl}/api/timelapse`, cameraConfig, { method: "DELETE" });
+}
+
+async function deleteTimelapseFile(cameraOverview, cameraConfig, name) {
+  const rootDir = await ensureTimelapseRoot(cameraOverview, cameraConfig);
   const absolutePath = path.resolve(path.join(rootDir, String(name || "")));
   if (!isWithinRoot(rootDir, absolutePath)) {
     throw new Error("invalid_timelapse_path");
   }
+  if (isRemoteArchive(cameraConfig) && /\.jpe?g$/i.test(String(name || ""))) {
+    await deleteRemoteImage(cameraOverview, cameraConfig, String(name));
+  }
   await fs.unlink(absolutePath);
 }
 
-async function deleteTimelapseByType(cameraOverview, type) {
-  const listing = await listTimelapseFiles(cameraOverview);
+async function deleteTimelapseByType(cameraOverview, cameraConfig, type) {
+  if (isRemoteArchive(cameraConfig) && type === "image") {
+    await deleteAllRemoteImages(cameraOverview, cameraConfig);
+  }
+  const listing = await listTimelapseFiles(cameraOverview, cameraConfig, { syncRemote: false });
   const normalizedType = type === "video" ? "video" : "image";
   const targets = listing.files.filter((file) => file.type === normalizedType);
   for (const target of targets) {
@@ -164,8 +321,8 @@ async function deleteTimelapseByType(cameraOverview, type) {
   return targets.length;
 }
 
-async function resolveTimelapseFilePath(cameraOverview, name) {
-  const rootDir = await ensureTimelapseRoot(cameraOverview);
+async function resolveTimelapseFilePath(cameraOverview, cameraConfig, name) {
+  const rootDir = await ensureTimelapseRoot(cameraOverview, cameraConfig);
   const absolutePath = path.resolve(path.join(rootDir, String(name || "")));
   if (!isWithinRoot(rootDir, absolutePath)) {
     throw new Error("invalid_timelapse_path");

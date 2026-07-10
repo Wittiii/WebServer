@@ -67,6 +67,12 @@ function buildCameraOverview(config) {
   const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
   const directStreamingClientsValue = getLatestTopicValue(statusTopics, "direct_streaming_clients");
   const frameFpsValue = getLatestTopicValue(statusTopics, "frame_fps");
+  const ambientLuxValue = getLatestTopicValue(statusTopics, "ambient_lux");
+  const irModeValue = getLatestTopicValue(statusTopics, "ir_mode");
+  const irEnabledValue = getLatestTopicValue(statusTopics, "ir_enabled");
+  const lightSensorValue = getLatestTopicValue(statusTopics, "light_sensor");
+  const sdValue = getLatestTopicValue(statusTopics, "sd");
+  const archiveUrlValue = getLatestTopicValue(statusTopics, "archive_url");
   const timelapseStateValue = getLatestTopicValue(statusTopics, "timelapse/state");
   const timelapseErrorValue = getLatestTopicValue(statusTopics, "timelapse/error");
   const timelapseStorageBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_bytes");
@@ -81,7 +87,9 @@ function buildCameraOverview(config) {
 
   const mqttClient = getClientSnapshot(config.mqttClientId);
   const streamConfig = parseJson(configValue);
-  const bridge = config.kind === "esp32" ? getEsp32BridgeSnapshot(config.cameraId) : null;
+  const bridge = config.kind === "esp32" || config.kind === "dfr1154"
+    ? getEsp32BridgeSnapshot(config.cameraId)
+    : null;
 
   return {
     cameraId: config.cameraId,
@@ -102,6 +110,7 @@ function buildCameraOverview(config) {
       urls: config.urls,
       currentConfig: streamConfig,
       sourceRtspUrl: rtspUrlValue || "",
+      archiveUrl: archiveUrlValue || "",
     },
     timelapse: config.capabilities.timelapse
       ? {
@@ -126,6 +135,11 @@ function buildCameraOverview(config) {
       directSessions: directSessionsValue || "",
       directStreamingClients: directStreamingClientsValue || "",
       frameFps: frameFpsValue || "",
+      ambientLux: ambientLuxValue || "",
+      irMode: irModeValue || "",
+      irEnabled: parseBoolean(irEnabledValue),
+      lightSensor: lightSensorValue || "",
+      sd: sdValue || "",
       ip: ipValue || "",
       rtspUrl: rtspUrlValue || config.urls.rtsp,
       lastStatus: lastStatusValue || "",
@@ -167,7 +181,7 @@ async function getTimelapse(req, res) {
 
   try {
     const overview = buildCameraOverview(config);
-    const listing = await listTimelapseFiles(overview);
+    const listing = await listTimelapseFiles(overview, config);
     res.json({
       ok: true,
       cameraId,
@@ -180,6 +194,7 @@ async function getTimelapse(req, res) {
         imageCount: listing.imageFiles.length,
         videoCount: listing.videoFiles.length,
       },
+      sync: listing.sync,
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: String(error?.message || error) });
@@ -195,8 +210,8 @@ async function buildTimelapse(req, res) {
 
   try {
     const overview = buildCameraOverview(config);
-    await buildTimelapseVideo(overview);
-    const listing = await listTimelapseFiles(overview);
+    await buildTimelapseVideo(overview, config);
+    const listing = await listTimelapseFiles(overview, config, { syncRemote: false });
     res.json({
       ok: true,
       latestVideo: listing.latestVideo,
@@ -221,14 +236,14 @@ async function deleteTimelapse(req, res) {
   try {
     const overview = buildCameraOverview(config);
     if (name) {
-      await deleteTimelapseFile(overview, name);
+      await deleteTimelapseFile(overview, config, name);
     } else if (type === "video" || type === "image") {
-      await deleteTimelapseByType(overview, type);
+      await deleteTimelapseByType(overview, config, type);
     } else {
       return res.status(400).json({ ok: false, error: "invalid_delete_target" });
     }
 
-    const listing = await listTimelapseFiles(overview);
+    const listing = await listTimelapseFiles(overview, config, { syncRemote: false });
     res.json({
       ok: true,
       latestVideo: listing.latestVideo,
@@ -253,7 +268,7 @@ async function getTimelapseFile(req, res) {
 
   try {
     const overview = buildCameraOverview(config);
-    const filePath = await resolveTimelapseFilePath(overview, name);
+    const filePath = await resolveTimelapseFilePath(overview, config, name);
     await fs.access(filePath);
     res.sendFile(filePath);
   } catch (error) {

@@ -141,38 +141,41 @@ async function initBrokerOverview() {
 
   document.querySelectorAll("section").forEach((section, index) => {
     if (section.dataset.collapsibleReady === "true") return;
+    if (section.dataset.collapsible === "false" || section.dataset.collapsible === "manual") return;
 
-    const heading = section.querySelector("h2, h3");
+    const existingHeader = [...section.children].find(
+      (child) => child.matches(".section-header, .camera-stream-header") && child.querySelector("h2, h3")
+    );
+    const heading =
+      [...section.children].find((child) => child.matches("h2, h3")) ||
+      existingHeader?.querySelector("h2, h3");
     if (!heading) return;
 
     section.dataset.collapsibleReady = "true";
     section.classList.add("collapsible-section");
 
-    const originalTag = heading.tagName.toLowerCase();
-    const title = document.createElement(originalTag);
-    title.textContent = heading.textContent.trim();
-    title.className = heading.className;
-
-    heading.remove();
-
-    const body = document.createElement("div");
-    body.className = "section-body";
-
-    while (section.firstChild) {
-      body.appendChild(section.firstChild);
+    const header = existingHeader || document.createElement("div");
+    if (!existingHeader) {
+      header.className = "section-header";
+      header.appendChild(heading);
     }
 
-    const header = document.createElement("div");
-    header.className = "section-header";
+    let body = [...section.children].find((child) => child.classList.contains("section-body"));
+    if (!body) {
+      body = document.createElement("div");
+      body.className = "section-body";
+      [...section.children].forEach((child) => {
+        if (child !== header) body.appendChild(child);
+      });
+    }
 
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "section-toggle";
 
-    header.appendChild(title);
     header.appendChild(toggle);
-    section.appendChild(header);
-    section.appendChild(body);
+    if (!existingHeader) section.prepend(header);
+    if (!body.parentElement) section.appendChild(body);
 
     const storageKey = `${pageKey}-section-${section.id || index}-collapsed`;
     const applyState = (collapsed) => {

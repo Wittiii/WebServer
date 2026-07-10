@@ -44,6 +44,13 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_ESP32_TOPIC_BASE=camera/esp32-cam-01`
 - `CAMERA_ESP32_MQTT_CLIENT_ID=esp32-cam-01`
 - `CAMERA_ESP32_STREAM_PATH=esp32-cam-01`
+- `CAMERA_DFR1154_ID=dfr1154-cam-01`
+- `CAMERA_DFR1154_TOPIC_BASE=camera/dfr1154-cam-01`
+- `CAMERA_DFR1154_MQTT_CLIENT_ID=dfr1154-cam-01`
+- `CAMERA_DFR1154_STREAM_PATH=dfr1154-cam-01`
+- `CAMERA_DFR1154_ARCHIVE_PORT=8080`
+- `CAMERA_DFR1154_ARCHIVE_TOKEN=1234`
+- `CAMERA_DFR1154_TIMELAPSE_DIR=` optionaler lokaler Cache; Standard ist `data/timelapse/dfr1154-cam-01`
 - `ESP32_TRANSCODE_ENABLED=true`
 - `ESP32_TRANSCODE_FFMPEG_PATH=ffmpeg`
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
@@ -76,7 +83,7 @@ Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
 
 ## Zeitraffer im Webserver
 
-Fuer die Pi-Kamera gibt es auf `/camera` einen eigenen einklappbaren Bereich:
+Fuer die Pi-Kamera und den DFR1154 gibt es auf `/camera` einen eigenen einklappbaren Bereich:
 
 - listet JPEG- und MP4-Dateien aus dem Zeitrafferordner
 - erzeugt auf Wunsch eine MP4 aus den vorhandenen JPEG-Bildern
@@ -85,3 +92,7 @@ Fuer die Pi-Kamera gibt es auf `/camera` einen eigenen einklappbaren Bereich:
 
 Die API verwendet bevorzugt den von `pi_streamer` gemeldeten MQTT-Wert `status/timelapse/output_dir`.
 Wenn dieser noch nicht vorhanden ist, kann alternativ `CAMERA_PI_TIMELAPSE_DIR` gesetzt werden.
+
+Der DFR1154 speichert seine JPEGs auf der SD-Karte und stellt sie auf Port `8080` bereit. Der Webserver
+ruft fehlende Bilder mit `X-Archive-Token` ab, legt sie in seinem lokalen Cache ab und erzeugt die MP4
+auf dem Server. MQTT wird nur fuer Steuerung und Status verwendet, nicht fuer Bilddaten.
