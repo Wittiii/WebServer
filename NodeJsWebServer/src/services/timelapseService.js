@@ -2,6 +2,8 @@ const fs = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
 
+const remoteSyncJobs = new Map();
+
 function toNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -83,8 +85,57 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getRemoteSyncJob(cameraId) {
+  const key = String(cameraId || "");
+  let job = remoteSyncJobs.get(key);
+  if (!job) {
+    job = {
+      cameraId: key,
+      running: false,
+      baseUrl: "",
+      remoteCount: 0,
+      downloaded: 0,
+      pending: 0,
+      error: "",
+      updatedAt: 0,
+      promise: null,
+    };
+    remoteSyncJobs.set(key, job);
+  }
+  return job;
+}
+
+function buildRemoteSyncSnapshot(job, overrides = {}) {
+  const merged = {
+    ok: !job.error,
+    running: job.running,
+    baseUrl: job.baseUrl,
+    remoteCount: job.remoteCount,
+    downloaded: job.downloaded,
+    pending: job.pending,
+    error: job.error,
+    updatedAt: job.updatedAt,
+    ...overrides,
+  };
+
+  return {
+    ok: merged.ok,
+    running: Boolean(merged.running),
+    baseUrl: merged.baseUrl || "",
+    remoteCount: Math.max(0, toNumber(merged.remoteCount, 0)),
+    downloaded: Math.max(0, toNumber(merged.downloaded, 0)),
+    pending: Math.max(0, toNumber(merged.pending, 0)),
+    error: merged.error || "",
+    updatedAt: merged.updatedAt ? new Date(merged.updatedAt).toISOString() : null,
+  };
+}
+
 function getRemoteSyncLimit() {
-  return Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 500));
+  return Math.max(1, toNumber(process.env.CAMERA_DFR1154_SYNC_MAX_FILES, 20));
+}
+
+function getRemoteDownloadPauseMs() {
+  return Math.max(0, toNumber(process.env.CAMERA_DFR1154_SYNC_PAUSE_MS, 150));
 }
 
 function validRemoteImageName(name) {
@@ -165,7 +216,7 @@ async function downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig) {
   }
 }
 
-async function syncRemoteArchive(cameraOverview, cameraConfig, rootDir) {
+async function syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job) {
   const baseUrl = getRemoteArchiveBaseUrl(cameraOverview, cameraConfig);
   const response = await fetchRemote(`${baseUrl}/api/timelapse`, cameraConfig);
   const payload = await response.json();
@@ -180,7 +231,7 @@ async function syncRemoteArchive(cameraOverview, cameraConfig, rootDir) {
       sizeBytes: Math.max(0, toNumber(file.sizeBytes, 0)),
       modifiedEpoch: Math.max(0, toNumber(file.modifiedEpoch, 0)),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => b.name.localeCompare(a.name));
 
   const pending = [];
   for (const remoteFile of remoteFiles) {
@@ -194,7 +245,17 @@ async function syncRemoteArchive(cameraOverview, cameraConfig, rootDir) {
   for (const remoteFile of selected) {
     await downloadRemoteImage(baseUrl, remoteFile, rootDir, cameraConfig);
     downloaded += 1;
+    if (getRemoteDownloadPauseMs() > 0) {
+      await sleep(getRemoteDownloadPauseMs());
+    }
   }
+
+  job.baseUrl = baseUrl;
+  job.remoteCount = remoteFiles.length;
+  job.downloaded = downloaded;
+  job.pending = Math.max(0, pending.length - downloaded);
+  job.error = "";
+  job.updatedAt = Date.now();
 
   return {
     ok: true,
@@ -203,6 +264,53 @@ async function syncRemoteArchive(cameraOverview, cameraConfig, rootDir) {
     downloaded,
     pending: Math.max(0, pending.length - downloaded),
   };
+}
+
+function startRemoteSyncLoop(cameraOverview, cameraConfig, rootDir, job) {
+  if (job.running) return job.promise;
+
+  job.running = true;
+  job.error = "";
+  job.updatedAt = Date.now();
+  job.promise = (async () => {
+    try {
+      while (true) {
+        const result = await syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job);
+        if (result.pending <= 0) break;
+        await sleep(Math.max(250, getRemoteDownloadPauseMs()));
+      }
+    } catch (error) {
+      job.error = String(error?.message || error);
+      job.updatedAt = Date.now();
+    } finally {
+      job.running = false;
+      job.updatedAt = Date.now();
+      job.promise = null;
+    }
+  })();
+
+  return job.promise;
+}
+
+async function ensureRemoteArchiveSync(cameraOverview, cameraConfig, rootDir) {
+  const job = getRemoteSyncJob(cameraOverview.cameraId);
+  if (job.running) return buildRemoteSyncSnapshot(job);
+
+  try {
+    const firstPass = await syncRemoteArchivePass(cameraOverview, cameraConfig, rootDir, job);
+    if (firstPass.pending > 0) {
+      startRemoteSyncLoop(cameraOverview, cameraConfig, rootDir, job);
+    }
+    return buildRemoteSyncSnapshot(job, {
+      ok: true,
+      running: firstPass.pending > 0,
+    });
+  } catch (error) {
+    job.running = false;
+    job.error = String(error?.message || error);
+    job.updatedAt = Date.now();
+    return buildRemoteSyncSnapshot(job, { ok: false });
+  }
 }
 
 function sanitizeFileEntry(cameraId, file) {
@@ -217,11 +325,7 @@ async function listTimelapseFiles(cameraOverview, cameraConfig, options = {}) {
   const rootDir = await ensureTimelapseRoot(cameraOverview, cameraConfig);
   let sync = null;
   if (isRemoteArchive(cameraConfig) && options.syncRemote !== false) {
-    try {
-      sync = await syncRemoteArchive(cameraOverview, cameraConfig, rootDir);
-    } catch (error) {
-      sync = { ok: false, error: String(error?.message || error) };
-    }
+    sync = await ensureRemoteArchiveSync(cameraOverview, cameraConfig, rootDir);
   }
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
   const files = [];

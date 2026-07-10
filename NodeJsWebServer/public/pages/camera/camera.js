@@ -35,6 +35,7 @@ const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
 let timelapseState = null;
+let timelapseRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
 let timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false";
 
@@ -617,6 +618,8 @@ function renderTimelapseSection(camera) {
         "Synchronisierung",
         sync?.ok === false
           ? `Fehler: ${sync.error}`
+          : sync?.running
+            ? `${sync.downloaded} neu | ${sync.pending} ausstehend | laeuft`
           : sync?.ok === true
             ? `${sync.downloaded} neu | ${sync.pending} ausstehend`
             : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
@@ -961,8 +964,36 @@ timelapseDeleteImagesEl?.addEventListener("click", async () => {
   }
 });
 
-setInterval(() => {
-  loadOverview().catch((error) => {
+setInterval(async () => {
+  try {
+    await loadOverview();
+  } catch (error) {
     setStatusLine(commandStatusEl, `Aktualisierung fehlgeschlagen: ${error.message}`, true);
-  });
+    return;
+  }
+
+  const activeCamera = getActiveCamera();
+  if (
+    timelapseRefreshInFlight ||
+    timelapseCollapsed ||
+    !activeCamera?.capabilities?.timelapse ||
+    activeCamera.kind !== "dfr1154"
+  ) {
+    return;
+  }
+
+  const currentSync = timelapseState?.cameraId === activeCamera.cameraId ? timelapseState?.sync : null;
+  if (!currentSync?.running && !(Number(currentSync?.pending || 0) > 0)) {
+    return;
+  }
+
+  timelapseRefreshInFlight = true;
+  try {
+    await loadTimelapse(activeCamera.cameraId);
+    renderTimelapseSection(getActiveCamera());
+  } catch {
+    // Keep the last successful snapshot visible; the user can retry manually.
+  } finally {
+    timelapseRefreshInFlight = false;
+  }
 }, 5000);
