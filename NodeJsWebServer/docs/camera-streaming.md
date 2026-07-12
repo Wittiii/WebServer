@@ -53,7 +53,6 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_DFR1154_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/dfr1154-cam-01`
 - `CAMERA_DFR1154_TIMELAPSE_ENABLED=true`
 - `CAMERA_DFR1154_TIMELAPSE_INTERVAL_SECONDS=60`
-- `CAMERA_DFR1154_TIMELAPSE_LIMIT_GB=22`
 - `ESP32_TRANSCODE_ENABLED=true`
 - `ESP32_TRANSCODE_FFMPEG_PATH=ffmpeg`
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
@@ -62,7 +61,6 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_PI_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/pi-zero-01`
 - `CAMERA_PI_TIMELAPSE_ENABLED=true`
 - `CAMERA_PI_TIMELAPSE_INTERVAL_SECONDS=60`
-- `CAMERA_PI_TIMELAPSE_LIMIT_GB=22`
 - `CAMERA_TIMELAPSE_MIN_FREE_GB=5`
 - `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB=0` (`0` deaktiviert nur das Gesamtlimit)
 - `TIMELAPSE_FFMPEG_PATH=ffmpeg`
@@ -107,7 +105,6 @@ Die Einstellungen `server_capture_enabled` und `server_capture_interval_seconds`
 ueber MQTT an die Kamera gesendet und dort als Soll-Konfiguration behalten. Der eigentliche
 Aufnahmestatus wird unter `camera/<id>/status/server_capture/*` vom Server publiziert.
 
-Speicherlimits werden ausschliesslich mit `CAMERA_PI_TIMELAPSE_LIMIT_GB`,
-`CAMERA_DFR1154_TIMELAPSE_LIMIT_GB`, `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB` und
+Die Speicherbegrenzung wird ausschliesslich mit `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB` und
 `CAMERA_TIMELAPSE_MIN_FREE_GB` auf dem Server festgelegt. Der zusaetzliche Wert
 `CAMERA_TIMELAPSE_WRITE_HEADROOM_MB` reserviert Platz fuer das gerade erzeugte JPEG.

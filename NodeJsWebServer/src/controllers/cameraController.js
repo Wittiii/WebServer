@@ -84,7 +84,6 @@ function buildCameraOverview(config) {
   const timelapseStateValue = getLatestTopicValue(statusTopics, "timelapse/state");
   const timelapseErrorValue = getLatestTopicValue(statusTopics, "timelapse/error");
   const timelapseStorageBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_bytes");
-  const timelapseStorageLimitBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_limit_bytes");
   const timelapseLastImageValue = getLatestTopicValue(statusTopics, "timelapse/last_image");
   const timelapseOutputDirValue = getLatestTopicValue(statusTopics, "timelapse/output_dir");
   const timelapseEnabledValue = getLatestTopicValue(statusTopics, "timelapse/enabled");
@@ -128,8 +127,6 @@ function buildCameraOverview(config) {
           state: serverCapture?.state || timelapseStateValue || "unknown",
           error: serverCapture?.error || timelapseErrorValue || "",
           storageBytes: serverCapture?.storageBytes ?? Number(timelapseStorageBytesValue || 0),
-          storageLimitBytes:
-            serverCapture?.storageLimitBytes ?? Number(timelapseStorageLimitBytesValue || 0),
           lastImage: serverCapture?.lastImage || timelapseLastImageValue || "",
           outputDir: serverCapture?.outputDir || timelapseOutputDirValue || "",
           enabled: serverCapture?.enabled ?? parseBoolean(timelapseEnabledValue),

@@ -45,7 +45,6 @@ function getJob(cameraId) {
       enabled: true,
       intervalSeconds: 60,
       storageBytes: 0,
-      storageLimitBytes: 22 * GIB,
       outputDir: "",
       lastImage: "",
       lastCaptureAt: null,
@@ -86,9 +85,7 @@ function getSettings(camera) {
       process.env[`${prefix}_TIMELAPSE_INTERVAL_SECONDS`] || 60
     )
   );
-  const limitGb = Math.max(0.1, toNumber(process.env[`${prefix}_TIMELAPSE_LIMIT_GB`], 22));
-
-  return { enabled, intervalSeconds, storageLimitBytes: Math.floor(limitGb * GIB) };
+  return { enabled, intervalSeconds };
 }
 
 function getOutputDir(camera) {
@@ -162,7 +159,6 @@ async function publishStatus(camera, job, force = false) {
     enabled: job.enabled,
     interval_seconds: job.intervalSeconds,
     storage_bytes: job.storageBytes,
-    storage_limit_bytes: job.storageLimitBytes,
     global_storage_bytes: job.globalStorageBytes,
     global_storage_limit_bytes: job.globalStorageLimitBytes,
     server_free_bytes: job.serverFreeBytes,
@@ -206,7 +202,6 @@ async function captureFrame(camera, job) {
   try {
     await refreshStorage(job);
     await refreshDiskLimits(job);
-    if (job.storageBytes >= job.storageLimitBytes) throw new Error("camera_storage_limit_reached");
     if (job.globalStorageLimitBytes && job.globalStorageBytes >= job.globalStorageLimitBytes) {
       throw new Error("global_storage_limit_reached");
     }
@@ -322,7 +317,6 @@ function getCameraTimelapseCaptureSnapshot(cameraId) {
     state: job.state,
     error: job.error,
     storageBytes: job.storageBytes,
-    storageLimitBytes: job.storageLimitBytes,
     globalStorageBytes: job.globalStorageBytes,
     globalStorageLimitBytes: job.globalStorageLimitBytes,
     serverFreeBytes: job.serverFreeBytes,

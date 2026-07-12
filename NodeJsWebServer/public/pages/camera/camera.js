@@ -577,8 +577,8 @@ function renderTimelapseSection(camera) {
       [
         "Kameraarchiv",
         archiveTotals
-          ? `${formatBytes(archiveTotals.totalBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`
-          : `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`,
+          ? formatBytes(archiveTotals.totalBytes)
+          : formatBytes(timelapse.storageBytes),
       ],
       [
         "Archivdateien",
