@@ -6,7 +6,7 @@ require("dotenv").config({ path: path.join(__dirname, "config", ".env") });
 require("./database/db");
 const { startAutomationEngine } = require("./services/automationService");
 const { startEsp32TranscodeSupervisor } = require("./services/esp32TranscodeService");
-const { startDfrTimelapseCaptureSupervisor } = require("./services/dfrTimelapseCaptureService");
+const { startCameraTimelapseCaptureSupervisor } = require("./services/cameraTimelapseCaptureService");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,4 +54,4 @@ app.listen(PORT, "0.0.0.0", () => {
 
 startAutomationEngine();
 startEsp32TranscodeSupervisor();
-startDfrTimelapseCaptureSupervisor();
+startCameraTimelapseCaptureSupervisor();

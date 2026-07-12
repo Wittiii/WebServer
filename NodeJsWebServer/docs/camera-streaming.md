@@ -15,12 +15,14 @@
   - `/api/camera/*` Endpunkte
   - MQTT Publish fuer Start, Stop, Restart und Parameter
   - Statusanzeige aus MQTT Topics
+  - Zeitraffer-Snapshots direkt aus MediaMTX fuer Pi und DFR1154
 - MediaMTX:
   - Stream-Annahme
   - Ausgabe als WebRTC, HLS und RTSP
 - Raspberry Pi:
   - `rpicam-vid`
   - Publish per FFmpeg an MediaMTX
+  - keine lokale Zeitrafferspeicherung
 - ESP32:
   - liefert RTSP(MJPEG)
   - wird bei erkanntem MQTT-Status automatisch lokal nach H264 fuer MediaMTX transcodiert
@@ -48,15 +50,21 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_DFR1154_TOPIC_BASE=camera/dfr1154-cam-01`
 - `CAMERA_DFR1154_MQTT_CLIENT_ID=dfr1154-cam-01`
 - `CAMERA_DFR1154_STREAM_PATH=dfr1154-cam-01`
-- `CAMERA_DFR1154_ARCHIVE_PORT=8080`
-- `CAMERA_DFR1154_ARCHIVE_TOKEN=1234`
-- `CAMERA_DFR1154_TIMELAPSE_DIR=` optionaler lokaler Cache; Standard ist `data/timelapse/dfr1154-cam-01`
+- `CAMERA_DFR1154_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/dfr1154-cam-01`
+- `CAMERA_DFR1154_TIMELAPSE_ENABLED=true`
+- `CAMERA_DFR1154_TIMELAPSE_INTERVAL_SECONDS=60`
+- `CAMERA_DFR1154_TIMELAPSE_LIMIT_GB=22`
 - `ESP32_TRANSCODE_ENABLED=true`
 - `ESP32_TRANSCODE_FFMPEG_PATH=ffmpeg`
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
 - `ESP32_TRANSCODE_PRESET=ultrafast`
 - `ESP32_TRANSCODE_TUNE=zerolatency`
-- `CAMERA_PI_TIMELAPSE_DIR=/home/witti/ESp32cam/timelapse` optional fallback if no MQTT timelapse path is available
+- `CAMERA_PI_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/pi-zero-01`
+- `CAMERA_PI_TIMELAPSE_ENABLED=true`
+- `CAMERA_PI_TIMELAPSE_INTERVAL_SECONDS=60`
+- `CAMERA_PI_TIMELAPSE_LIMIT_GB=22`
+- `CAMERA_TIMELAPSE_MIN_FREE_GB=5`
+- `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB=0` (`0` deaktiviert nur das Gesamtlimit)
 - `TIMELAPSE_FFMPEG_PATH=ffmpeg`
 - `TIMELAPSE_VIDEO_FPS=20`
 
@@ -90,9 +98,11 @@ Fuer die Pi-Kamera und den DFR1154 gibt es auf `/camera` einen eigenen einklappb
 - zeigt das neueste MP4 direkt im Browser an
 - kann einzelne Dateien oder alle JPG/MP4-Dateien loeschen
 
-Die API verwendet bevorzugt den von `pi_streamer` gemeldeten MQTT-Wert `status/timelapse/output_dir`.
-Wenn dieser noch nicht vorhanden ist, kann alternativ `CAMERA_PI_TIMELAPSE_DIR` gesetzt werden.
+Pi und DFR1154 speichern keine Zeitrafferbilder auf dem Kamerageraet. Der Server liest den bereits
+vorhandenen MediaMTX-Stream in dem eingestellten Intervall mit FFmpeg und schreibt ein JPEG in den
+jeweiligen Serverordner. Pro Kamera gilt ein eigenes GB-Limit. Zusaetzlich kann ein globales Limit
+gesetzt werden und `CAMERA_TIMELAPSE_MIN_FREE_GB` verhindert, dass die Serverplatte vollgeschrieben wird.
 
-Der DFR1154 speichert seine JPEGs auf der SD-Karte und stellt sie auf Port `8080` bereit. Der Webserver
-ruft fehlende Bilder mit `X-Archive-Token` ab, legt sie in seinem lokalen Cache ab und erzeugt die MP4
-auf dem Server. MQTT wird nur fuer Steuerung und Status verwendet, nicht fuer Bilddaten.
+Die Einstellungen `timelapse_enabled`, `timelapse_interval_seconds` und `timelapse_limit_gb` werden
+ueber MQTT an die Kamera gesendet und dort als Soll-Konfiguration behalten. Der eigentliche
+Aufnahmestatus wird unter `camera/<id>/status/server_capture/*` vom Server publiziert.

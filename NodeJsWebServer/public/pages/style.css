@@ -956,6 +956,85 @@ section::before {
   gap: 0.85rem;
 }
 
+.quick-manage-list,
+.mqtt-topic-tree,
+.mqtt-topic-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.quick-manage-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.quick-manage-row {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.quick-manage-row > span,
+.quick-manage-row small {
+  display: block;
+}
+
+.quick-manage-row small {
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.mqtt-topic-tree {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 42rem;
+  overflow: auto;
+}
+
+.mqtt-topic-tree ul {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--line);
+}
+
+.mqtt-tree-branch summary,
+.mqtt-tree-leaf {
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.mqtt-tree-branch summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.mqtt-tree-branch summary span,
+.mqtt-tree-value time {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.mqtt-tree-value {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.45rem 0.7rem;
+}
+
+.mqtt-tree-value span {
+  overflow-wrap: anywhere;
+}
+
 .quick-widget-card,
 .quick-widget-empty {
   border-radius: 1rem;

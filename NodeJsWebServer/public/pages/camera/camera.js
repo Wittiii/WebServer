@@ -1,3 +1,18 @@
+import {
+  buildTimelapse,
+  deleteTimelapse,
+  fetchCameraOverview,
+  fetchTimelapse,
+  postCameraCommand,
+} from "./camera-api.js";
+import {
+  escapeHtml,
+  formatBytes,
+  formatTimestamp,
+  normalizeFieldValue,
+  setStatusLine,
+} from "./camera-utils.js";
+
 const summaryEl = document.getElementById("camera-summary");
 const pickerEl = document.getElementById("camera-picker");
 const stateCardEl = document.getElementById("camera-state-card");
@@ -38,59 +53,6 @@ let timelapseState = null;
 let timelapseRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
 let timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false";
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatTimestamp(value) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString();
-}
-
-function formatBytes(value) {
-  const bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = bytes;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
-function normalizeFieldValue(value, field = {}) {
-  if (field.type === "checkbox") {
-    return Boolean(value);
-  }
-
-  if (value == null || value === "") {
-    return "";
-  }
-
-  if (field.type === "number" || field.type === "select") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : String(value).trim();
-  }
-
-  return String(value).trim();
-}
-
-function setStatusLine(element, text, isError = false) {
-  if (!element) return;
-  element.textContent = text;
-  element.style.color = isError ? "#f87171" : "#38bdf8";
-}
 
 function getCameras() {
   return overviewState?.cameras || [];
@@ -407,6 +369,10 @@ function renderState(camera) {
       <div><strong>Direkte Sessions</strong><span>${escapeHtml(camera.status.directSessions || camera.status.clients || "-")}</span></div>
       <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients || camera.status.clients || "-")}</span></div>
       <div><strong>Quell-FPS</strong><span>${escapeHtml(camera.status.frameFps || "-")}</span></div>
+      <div><strong>Publisher</strong><span>${camera.status.publisherConnected === true ? "VERBUNDEN" : camera.status.publisherConnected === false ? "GETRENNT" : "-"}</span></div>
+      <div><strong>Reconnects</strong><span>${escapeHtml(camera.status.reconnectCount ?? "-")}</span></div>
+      <div><strong>Stream Laufzeit</strong><span>${camera.status.streamUptimeSeconds ? `${escapeHtml(camera.status.streamUptimeSeconds)} s` : "-"}</span></div>
+      <div><strong>Daten zuletzt</strong><span>${camera.status.streamLastDataAgeSeconds != null ? `${escapeHtml(camera.status.streamLastDataAgeSeconds)} s` : "-"}</span></div>
       <div><strong>Bridge Status</strong><span>${escapeHtml(bridge?.state || "-")}</span></div>
       <div><strong>Bridge PID</strong><span>${escapeHtml(bridge?.pid || "-")}</span></div>
     </div>
@@ -604,9 +570,9 @@ function renderTimelapseSection(camera) {
   if (timelapseSummaryEl) {
     const timelapse = camera.timelapse || {};
     const archiveTotals = timelapseState?.cameraId === camera.cameraId ? timelapseState.totals : null;
-    const sync = timelapseState?.cameraId === camera.cameraId ? timelapseState.sync : null;
     const rows = [
       ["Status", timelapse.state || "-"],
+      ["Aufnahme", timelapse.enabled === true ? "aktiv" : timelapse.enabled === false ? "deaktiviert" : "-"],
       ["Intervall", timelapse.intervalSeconds ? `${timelapse.intervalSeconds} s` : "-"],
       [
         camera.capabilities?.serverTimelapse ? "Serverspeicher" : "Geraetespeicher",
@@ -618,17 +584,18 @@ function renderTimelapseSection(camera) {
         archiveTotals ? `${archiveTotals.imageCount} JPG | ${archiveTotals.videoCount} MP4` : "Archiv noch nicht geladen",
       ],
       [
-        "Synchronisierung",
-        sync?.ok === false
-          ? `Fehler: ${sync.error}`
-          : sync?.running
-            ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | laeuft`
-          : sync?.ok === true
-            ? `${sync.downloaded} geladen | ${sync.scanned || 0} geprueft | fertig`
-            : camera.capabilities?.serverTimelapse
-              ? "Direkte Aufnahme auf dem Server"
-              : camera.kind === "dfr1154" ? "Noch nicht gestartet" : "Direkter Ordner",
+        "Server frei",
+        timelapse.serverFreeBytes
+          ? `${formatBytes(timelapse.serverFreeBytes)} (Reserve ${formatBytes(timelapse.serverReserveBytes)})`
+          : "wird ermittelt",
       ],
+      [
+        "Gesamtarchiv",
+        timelapse.globalStorageLimitBytes
+          ? `${formatBytes(timelapse.globalStorageBytes)} / ${formatBytes(timelapse.globalStorageLimitBytes)}`
+          : `${formatBytes(timelapse.globalStorageBytes)} / unbegrenzt`,
+      ],
+      ["Aufnahmeart", "Direkte Aufnahme auf dem Server"],
       ["Ordner", timelapse.outputDir || "-"],
       ["Letztes Bild", timelapse.lastImage || "-"],
     ];
@@ -773,12 +740,7 @@ function renderActiveCamera(options = {}) {
 }
 
 async function loadOverview() {
-  const response = await fetch("/api/camera/overview");
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  setOverviewState(await response.json());
+  setOverviewState(await fetchCameraOverview());
   if (!activeCameraId) {
     activeCameraId = overviewState.primaryCameraId;
   }
@@ -789,53 +751,23 @@ async function loadOverview() {
 }
 
 async function sendCommand(cameraId, action, body = {}) {
-  const response = await fetch("/api/camera/command", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cameraId, action, ...body }),
-  });
-  const data = await response.json();
-  if (!response.ok || !data.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
+  const data = await postCameraCommand(cameraId, action, body);
   setOverviewState(data.overview);
   return overviewState;
 }
 
 async function loadTimelapse(cameraId) {
-  const response = await fetch(`/api/camera/timelapse?cameraId=${encodeURIComponent(cameraId)}`);
-  const data = await response.json();
-  if (!response.ok || !data.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
+  const data = await fetchTimelapse(cameraId);
   timelapseState = data;
   return data;
 }
 
 async function postTimelapseBuild(cameraId) {
-  const response = await fetch("/api/camera/timelapse/build", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cameraId }),
-  });
-  const data = await response.json();
-  if (!response.ok || !data.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
-  return data;
+  return buildTimelapse(cameraId);
 }
 
 async function postTimelapseDelete(payload) {
-  const response = await fetch("/api/camera/timelapse/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json();
-  if (!response.ok || !data.ok) {
-    throw new Error(data.error || `HTTP ${response.status}`);
-  }
-  return data;
+  return deleteTimelapse(payload);
 }
 
 document.querySelectorAll("[data-camera-action]").forEach((button) => {
@@ -982,7 +914,7 @@ setInterval(async () => {
     timelapseRefreshInFlight ||
     timelapseCollapsed ||
     !activeCamera?.capabilities?.timelapse ||
-    activeCamera.kind !== "dfr1154"
+    !activeCamera.capabilities?.serverTimelapse
   ) {
     return;
   }

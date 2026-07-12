@@ -1,20 +1,5 @@
-const clientList = document.getElementById("client-list");
-const topicList = document.getElementById("topic-list");
-const clientsCountEl = document.getElementById("stats-clients-count");
-const topicsCountEl = document.getElementById("stats-topics-count");
-const trendCanvas = document.getElementById("dashboard-trend-chart");
-const serverCpuUsageEl = document.getElementById("server-cpu-usage");
-const serverCpuMetaEl = document.getElementById("server-cpu-meta");
-const serverRamUsageEl = document.getElementById("server-ram-usage");
-const serverRamMetaEl = document.getElementById("server-ram-meta");
-const serverStorageFreeEl = document.getElementById("server-storage-free");
-const serverStorageMetaEl = document.getElementById("server-storage-meta");
-const serverDbSizeEl = document.getElementById("server-db-size");
-const serverDbMetaEl = document.getElementById("server-db-meta");
-const serverCpuCardEl = serverCpuUsageEl?.closest(".stats-card") || null;
-const serverRamCardEl = serverRamUsageEl?.closest(".stats-card") || null;
-const serverStorageCardEl = serverStorageFreeEl?.closest(".stats-card") || null;
-const serverDbCardEl = serverDbSizeEl?.closest(".stats-card") || null;
+import { initDashboardOverview } from "./dashboard-overview.js";
+import { escapeHtml } from "./dashboard-utils.js";
 
 const widgetForm = document.getElementById("quick-widget-form");
 const widgetTypeEl = document.getElementById("quick-widget-type");
@@ -25,12 +10,10 @@ const widgetTitleEl = document.getElementById("quick-widget-title");
 const widgetCancelEl = document.getElementById("quick-widget-cancel");
 const widgetStatusEl = document.getElementById("quick-widget-status");
 const widgetListEl = document.getElementById("quick-widget-list");
+const widgetManageListEl = document.getElementById("quick-widget-manage-list");
 const quickBoardSection = document.getElementById("dashboard-quick-board");
 const quickBuilderSection = document.getElementById("dashboard-quick-builder");
 
-const MAX_TREND_POINTS = 20;
-
-let trendHistory = [];
 let widgets = [];
 let objectsCache = [];
 let editingWidgetId = null;
@@ -38,60 +21,10 @@ let widgetStates = new Map();
 let widgetFeedback = new Map();
 const objectMetaCache = new Map();
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function setWidgetStatus(text, isError = false) {
   if (!widgetStatusEl) return;
   widgetStatusEl.textContent = text;
   widgetStatusEl.style.color = isError ? "var(--danger)" : "var(--muted)";
-}
-
-function formatBytes(bytes) {
-  const value = Number(bytes || 0);
-  if (!Number.isFinite(value) || value <= 0) return "0 B";
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = value;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  const decimals = size >= 100 || unitIndex === 0 ? 0 : 1;
-  return `${size.toFixed(decimals)} ${units[unitIndex]}`;
-}
-
-function formatPercent(value) {
-  const numeric = Number(value || 0);
-  if (!Number.isFinite(numeric)) return "-";
-  return `${numeric.toFixed(1)}%`;
-}
-
-function getUsageSeverity(usagePercent, warnAt, criticalAt) {
-  const numeric = Number(usagePercent || 0);
-  if (!Number.isFinite(numeric)) return "normal";
-  if (numeric >= criticalAt) return "critical";
-  if (numeric >= warnAt) return "warn";
-  return "normal";
-}
-
-function applyHealthClass(cardElement, severity) {
-  if (!cardElement) return;
-  cardElement.classList.remove("health-warn", "health-critical");
-  if (severity === "warn") {
-    cardElement.classList.add("health-warn");
-  } else if (severity === "critical") {
-    cardElement.classList.add("health-critical");
-  }
 }
 
 function createWidgetId() {
@@ -127,213 +60,6 @@ function openQuickBoard() {
 function openQuickBuilder() {
   if (!quickBuilderSection?.classList.contains("collapsed")) return;
   quickBuilderSection.querySelector(".section-toggle")?.click();
-}
-
-function updateTrendHistory(clientsCount, topicsCount) {
-  trendHistory.push({ time: new Date(), clients: clientsCount, topics: topicsCount });
-  if (trendHistory.length > MAX_TREND_POINTS) {
-    trendHistory.shift();
-  }
-  drawTrendChart();
-}
-
-function drawTrendChart() {
-  if (!trendCanvas) return;
-  const ctx = trendCanvas.getContext("2d");
-  const width = trendCanvas.clientWidth;
-  const height = trendCanvas.clientHeight;
-  const ratio = window.devicePixelRatio || 1;
-
-  trendCanvas.width = width * ratio;
-  trendCanvas.height = height * ratio;
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-
-  if (!trendHistory.length) {
-    ctx.fillStyle = "#91a7c5";
-    ctx.font = "16px IBM Plex Sans, sans-serif";
-    ctx.fillText("Keine Trenddaten", 20, 40);
-    return;
-  }
-
-  const padding = 42;
-  const valuesClients = trendHistory.map((entry) => entry.clients);
-  const valuesTopics = trendHistory.map((entry) => entry.topics);
-  const maxValue = Math.max(...valuesClients, ...valuesTopics, 1);
-  const chartHeight = height - padding * 2;
-  const stepX = (width - padding * 2) / Math.max(trendHistory.length - 1, 1);
-
-  ctx.strokeStyle = "rgba(145, 167, 197, 0.2)";
-  for (let i = 0; i < 5; i += 1) {
-    const y = padding + (chartHeight / 4) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding, y);
-    ctx.lineTo(width - padding, y);
-    ctx.stroke();
-  }
-
-  const drawLine = (values, color) => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    values.forEach((value, index) => {
-      const x = padding + stepX * index;
-      const y = height - padding - (value / maxValue) * chartHeight;
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  };
-
-  drawLine(valuesClients, "#63c8ff");
-  drawLine(valuesTopics, "#ffd166");
-
-  ctx.fillStyle = "#91a7c5";
-  ctx.font = "12px IBM Plex Sans, sans-serif";
-  trendHistory.forEach((entry, index) => {
-    const x = padding + stepX * index;
-    ctx.fillText(entry.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), x - 24, height - 14);
-  });
-
-  ctx.fillStyle = "#63c8ff";
-  ctx.fillText("Clients", padding, 18);
-  ctx.fillStyle = "#ffd166";
-  ctx.fillText("Topics", padding + 86, 18);
-}
-
-async function loadMqttClients() {
-  if (!clientList) return;
-
-  try {
-    const list = await fetch("/api/mqtt/clients").then((r) => r.json());
-    if (!Array.isArray(list)) throw new Error("ungueltiges Antwortformat");
-
-    const onlineClients = list.filter((c) => c.connected).length;
-    if (clientsCountEl) clientsCountEl.textContent = String(onlineClients);
-
-    if (!list.length) {
-      clientList.innerHTML = '<li>Keine Clients registriert</li>';
-      return;
-    }
-
-    clientList.innerHTML = list
-      .map((client) => {
-        const badgeClass = client.connected ? "status-online" : "status-offline";
-        const lastSeen = client.last ? new Date(client.last).toLocaleTimeString() : "-";
-        const lastTopic = client.lastTopic ? escapeHtml(client.lastTopic) : "Keine Aktivitaet";
-        return `
-          <li>
-            <strong class="obj-name">${escapeHtml(client.id)}</strong>
-            <span class="obj-date">${lastSeen}</span>
-            <span class="obj-topic">${lastTopic}</span>
-            <span class="status-badge ${badgeClass}">${client.connected ? '<span class="pulse-online"></span>Online' : "Offline"}</span>
-          </li>
-        `;
-      })
-      .join("");
-  } catch (error) {
-    clientList.innerHTML = `<li class="error-msg">Fehler: ${escapeHtml(error.message || error)}</li>`;
-    if (clientsCountEl) clientsCountEl.textContent = "0";
-  }
-}
-
-async function loadMqttTopics() {
-  if (!topicList) return;
-
-  try {
-    const list = await fetch("/api/mqtt/topics").then((r) => r.json());
-    if (!Array.isArray(list)) throw new Error("ungueltiges Antwortformat");
-
-    if (topicsCountEl) topicsCountEl.textContent = String(list.length);
-
-    if (!list.length) {
-      topicList.innerHTML = '<li>Keine Topics registriert</li>';
-      return;
-    }
-
-    topicList.innerHTML = list
-      .map((topic) => {
-        const receivedAt = topic.timestamp ? new Date(topic.timestamp).toLocaleTimeString() : "-";
-        return `
-          <li>
-            <strong class="obj-name">${escapeHtml(topic.topic)}</strong>
-            <span class="obj-topic">${escapeHtml(topic.lastMessage)}</span>
-            <span class="obj-date">${receivedAt}</span>
-          </li>
-        `;
-      })
-      .join("");
-  } catch (error) {
-    topicList.innerHTML = `<li class="error-msg">Fehler: ${escapeHtml(error.message || error)}</li>`;
-    if (topicsCountEl) topicsCountEl.textContent = "0";
-  }
-}
-
-async function loadSystemStats() {
-  try {
-    const data = await fetch("/dashboard/system").then((response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    });
-
-    const cpuUsage = Number(data?.cpu?.usagePercent || 0);
-    const cpuCores = Number(data?.cpu?.cores || 0);
-    const cpuLoad = Array.isArray(data?.cpu?.loadAverage) ? data.cpu.loadAverage[0] : null;
-    applyHealthClass(serverCpuCardEl, getUsageSeverity(cpuUsage, 65, 85));
-    if (serverCpuUsageEl) serverCpuUsageEl.textContent = formatPercent(cpuUsage);
-    if (serverCpuMetaEl) {
-      const loadText = Number.isFinite(cpuLoad) ? ` | Load 1m ${cpuLoad.toFixed(2)}` : "";
-      serverCpuMetaEl.textContent = `${cpuCores || "-"} Kerne${loadText}`;
-    }
-
-    const ramUsed = Number(data?.memory?.usedBytes || 0);
-    const ramTotal = Number(data?.memory?.totalBytes || 0);
-    const ramPercent = ramTotal > 0 ? (ramUsed / ramTotal) * 100 : 0;
-    applyHealthClass(serverRamCardEl, getUsageSeverity(ramPercent, 75, 90));
-    if (serverRamUsageEl) serverRamUsageEl.textContent = formatPercent(ramPercent);
-    if (serverRamMetaEl) serverRamMetaEl.textContent = `${formatBytes(ramUsed)} von ${formatBytes(ramTotal)} belegt`;
-
-    const storageFree = Number(data?.storage?.freeBytes || 0);
-    const storageUsed = Number(data?.storage?.usedBytes || 0);
-    const storageTotal = Number(data?.storage?.totalBytes || 0);
-    const storageUsedPercent = storageTotal > 0 ? (storageUsed / storageTotal) * 100 : 0;
-    applyHealthClass(serverStorageCardEl, getUsageSeverity(storageUsedPercent, 80, 92));
-    if (serverStorageFreeEl) serverStorageFreeEl.textContent = formatBytes(storageFree);
-    if (serverStorageMetaEl) {
-      serverStorageMetaEl.textContent = `${formatBytes(storageUsed)} von ${formatBytes(storageTotal)} belegt (${formatPercent(storageUsedPercent)})`;
-    }
-
-    const dbSize = Number(data?.database?.sizeBytes || 0);
-    const dbUsagePercent = storageTotal > 0 ? (dbSize / storageTotal) * 100 : 0;
-    const dbSeverity = storageTotal > 0
-      ? getUsageSeverity(dbUsagePercent, 10, 20)
-      : getUsageSeverity(dbSize / (1024 * 1024), 512, 2048);
-    applyHealthClass(serverDbCardEl, dbSeverity);
-    if (serverDbSizeEl) serverDbSizeEl.textContent = formatBytes(dbSize);
-    if (serverDbMetaEl) {
-      const dbPercentText = storageTotal > 0 ? ` | ${formatPercent(dbUsagePercent)} vom Storage` : "";
-      serverDbMetaEl.textContent = `${formatBytes(storageFree)} frei auf dem Server${dbPercentText}`;
-    }
-  } catch (error) {
-    const message = `Fehler: ${error.message || error}`;
-    applyHealthClass(serverCpuCardEl, "normal");
-    applyHealthClass(serverRamCardEl, "normal");
-    applyHealthClass(serverStorageCardEl, "normal");
-    applyHealthClass(serverDbCardEl, "normal");
-    if (serverCpuUsageEl) serverCpuUsageEl.textContent = "-";
-    if (serverRamUsageEl) serverRamUsageEl.textContent = "-";
-    if (serverStorageFreeEl) serverStorageFreeEl.textContent = "-";
-    if (serverDbSizeEl) serverDbSizeEl.textContent = "-";
-    if (serverCpuMetaEl) serverCpuMetaEl.textContent = message;
-    if (serverRamMetaEl) serverRamMetaEl.textContent = message;
-    if (serverStorageMetaEl) serverStorageMetaEl.textContent = message;
-    if (serverDbMetaEl) serverDbMetaEl.textContent = message;
-  }
-}
-
-async function refreshDashboard() {
-  await Promise.all([loadMqttClients(), loadMqttTopics(), loadSystemStats()]);
-  updateTrendHistory(Number(clientsCountEl?.textContent || 0), Number(topicsCountEl?.textContent || 0));
 }
 
 async function fetchObjects() {
@@ -520,11 +246,12 @@ function renderWidgets() {
 
   if (!widgets.length) {
     widgetListEl.innerHTML = '<li class="quick-widget-empty">Noch keine Schnellkarten gespeichert.</li>';
+    renderWidgetManagement();
     return;
   }
 
   widgetListEl.innerHTML = widgets
-    .map((widget, index) => {
+    .map((widget) => {
       const state = widgetStates.get(widget.id) || {};
       const statusLine = state.status
         ? `<span class="${state.status.isError ? "quick-widget-error" : "quick-widget-ok"}">${escapeHtml(state.status.text)}</span>`
@@ -537,12 +264,6 @@ function renderWidgets() {
               <div class="quick-widget-title">
                 <strong>${escapeHtml(state.title || "Befehl")}</strong>
                 <span>${escapeHtml(state.objectName || "")}</span>
-              </div>
-              <div class="quick-widget-actions">
-                <button type="button" class="cmd-send" data-action="edit">Bearbeiten</button>
-                <button type="button" class="cmd-send" data-action="up" ${index === 0 ? "disabled" : ""}>Hoch</button>
-                <button type="button" class="cmd-send" data-action="down" ${index === widgets.length - 1 ? "disabled" : ""}>Runter</button>
-                <button type="button" class="cmd-delete" data-action="delete">Loeschen</button>
               </div>
             </div>
             <button type="button" class="quick-widget-run" data-action="run">Senden</button>
@@ -559,12 +280,6 @@ function renderWidgets() {
               <strong>${escapeHtml(state.title || "Messwert")}</strong>
               <span>${escapeHtml(state.objectName || "")}</span>
             </div>
-            <div class="quick-widget-actions">
-              <button type="button" class="cmd-send" data-action="edit">Bearbeiten</button>
-              <button type="button" class="cmd-send" data-action="up" ${index === 0 ? "disabled" : ""}>Hoch</button>
-              <button type="button" class="cmd-send" data-action="down" ${index === widgets.length - 1 ? "disabled" : ""}>Runter</button>
-              <button type="button" class="cmd-delete" data-action="delete">Loeschen</button>
-            </div>
           </div>
           <div class="quick-widget-value">${escapeHtml(state.value || "-")}${unit}</div>
           <div class="quick-widget-meta">${escapeHtml(state.timestamp || "")}</div>
@@ -573,6 +288,26 @@ function renderWidgets() {
       `;
     })
     .join("");
+  renderWidgetManagement();
+}
+
+function renderWidgetManagement() {
+  if (!widgetManageListEl) return;
+  if (!widgets.length) {
+    widgetManageListEl.innerHTML = '<li class="quick-widget-empty">Keine Karten angelegt.</li>';
+    return;
+  }
+  widgetManageListEl.innerHTML = widgets.map((widget, index) => `
+    <li class="quick-manage-row" data-widget-id="${escapeHtml(widget.id)}">
+      <span><strong>${escapeHtml(widget.title || widget.commandLabel || widget.keyLabel || widget.keyName || "Karte")}</strong><small>${escapeHtml(widget.objectName || "")}</small></span>
+      <div class="quick-widget-actions">
+        <button type="button" class="cmd-send" data-action="edit">Bearbeiten</button>
+        <button type="button" class="cmd-send" data-action="up" ${index === 0 ? "disabled" : ""}>Hoch</button>
+        <button type="button" class="cmd-send" data-action="down" ${index === widgets.length - 1 ? "disabled" : ""}>Runter</button>
+        <button type="button" class="cmd-delete" data-action="delete">Loeschen</button>
+      </div>
+    </li>
+  `).join("");
 }
 
 async function refreshWidgetStates() {
@@ -723,7 +458,7 @@ widgetObjectEl?.addEventListener("change", () => {
   });
 });
 
-widgetListEl?.addEventListener("click", async (event) => {
+async function handleWidgetAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
 
@@ -768,7 +503,10 @@ widgetListEl?.addEventListener("click", async (event) => {
     await publishWidgetCommand(widgetId);
     button.disabled = false;
   }
-});
+}
+
+widgetListEl?.addEventListener("click", handleWidgetAction);
+widgetManageListEl?.addEventListener("click", handleWidgetAction);
 
 async function initQuickBoard() {
   try {
@@ -782,10 +520,9 @@ async function initQuickBoard() {
   }
 }
 
-refreshDashboard();
+initDashboardOverview();
 initQuickBoard();
 
-setInterval(refreshDashboard, 10000);
 setInterval(() => {
   refreshWidgetStates().catch(() => {});
 }, 15000);

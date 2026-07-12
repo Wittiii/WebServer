@@ -44,8 +44,14 @@ function createPiCameraConfig(hostname, mediaConfig) {
     mediaHost: mediaConfig.mediaHost || hostname,
     mediaMTX: mediaConfig,
     urls: buildUrls({ ...mediaConfig, streamPath }),
+    archive: {
+      type: "server_capture",
+      localDir: process.env.CAMERA_PI_TIMELAPSE_DIR || "",
+      envPrefix: "CAMERA_PI",
+    },
     capabilities: {
       liveLed: false,
+      serverTimelapse: true,
       timelapse: true,
       directRtsp: false,
     },
@@ -60,6 +66,9 @@ function createPiCameraConfig(hostname, mediaConfig) {
         { key: "brightness", label: "Helligkeit", type: "number", step: 0.05, placeholder: "0.0" },
         { key: "contrast", label: "Kontrast", type: "number", step: 0.1, placeholder: "1.0" },
         { key: "saturation", label: "Saettigung", type: "number", step: 0.1, placeholder: "1.0" },
+        { key: "timelapse_interval_seconds", label: "Zeitraffer Intervall (s)", type: "number", min: 10, max: 86400, step: 1, placeholder: "60" },
+        { key: "timelapse_limit_gb", label: "Zeitraffer Limit (GB)", type: "number", min: 0.1, max: 1000, step: 0.1, placeholder: "22" },
+        { key: "timelapse_enabled", label: "Zeitraffer aktiv", type: "checkbox" },
       ],
     },
   };
@@ -143,6 +152,7 @@ function createDfr1154CameraConfig(hostname, mediaConfig) {
     archive: {
       type: "server_capture",
       localDir: process.env.CAMERA_DFR1154_TIMELAPSE_DIR || "",
+      envPrefix: "CAMERA_DFR1154",
     },
     capabilities: {
       liveLed: true,
@@ -189,8 +199,8 @@ function createDfr1154CameraConfig(hostname, mediaConfig) {
         },
         { key: "ir_on_lux", label: "IR an unter Lux", type: "number", min: 0, max: 100000, step: 1, placeholder: "5" },
         { key: "ir_off_lux", label: "IR aus ueber Lux", type: "number", min: 1, max: 100000, step: 1, placeholder: "10" },
-        { key: "timelapse_interval_seconds", label: "Zeitraffer Intervall (s)", type: "number", min: 5, max: 86400, step: 1, placeholder: "60" },
-        { key: "timelapse_limit_gb", label: "Zeitraffer Limit (GB)", type: "number", min: 1, max: 30, step: 1, placeholder: "22" },
+        { key: "timelapse_interval_seconds", label: "Zeitraffer Intervall (s)", type: "number", min: 10, max: 86400, step: 1, placeholder: "60" },
+        { key: "timelapse_limit_gb", label: "Zeitraffer Limit (GB)", type: "number", min: 0.1, max: 1000, step: 0.1, placeholder: "22" },
         { key: "hmirror", label: "Horizontal spiegeln", type: "checkbox" },
         { key: "vflip", label: "Vertikal spiegeln", type: "checkbox" },
         { key: "led", label: "Status LED", type: "checkbox" },

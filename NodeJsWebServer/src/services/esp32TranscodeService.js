@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 
 const { getCameraConfigs } = require("../config/cameraConfig");
-const { topics } = require("../mqttBroker");
+const { publish, topics } = require("../mqttBroker");
 
 const bridges = new Map();
 
@@ -171,6 +171,9 @@ function ensureBridge(cameraId) {
     desiredSignature: "",
     commandPreview: "",
     stopTimer: null,
+    restartCount: 0,
+    lastPublishedSignature: "",
+    lastPublishedAt: 0,
   };
   bridges.set(cameraId, created);
   return created;
@@ -264,6 +267,7 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   bridge.process = child;
   bridge.pid = child.pid || null;
   bridge.lastStartAt = Date.now();
+  bridge.restartCount += 1;
 
   child.stdout.on("data", (chunk) => {
     const text = String(chunk).trim();
@@ -322,6 +326,27 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   });
 }
 
+function publishBridgeStatus(camera, bridge) {
+  const values = {
+    state: bridge.state,
+    error: bridge.lastError || "",
+    message: bridge.lastMessage || "",
+    source_url: bridge.sourceRtspUrl || "",
+    destination_url: bridge.destinationRtspUrl || "",
+    pid: bridge.pid || 0,
+    restart_count: bridge.restartCount,
+    last_start_at: bridge.lastStartAt ? new Date(bridge.lastStartAt).toISOString() : "",
+    last_stop_at: bridge.lastStopAt ? new Date(bridge.lastStopAt).toISOString() : "",
+  };
+  const signature = JSON.stringify(values);
+  if (signature === bridge.lastPublishedSignature && Date.now() - bridge.lastPublishedAt < 30000) return;
+  bridge.lastPublishedSignature = signature;
+  bridge.lastPublishedAt = Date.now();
+  Promise.all(Object.entries(values).map(([key, value]) =>
+    publish(`${camera.mqttTopicBase}/status/bridge/${key}`, String(value), { qos: 1, retain: true })
+  )).catch((error) => console.error(`[ESP32-Bridge:${camera.cameraId}] MQTT status: ${error.message}`));
+}
+
 function evaluateBridge(camera) {
   const bridge = ensureBridge(camera.cameraId);
 
@@ -361,6 +386,7 @@ function supervisorTick() {
 
   for (const camera of cameras) {
     evaluateBridge(camera);
+    publishBridgeStatus(camera, ensureBridge(camera.cameraId));
   }
 
   for (const [cameraId, bridge] of bridges.entries()) {
@@ -394,6 +420,7 @@ function getEsp32BridgeSnapshot(cameraId) {
     lastStartAt: bridge.lastStartAt ? new Date(bridge.lastStartAt).toISOString() : null,
     lastStopAt: bridge.lastStopAt ? new Date(bridge.lastStopAt).toISOString() : null,
     commandPreview: bridge.commandPreview || "",
+    restartCount: bridge.restartCount,
   };
 }
 

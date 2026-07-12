@@ -70,7 +70,7 @@
 
         <section id="mqtt-topics" class="panel">
           <h2>MQTT Topics</h2>
-          <ul id="topic-list" class="readings-list"></ul>
+          <ul id="topic-list" class="mqtt-topic-tree"></ul>
         </section>
       </div>
 
@@ -87,7 +87,9 @@
       </section>
 
       <section id="dashboard-quick-builder" class="panel">
-        <h2>Karte anlegen</h2>
+        <h2>Karten verwalten</h2>
+        <ul id="quick-widget-manage-list" class="quick-manage-list"></ul>
+        <h3>Karte anlegen oder bearbeiten</h3>
         <form id="quick-widget-form" class="quick-builder-form">
           <div class="form-group">
             <label for="quick-widget-type">Typ</label>
@@ -124,6 +126,6 @@
   </main>
 
   <script src="/pages/main.js"></script>
-  <script src="/pages/dashboard/dashboard.js"></script>
+  <script type="module" src="/pages/dashboard/dashboard.js"></script>
 </body>
 </html>

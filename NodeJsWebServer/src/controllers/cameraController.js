@@ -4,7 +4,7 @@ const path = require("path");
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
 const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
-const { getDfrTimelapseCaptureSnapshot } = require("../services/dfrTimelapseCaptureService");
+const { getCameraTimelapseCaptureSnapshot } = require("../services/cameraTimelapseCaptureService");
 const {
   buildTimelapseVideo,
   deleteTimelapseByType,
@@ -68,6 +68,13 @@ function buildCameraOverview(config) {
   const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
   const directStreamingClientsValue = getLatestTopicValue(statusTopics, "direct_streaming_clients");
   const frameFpsValue = getLatestTopicValue(statusTopics, "frame_fps");
+  const configuredFpsValue = getLatestTopicValue(statusTopics, "configured_fps");
+  const publisherConnectedValue = getLatestTopicValue(statusTopics, "publisher_connected");
+  const mqttConnectedValue = getLatestTopicValue(statusTopics, "mqtt_connected");
+  const reconnectCountValue = getLatestTopicValue(statusTopics, "reconnect_count");
+  const streamBytesValue = getLatestTopicValue(statusTopics, "stream_bytes_total");
+  const streamUptimeValue = getLatestTopicValue(statusTopics, "stream_uptime_seconds");
+  const streamDataAgeValue = getLatestTopicValue(statusTopics, "stream_last_data_age_seconds");
   const ambientLuxValue = getLatestTopicValue(statusTopics, "ambient_lux");
   const irModeValue = getLatestTopicValue(statusTopics, "ir_mode");
   const irEnabledValue = getLatestTopicValue(statusTopics, "ir_enabled");
@@ -92,7 +99,7 @@ function buildCameraOverview(config) {
     ? getEsp32BridgeSnapshot(config.cameraId)
     : null;
   const serverCapture = config.archive?.type === "server_capture"
-    ? getDfrTimelapseCaptureSnapshot(config.cameraId)
+    ? getCameraTimelapseCaptureSnapshot(config.cameraId)
     : null;
 
   return {
@@ -129,6 +136,12 @@ function buildCameraOverview(config) {
           intervalSeconds:
             serverCapture?.intervalSeconds ?? Number(timelapseIntervalValue || 0),
           lastCaptureAt: serverCapture?.lastCaptureAt || null,
+          globalStorageBytes: serverCapture?.globalStorageBytes ?? 0,
+          globalStorageLimitBytes: serverCapture?.globalStorageLimitBytes ?? 0,
+          serverFreeBytes: serverCapture?.serverFreeBytes ?? 0,
+          serverReserveBytes: serverCapture?.serverReserveBytes ?? 0,
+          captureInFlight: serverCapture?.captureInFlight ?? false,
+          consecutiveErrors: serverCapture?.consecutiveErrors ?? 0,
         }
       : null,
     mediamtx: config.mediaMTX,
@@ -142,6 +155,13 @@ function buildCameraOverview(config) {
       directSessions: directSessionsValue || "",
       directStreamingClients: directStreamingClientsValue || "",
       frameFps: frameFpsValue || "",
+      configuredFps: configuredFpsValue || "",
+      publisherConnected: parseBoolean(publisherConnectedValue),
+      mqttConnected: parseBoolean(mqttConnectedValue),
+      reconnectCount: Number(reconnectCountValue || 0),
+      streamBytesTotal: Number(streamBytesValue || 0),
+      streamUptimeSeconds: Number(streamUptimeValue || 0),
+      streamLastDataAgeSeconds: streamDataAgeValue === "" ? null : Number(streamDataAgeValue),
       ambientLux: ambientLuxValue || "",
       irMode: irModeValue || "",
       irEnabled: parseBoolean(irEnabledValue),
