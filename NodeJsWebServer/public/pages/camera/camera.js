@@ -575,10 +575,11 @@ function renderTimelapseSection(camera) {
       ["Aufnahme", timelapse.enabled === true ? "aktiv" : timelapse.enabled === false ? "deaktiviert" : "-"],
       ["Intervall", timelapse.intervalSeconds ? `${timelapse.intervalSeconds} s` : "-"],
       [
-        camera.capabilities?.serverTimelapse ? "Serverspeicher" : "Geraetespeicher",
-        `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`,
+        "Kameraarchiv",
+        archiveTotals
+          ? `${formatBytes(archiveTotals.totalBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`
+          : `${formatBytes(timelapse.storageBytes)} / ${formatBytes(timelapse.storageLimitBytes)}`,
       ],
-      ["Serverarchiv", archiveTotals ? formatBytes(archiveTotals.totalBytes) : "Archiv noch nicht geladen"],
       [
         "Archivdateien",
         archiveTotals ? `${archiveTotals.imageCount} JPG | ${archiveTotals.videoCount} MP4` : "Archiv noch nicht geladen",
@@ -586,14 +587,14 @@ function renderTimelapseSection(camera) {
       [
         "Server frei",
         timelapse.serverFreeBytes
-          ? `${formatBytes(timelapse.serverFreeBytes)} (Reserve ${formatBytes(timelapse.serverReserveBytes)})`
+          ? `${formatBytes(timelapse.serverFreeBytes)} frei, davon ${formatBytes(timelapse.serverReserveBytes)} geschuetzt`
           : "wird ermittelt",
       ],
       [
         "Gesamtarchiv",
         timelapse.globalStorageLimitBytes
           ? `${formatBytes(timelapse.globalStorageBytes)} / ${formatBytes(timelapse.globalStorageLimitBytes)}`
-          : `${formatBytes(timelapse.globalStorageBytes)} / unbegrenzt`,
+          : `${formatBytes(timelapse.globalStorageBytes)} fuer alle Kameras`,
       ],
       ["Aufnahmeart", "Direkte Aufnahme auf dem Server"],
       ["Ordner", timelapse.outputDir || "-"],

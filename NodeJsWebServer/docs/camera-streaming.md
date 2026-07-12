@@ -103,6 +103,11 @@ vorhandenen MediaMTX-Stream in dem eingestellten Intervall mit FFmpeg und schrei
 jeweiligen Serverordner. Pro Kamera gilt ein eigenes GB-Limit. Zusaetzlich kann ein globales Limit
 gesetzt werden und `CAMERA_TIMELAPSE_MIN_FREE_GB` verhindert, dass die Serverplatte vollgeschrieben wird.
 
-Die Einstellungen `timelapse_enabled`, `timelapse_interval_seconds` und `timelapse_limit_gb` werden
+Die Einstellungen `server_capture_enabled` und `server_capture_interval_seconds` werden
 ueber MQTT an die Kamera gesendet und dort als Soll-Konfiguration behalten. Der eigentliche
 Aufnahmestatus wird unter `camera/<id>/status/server_capture/*` vom Server publiziert.
+
+Speicherlimits werden ausschliesslich mit `CAMERA_PI_TIMELAPSE_LIMIT_GB`,
+`CAMERA_DFR1154_TIMELAPSE_LIMIT_GB`, `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB` und
+`CAMERA_TIMELAPSE_MIN_FREE_GB` auf dem Server festgelegt. Der zusaetzliche Wert
+`CAMERA_TIMELAPSE_WRITE_HEADROOM_MB` reserviert Platz fuer das gerade erzeugte JPEG.
