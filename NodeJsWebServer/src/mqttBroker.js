@@ -12,13 +12,19 @@ const DEFAULT_CLIENT_STALE_MS = Math.max(15000, Number(process.env.MQTT_CLIENT_S
 
 // Auth: nur wenn USER/PASS gesetzt
 aedes.authenticate = (client, username, password, done) => {
+  const suppliedUser = Buffer.isBuffer(username)
+    ? username.toString()
+    : String(username || '');
   const ok =
     USER &&
     PASS &&
-    username === USER &&
+    suppliedUser === USER &&
     Buffer.isBuffer(password) &&
     password.toString() === PASS;
   if (!ok) {
+    console.warn(
+      `[MQTT] auth rejected client=${client?.id || '-'} username=${suppliedUser || '-'}`,
+    );
     const err = new Error('Auth failed');
     err.returnCode = 4; // ConnAck "Bad user name or password"
     return done(err, false);
@@ -30,13 +36,24 @@ aedes.authenticate = (client, username, password, done) => {
 // aedes.authorizeSubscribe = (client, sub, done) => done(null, sub);
 // aedes.authorizePublish = (client, packet, done) => done(null);
 
-net.createServer(aedes.handle).listen(TCP_PORT, () => {
+function handleListenerError(name, port, error) {
+  const hint = error?.code === 'EADDRINUSE'
+    ? ' another broker or Node process already owns this port'
+    : '';
+  console.error(`[MQTT] ${name} listener failed port=${port} code=${error?.code || '-'}:${hint}`);
+  throw error;
+}
+
+const tcpServer = net.createServer(aedes.handle);
+tcpServer.on('error', (error) => handleListenerError('TCP', TCP_PORT, error));
+tcpServer.listen(TCP_PORT, () => {
   console.log(`[MQTT] Broker TCP läuft auf ${TCP_PORT}`);
 });
 
 const httpServer = http.createServer();
 const wss = new ws.Server({ server: httpServer });
 wss.on('connection', (stream) => aedes.handle(stream));
+httpServer.on('error', (error) => handleListenerError('WebSocket', WS_PORT, error));
 httpServer.listen(WS_PORT, () => {
   console.log(`[MQTT] Broker WS läuft auf ${WS_PORT}`);
 });
@@ -178,6 +195,14 @@ aedes.on('clientDisconnect', (c) => {
 aedes.on('keepaliveTimeout', (c) => {
   markClientDisconnected(c, 'keepalive_timeout');
   console.log('[MQTT] client keepalive timeout', c.id);
+});
+aedes.on('clientError', (c, error) => {
+  console.error(`[MQTT] client error client=${c?.id || '-'}: ${error?.message || error}`);
+});
+aedes.on('connectionError', (c, error) => {
+  console.error(
+    `[MQTT] connection error client=${c?.id || '-'} remote=${c?.conn?.remoteAddress || '-'}: ${error?.message || error}`,
+  );
 });
 aedes.on('ping', (_packet, c) => {
   touchClient(c, { connected: true, disconnectReason: null });
