@@ -88,7 +88,7 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
   const detectedSourceFps = toNumber(sourceConfig.stream_fps, 0);
   const outputFps = toNumber(process.env.ESP32_TRANSCODE_OUTPUT_FPS, 0) || detectedSourceFps;
   const gopSize = toNumber(process.env.ESP32_TRANSCODE_GOP, 0) || (outputFps > 0 ? outputFps * 2 : 24);
-  const crf = toNumber(process.env.ESP32_TRANSCODE_CRF, 23);
+  const crf = options.crf ?? toNumber(process.env.ESP32_TRANSCODE_CRF, 23);
   const bitrate = String(process.env.ESP32_TRANSCODE_BITRATE || "").trim();
 
   const args = [
@@ -112,15 +112,15 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     sourceRtspUrl,
     "-an",
     "-c:v",
-    process.env.ESP32_TRANSCODE_CODEC || "libx264",
+    options.codec || process.env.ESP32_TRANSCODE_CODEC || "libx264",
     "-preset",
-    process.env.ESP32_TRANSCODE_PRESET || "superfast",
+    options.preset || process.env.ESP32_TRANSCODE_PRESET || "superfast",
     "-tune",
     process.env.ESP32_TRANSCODE_TUNE || "zerolatency",
     "-pix_fmt",
     process.env.ESP32_TRANSCODE_PIXEL_FORMAT || "yuv420p",
     "-profile:v",
-    process.env.ESP32_TRANSCODE_PROFILE || "baseline",
+    options.profile || process.env.ESP32_TRANSCODE_PROFILE || "baseline",
     "-bf",
     "0",
     "-crf",
@@ -227,6 +227,10 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
         analyzeDuration: toNumber(process.env.DFR1154_TRANSCODE_ANALYZEDURATION, 1000000),
         probeSize: toNumber(process.env.DFR1154_TRANSCODE_PROBESIZE, 1000000),
         logLevel: process.env.DFR1154_TRANSCODE_LOGLEVEL || "error",
+        codec: process.env.DFR1154_TRANSCODE_CODEC || "libx264",
+        preset: process.env.DFR1154_TRANSCODE_PRESET || "superfast",
+        profile: process.env.DFR1154_TRANSCODE_PROFILE || "high",
+        crf: toNumber(process.env.DFR1154_TRANSCODE_CRF, 17),
       }
     : {};
   const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig, dfr1154Options);
