@@ -225,7 +225,7 @@ async function captureFrame(camera, job) {
         [
           "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
           "-rtsp_transport", "tcp",
-          "-rw_timeout", String(captureTimeoutMs(camera) * 1000),
+          "-timeout", String(captureTimeoutMs(camera) * 1000),
           "-i", getMediaMtxUrl(camera),
           "-map", "0:v:0", "-frames:v", "1", "-c:v", "mjpeg", "-q:v", "2",
           "-f", "image2", temporaryPath,

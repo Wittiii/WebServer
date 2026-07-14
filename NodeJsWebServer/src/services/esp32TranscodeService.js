@@ -123,7 +123,7 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     String(options.probeSize ?? 32768),
     "-rtsp_transport",
     options.sourceTransport || process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
-    "-rw_timeout",
+    "-timeout",
     String(getSourceReadTimeoutMs() * 1000),
     "-i",
     sourceRtspUrl,
