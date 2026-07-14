@@ -15,7 +15,7 @@
   - `/api/camera/*` Endpunkte
   - MQTT Publish fuer Start, Stop, Restart und Parameter
   - Statusanzeige aus MQTT Topics
-  - Zeitraffer-Snapshots direkt aus MediaMTX fuer Pi und DFR1154
+  - Zeitraffer-Snapshots direkt aus MediaMTX fuer Pi, ESP32-CAM und DFR1154
 - MediaMTX:
   - Stream-Annahme
   - Ausgabe als WebRTC, HLS und RTSP
@@ -46,6 +46,9 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_ESP32_TOPIC_BASE=camera/esp32-cam-01`
 - `CAMERA_ESP32_MQTT_CLIENT_ID=esp32-cam-01`
 - `CAMERA_ESP32_STREAM_PATH=esp32-cam-01`
+- `CAMERA_ESP32_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/esp32-cam-01`
+- `CAMERA_ESP32_TIMELAPSE_ENABLED=true`
+- `CAMERA_ESP32_TIMELAPSE_INTERVAL_SECONDS=60`
 - `CAMERA_DFR1154_ID=dfr1154-cam-01`
 - `CAMERA_DFR1154_TOPIC_BASE=camera/dfr1154-cam-01`
 - `CAMERA_DFR1154_MQTT_CLIENT_ID=dfr1154-cam-01`
@@ -56,8 +59,14 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `ESP32_TRANSCODE_ENABLED=true`
 - `ESP32_TRANSCODE_FFMPEG_PATH=ffmpeg`
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
-- `ESP32_TRANSCODE_PRESET=ultrafast`
+- `ESP32_TRANSCODE_PRESET=superfast`
 - `ESP32_TRANSCODE_TUNE=zerolatency`
+- `ESP32_SOURCE_RW_TIMEOUT_MS=15000`
+- `ESP32_TRANSCODE_STARTUP_TIMEOUT_MS=30000`
+- `ESP32_TRANSCODE_STALL_TIMEOUT_MS=25000`
+- `DFR1154_TRANSCODE_PRESET=superfast`
+- `DFR1154_TRANSCODE_PROFILE=high`
+- `DFR1154_TRANSCODE_CRF=17`
 - `CAMERA_PI_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/pi-zero-01`
 - `CAMERA_PI_TIMELAPSE_ENABLED=true`
 - `CAMERA_PI_TIMELAPSE_INTERVAL_SECONDS=60`
@@ -89,17 +98,17 @@ Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
 
 ## Zeitraffer im Webserver
 
-Fuer die Pi-Kamera und den DFR1154 gibt es auf `/camera` einen eigenen einklappbaren Bereich:
+Fuer die Pi-Kamera, die ESP32-CAM und den DFR1154 gibt es auf `/camera` einen eigenen einklappbaren Bereich:
 
 - listet JPEG- und MP4-Dateien aus dem Zeitrafferordner
 - erzeugt auf Wunsch eine MP4 aus den vorhandenen JPEG-Bildern
 - zeigt das neueste MP4 direkt im Browser an
 - kann einzelne Dateien oder alle JPG/MP4-Dateien loeschen
 
-Pi und DFR1154 speichern keine Zeitrafferbilder auf dem Kamerageraet. Der Server liest den bereits
+Die Kamerageraete speichern keine Zeitrafferbilder. Der Server liest den bereits
 vorhandenen MediaMTX-Stream in dem eingestellten Intervall mit FFmpeg und schreibt ein JPEG in den
-jeweiligen Serverordner. Pro Kamera gilt ein eigenes GB-Limit. Zusaetzlich kann ein globales Limit
-gesetzt werden und `CAMERA_TIMELAPSE_MIN_FREE_GB` verhindert, dass die Serverplatte vollgeschrieben wird.
+jeweiligen Serverordner. `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB` kann das gesamte Kameraarchiv begrenzen;
+`CAMERA_TIMELAPSE_MIN_FREE_GB` verhindert unabhaengig davon, dass die Serverplatte vollgeschrieben wird.
 
 Die Einstellungen `server_capture_enabled` und `server_capture_interval_seconds` werden
 ueber MQTT an die Kamera gesendet und dort als Soll-Konfiguration behalten. Der eigentliche
@@ -108,3 +117,17 @@ Aufnahmestatus wird unter `camera/<id>/status/server_capture/*` vom Server publi
 Die Speicherbegrenzung wird ausschliesslich mit `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB` und
 `CAMERA_TIMELAPSE_MIN_FREE_GB` auf dem Server festgelegt. Der zusaetzliche Wert
 `CAMERA_TIMELAPSE_WRITE_HEADROOM_MB` reserviert Platz fuer das gerade erzeugte JPEG.
+
+## MQTT-Steuerung und Wiederanlauf
+
+Der Webserver sendet Kameraeinstellungen mit QoS 1 an `camera/<id>/cmd/set`. Jede Anfrage enthaelt
+eine Request-ID. ESP32-CAM und DFR1154 melden das Ergebnis unter
+`camera/<id>/status/command/*` zurueck und speichern erfolgreiche Einstellungen in NVS.
+
+Beide ESP-Firmwares behandeln WLAN-, MQTT-, RTSP- und OTA-Ausfaelle unabhaengig voneinander:
+
+- WLAN und MQTT werden dauerhaft neu verbunden.
+- Blockierte oder getrennte RTSP-Clients werden entfernt, ohne MQTT und OTA anzuhalten.
+- Wiederholte Kamera-Capture-Fehler starten zuerst die Kamerapipeline neu und danach notfalls das Geraet.
+- Der Node-FFmpeg-Supervisor erkennt Startfehler und ausbleibenden Fortschritt und startet die Bridge neu.
+- Server-Snapshots werden erst aufgenommen, wenn die jeweilige H264-Bridge nachweislich Frames ausgibt.

@@ -691,6 +691,23 @@ section::before {
   align-items: end;
 }
 
+.camera-settings-section {
+  grid-column: 1 / -1;
+  margin: 0.9rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.camera-settings-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .camera-state-card {
   display: grid;
   gap: 1rem;

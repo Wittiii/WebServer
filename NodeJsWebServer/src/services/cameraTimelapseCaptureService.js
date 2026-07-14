@@ -53,6 +53,7 @@ function getJob(cameraId) {
       evaluating: false,
       consecutiveErrors: 0,
       lastStorageScanAt: 0,
+      storageInitialized: false,
       serverFreeBytes: 0,
       reserveBytes: 0,
       writeHeadroomBytes: 0,
@@ -123,6 +124,13 @@ async function refreshStorage(job) {
   job.storageBytes = total;
   job.lastImage = latestImage;
   job.lastStorageScanAt = Date.now();
+  job.storageInitialized = true;
+}
+
+function updateGlobalStorageBytes() {
+  const total = [...jobs.values()].reduce((sum, item) => sum + item.storageBytes, 0);
+  for (const item of jobs.values()) item.globalStorageBytes = total;
+  return total;
 }
 
 async function refreshDiskLimits(job) {
@@ -133,7 +141,7 @@ async function refreshDiskLimits(job) {
     1,
     toNumber(process.env.CAMERA_TIMELAPSE_WRITE_HEADROOM_MB, 16)
   ) * 1024 ** 2;
-  job.globalStorageBytes = [...jobs.values()].reduce((sum, item) => sum + item.storageBytes, 0);
+  updateGlobalStorageBytes();
   job.globalStorageLimitBytes = Math.max(
     0,
     toNumber(process.env.CAMERA_TIMELAPSE_TOTAL_LIMIT_GB, 0)
@@ -149,7 +157,8 @@ function sourceIsReady(camera) {
     return publisherConnected === true || state === "streaming" || state === "running";
   }
   const bridge = getEsp32BridgeSnapshot(camera.cameraId);
-  return Boolean(bridge?.pid) && !["error", "retry_wait", "stopped"].includes(bridge.state);
+  const progressFresh = bridge?.progressAgeSeconds == null || bridge.progressAgeSeconds < 20;
+  return Boolean(bridge?.pid) && bridge.state === "running" && progressFresh;
 }
 
 async function publishStatus(camera, job, force = false) {
@@ -215,7 +224,9 @@ async function captureFrame(camera, job) {
         process.env.TIMELAPSE_FFMPEG_PATH || "ffmpeg",
         [
           "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
-          "-rtsp_transport", "tcp", "-i", getMediaMtxUrl(camera),
+          "-rtsp_transport", "tcp",
+          "-rw_timeout", String(captureTimeoutMs(camera) * 1000),
+          "-i", getMediaMtxUrl(camera),
           "-map", "0:v:0", "-frames:v", "1", "-c:v", "mjpeg", "-q:v", "2",
           "-f", "image2", temporaryPath,
         ],
@@ -240,6 +251,8 @@ async function captureFrame(camera, job) {
     if (!stats.isFile() || stats.size === 0) throw new Error("snapshot_file_empty");
     await fs.rename(temporaryPath, finalPath);
     job.storageBytes += stats.size;
+    updateGlobalStorageBytes();
+    job.serverFreeBytes = Math.max(0, job.serverFreeBytes - stats.size);
     job.lastImage = name;
     job.lastCaptureAt = new Date().toISOString();
     job.state = "running";
@@ -278,6 +291,12 @@ async function evaluateCamera(camera) {
       job.error = "";
     } else if (!sourceIsReady(camera)) {
       job.state = "waiting_stream";
+      job.error = "";
+    } else if (
+      job.globalStorageLimitBytes > 0 &&
+      [...jobs.values()].some((item) => !item.storageInitialized)
+    ) {
+      job.state = "initializing_archive";
       job.error = "";
     } else if (!job.captureInFlight && Date.now() >= job.nextCaptureAt) {
       if (captureOwner && captureOwner !== camera.cameraId) {

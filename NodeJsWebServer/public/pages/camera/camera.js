@@ -45,7 +45,7 @@ const timelapseVideoHintEl = document.getElementById("timelapse-video-hint");
 
 let overviewState = null;
 let activeCameraId = null;
-let settingsDraftState = { cameraId: null, dirty: false, values: {} };
+let settingsDraftState = { cameraId: null, dirty: false, values: {}, touched: new Set() };
 const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
@@ -88,12 +88,17 @@ function getReportedFieldValue(camera, field) {
 }
 
 function resetSettingsDraft(cameraId = null) {
-  settingsDraftState = { cameraId, dirty: false, values: {} };
+  settingsDraftState = { cameraId, dirty: false, values: {}, touched: new Set() };
 }
 
-function captureSettingsDraft() {
+function captureSettingsDraft(target = null) {
   const camera = getActiveCamera();
   if (!settingsForm || !camera) return;
+
+  const touched = settingsDraftState.cameraId === camera.cameraId
+    ? new Set(settingsDraftState.touched || [])
+    : new Set();
+  if (target?.name) touched.add(target.name);
 
   const values = {};
   for (const field of camera.controls?.fields || []) {
@@ -106,13 +111,15 @@ function captureSettingsDraft() {
     cameraId: camera.cameraId,
     dirty: true,
     values,
+    touched,
   };
 }
 
-function setPendingCameraSettings(cameraId, settings) {
+function setPendingCameraSettings(cameraId, settings, requestId = null) {
   if (!cameraId || !settings || typeof settings !== "object") return;
   pendingCameraSettings.set(cameraId, {
     settings: { ...settings },
+    requestId,
     requestedAt: Date.now(),
   });
 }
@@ -144,6 +151,22 @@ function applyPendingSettingsToCamera(camera) {
   if (expired) {
     pendingCameraSettings.delete(camera.cameraId);
     setSettingsFeedback(camera.cameraId, "Rueckmeldung der Kamera steht noch aus.", true, 10000);
+    return camera;
+  }
+
+  const command = camera.status?.lastCommand;
+  if (
+    pendingEntry.requestId &&
+    command?.id === pendingEntry.requestId &&
+    ["error", "partial"].includes(command.result)
+  ) {
+    pendingCameraSettings.delete(camera.cameraId);
+    setSettingsFeedback(
+      camera.cameraId,
+      command.message || "Mindestens eine Einstellung wurde von der Kamera abgelehnt.",
+      true,
+      12000
+    );
     return camera;
   }
 
@@ -339,7 +362,6 @@ function renderState(camera) {
         <div><strong>Umgebungslicht</strong><span>${escapeHtml(camera.status.ambientLux || "-")} Lux</span></div>
         <div><strong>IR Modus</strong><span>${escapeHtml(camera.status.irMode || config.ir_mode_name || "-")}</span></div>
         <div><strong>IR Zustand</strong><span>${camera.status.irEnabled === true ? "AN" : camera.status.irEnabled === false ? "AUS" : "-"}</span></div>
-        <div><strong>SD-Karte</strong><span>${escapeHtml(camera.status.sd || "-")}</span></div>
         <div><strong>Lichtsensor</strong><span>${escapeHtml(camera.status.lightSensor || "-")}</span></div>
       `
       : camera.kind === "esp32"
@@ -366,15 +388,24 @@ function renderState(camera) {
       <div><strong>Letzter Ping</strong><span>${escapeHtml(camera.status.pong || "-")}</span></div>
       <div><strong>RTSP Quelle</strong><span>${escapeHtml(camera.status.rtspUrl || "-")}</span></div>
       <div><strong>MQTT zuletzt</strong><span>${escapeHtml(camera.mqtt.lastTopic || "-")}</span></div>
-      <div><strong>Direkte Sessions</strong><span>${escapeHtml(camera.status.directSessions || camera.status.clients || "-")}</span></div>
-      <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients || camera.status.clients || "-")}</span></div>
-      <div><strong>Quell-FPS</strong><span>${escapeHtml(camera.status.frameFps || "-")}</span></div>
+      <div><strong>Direkte Sessions</strong><span>${escapeHtml(camera.status.directSessions ?? camera.status.clients ?? "-")}</span></div>
+      <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients ?? camera.status.clients ?? "-")}</span></div>
+      <div><strong>Quell-FPS</strong><span>${escapeHtml(camera.status.frameFps ?? "-")}</span></div>
       <div><strong>Publisher</strong><span>${camera.status.publisherConnected === true ? "VERBUNDEN" : camera.status.publisherConnected === false ? "GETRENNT" : "-"}</span></div>
       <div><strong>Reconnects</strong><span>${escapeHtml(camera.status.reconnectCount ?? "-")}</span></div>
+      <div><strong>WLAN / MQTT Reconnects</strong><span>${escapeHtml(camera.status.wifiReconnectCount ?? 0)} / ${escapeHtml(camera.status.mqttReconnectCount ?? 0)}</span></div>
+      <div><strong>Kamera-Recovery</strong><span>${escapeHtml(camera.status.cameraRecoveryCount ?? 0)}</span></div>
+      <div><strong>MQTT Publish-Fehler</strong><span>${escapeHtml(camera.status.mqttPublishFailures ?? 0)}</span></div>
+      <div><strong>WLAN Signal</strong><span>${camera.status.wifiRssi != null ? `${escapeHtml(camera.status.wifiRssi)} dBm` : "-"}</span></div>
+      <div><strong>Geraete-Laufzeit</strong><span>${camera.status.uptimeSeconds ? `${escapeHtml(camera.status.uptimeSeconds)} s` : "-"}</span></div>
+      <div><strong>Freier Geraetespeicher</strong><span>${camera.status.freeHeapBytes ? escapeHtml(formatBytes(camera.status.freeHeapBytes)) : "-"}</span></div>
       <div><strong>Stream Laufzeit</strong><span>${camera.status.streamUptimeSeconds ? `${escapeHtml(camera.status.streamUptimeSeconds)} s` : "-"}</span></div>
       <div><strong>Daten zuletzt</strong><span>${camera.status.streamLastDataAgeSeconds != null ? `${escapeHtml(camera.status.streamLastDataAgeSeconds)} s` : "-"}</span></div>
       <div><strong>Bridge Status</strong><span>${escapeHtml(bridge?.state || "-")}</span></div>
       <div><strong>Bridge PID</strong><span>${escapeHtml(bridge?.pid || "-")}</span></div>
+      <div><strong>Bridge Fortschritt</strong><span>${bridge?.progressAgeSeconds != null ? `vor ${escapeHtml(bridge.progressAgeSeconds)} s` : "-"}</span></div>
+      <div><strong>Letzter Befehl</strong><span>${escapeHtml(camera.status.lastCommand?.name || "-")} / ${escapeHtml(camera.status.lastCommand?.result || "-")}</span></div>
+      <div><strong>Befehl Rueckmeldung</strong><span>${escapeHtml(camera.status.lastCommand?.message || "-")}</span></div>
     </div>
     <div class="camera-error-box ${camera.status.error ? "camera-error-active" : ""}">
       ${escapeHtml(camera.status.error || bridge?.lastError || bridge?.lastMessage || camera.status.lastStatus || "Kein gemeldeter Fehler.")}
@@ -598,7 +629,7 @@ function renderTimelapseSection(camera) {
       ],
       ["Aufnahmeart", "Direkte Aufnahme auf dem Server"],
       ["Ordner", timelapse.outputDir || "-"],
-      ["Letztes Bild", timelapse.lastImage || "-"],
+      ["Letztes Bild", currentTimelapseState?.latestImage?.name || timelapse.lastImage || "-"],
     ];
 
     timelapseSummaryEl.innerHTML = rows
@@ -641,9 +672,13 @@ function renderSettingsForm(camera, { force = false } = {}) {
     .map((field) => {
       const fieldId = `camera-field-${field.key}`;
       const value = fieldCurrentValue(camera, field);
+      const section = field.section
+        ? `<h3 class="camera-settings-section">${escapeHtml(field.section)}</h3>`
+        : "";
 
       if (field.type === "checkbox") {
         return `
+          ${section}
           <div class="form-group camera-checkbox-group">
             <label class="switch-line" for="${escapeHtml(fieldId)}">
               <input id="${escapeHtml(fieldId)}" name="${escapeHtml(field.key)}" type="checkbox" ${value ? "checked" : ""}>
@@ -655,6 +690,7 @@ function renderSettingsForm(camera, { force = false } = {}) {
 
       if (field.type === "select") {
         return `
+          ${section}
           <div class="form-group">
             <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}</label>
             <select id="${escapeHtml(fieldId)}" name="${escapeHtml(field.key)}">
@@ -674,6 +710,7 @@ function renderSettingsForm(camera, { force = false } = {}) {
       }
 
       return `
+        ${section}
         <div class="form-group">
           <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}</label>
           <input
@@ -689,14 +726,18 @@ function renderSettingsForm(camera, { force = false } = {}) {
         </div>
       `;
     })
-    .join("") + '<div class="form-group camera-form-actions"><button type="submit">Einstellungen senden</button></div>';
+    .join("") + '<div class="form-group camera-form-actions"><button type="submit">Aenderungen senden</button></div>';
 }
 
 function readSettingsFromForm(camera) {
   const settings = {};
   const fields = camera.controls?.fields || [];
+  const touched = settingsDraftState.cameraId === camera.cameraId
+    ? new Set(settingsDraftState.touched || [])
+    : new Set();
 
   for (const field of fields) {
+    if (!touched.has(field.key)) continue;
     const input = settingsForm.elements.namedItem(field.key);
     if (!input) continue;
 
@@ -754,7 +795,7 @@ async function loadOverview() {
 async function sendCommand(cameraId, action, body = {}) {
   const data = await postCameraCommand(cameraId, action, body);
   setOverviewState(data.overview);
-  return overviewState;
+  return data;
 }
 
 async function loadTimelapse(cameraId) {
@@ -802,9 +843,10 @@ settingsForm?.addEventListener("submit", async (event) => {
 
   try {
     setStatusLine(settingsStatusEl, `Sende Einstellungen an ${activeCamera.label}...`);
-    setPendingCameraSettings(activeCamera.cameraId, settings);
     setSettingsFeedback(activeCamera.cameraId, "", false, 0);
-    await sendCommand(activeCamera.cameraId, "set", { settings });
+    const result = await sendCommand(activeCamera.cameraId, "set", { settings });
+    setPendingCameraSettings(activeCamera.cameraId, settings, result.requestId);
+    setOverviewState(result.overview);
     resetSettingsDraft(activeCamera.cameraId);
     renderActiveCamera({ forceSettings: true });
   } catch (error) {
@@ -814,12 +856,12 @@ settingsForm?.addEventListener("submit", async (event) => {
   }
 });
 
-settingsForm?.addEventListener("input", () => {
-  captureSettingsDraft();
+settingsForm?.addEventListener("input", (event) => {
+  captureSettingsDraft(event.target);
 });
 
-settingsForm?.addEventListener("change", () => {
-  captureSettingsDraft();
+settingsForm?.addEventListener("change", (event) => {
+  captureSettingsDraft(event.target);
 });
 
 loadOverview().catch((error) => {

@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 
 const { getCameraConfigs } = require("../config/cameraConfig");
-const { publish, topics } = require("../mqttBroker");
+const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 
 const bridges = new Map();
 
@@ -68,6 +68,18 @@ function getStopTimeoutMs() {
   return Math.max(1000, toNumber(process.env.ESP32_TRANSCODE_STOP_TIMEOUT_MS, 4000));
 }
 
+function getSourceReadTimeoutMs() {
+  return Math.max(3000, toNumber(process.env.ESP32_SOURCE_RW_TIMEOUT_MS, 15000));
+}
+
+function getStartupTimeoutMs() {
+  return Math.max(10000, toNumber(process.env.ESP32_TRANSCODE_STARTUP_TIMEOUT_MS, 30000));
+}
+
+function getStallTimeoutMs() {
+  return Math.max(10000, toNumber(process.env.ESP32_TRANSCODE_STALL_TIMEOUT_MS, 25000));
+}
+
 function getSourceRtspUrl(camera) {
   const explicitUrl = getCameraTopicValue(camera, "rtsp_url");
   if (explicitUrl) return explicitUrl;
@@ -96,6 +108,9 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     "-hide_banner",
     "-loglevel",
     options.logLevel || process.env.ESP32_TRANSCODE_LOGLEVEL || "warning",
+    "-progress",
+    "pipe:1",
+    "-nostats",
     "-use_wallclock_as_timestamps",
     "1",
     "-fflags",
@@ -108,6 +123,8 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     String(options.probeSize ?? 32768),
     "-rtsp_transport",
     options.sourceTransport || process.env.ESP32_SOURCE_RTSP_TRANSPORT || "tcp",
+    "-rw_timeout",
+    String(getSourceReadTimeoutMs() * 1000),
     "-i",
     sourceRtspUrl,
     "-an",
@@ -172,6 +189,10 @@ function ensureBridge(cameraId) {
     commandPreview: "",
     stopTimer: null,
     restartCount: 0,
+    lastProgressAt: null,
+    lastFrame: 0,
+    lastOutputTimeUs: 0,
+    progressBuffer: "",
     lastPublishedSignature: "",
     lastPublishedAt: 0,
   };
@@ -191,6 +212,11 @@ function stopBridgeProcess(bridge, reason) {
     bridge.state = "idle";
     bridge.lastMessage = reason;
     bridge.pid = null;
+    return;
+  }
+
+  if (bridge.state === "stopping" && bridge.stopTimer) {
+    bridge.lastMessage = reason;
     return;
   }
 
@@ -236,9 +262,25 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   const args = getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig, dfr1154Options);
   const signature = JSON.stringify({ sourceRtspUrl, destinationRtspUrl, args });
 
+  // Do not let a supervisor tick undo an in-flight stop while ffmpeg exits.
+  if (bridge.process && bridge.state === "stopping") {
+    if (!bridge.stopTimer) stopBridgeProcess(bridge, bridge.lastMessage || "ffmpeg output ended");
+    return;
+  }
+
   if (bridge.process && bridge.desiredSignature === signature) {
-    bridge.state = "running";
-    bridge.lastMessage = "bridge running";
+    const now = Date.now();
+    const hasProgress = Boolean(bridge.lastProgressAt);
+    const activityAt = hasProgress ? bridge.lastProgressAt : bridge.lastStartAt;
+    const timeoutMs = hasProgress ? getStallTimeoutMs() : getStartupTimeoutMs();
+    if (activityAt && now - activityAt > timeoutMs) {
+      bridge.lastError = hasProgress ? "ffmpeg progress stalled" : "ffmpeg startup timed out";
+      bridge.restartAfter = now + getRestartDelayMs();
+      stopBridgeProcess(bridge, bridge.lastError);
+      return;
+    }
+    bridge.state = hasProgress ? "running" : "starting";
+    bridge.lastMessage = hasProgress ? "bridge running" : "waiting for first encoded frame";
     return;
   }
 
@@ -258,6 +300,7 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   bridge.desiredSignature = signature;
   bridge.commandPreview = [ffmpegPath, ...args].join(" ");
   bridge.lastError = "";
+  bridge.restartAfter = 0;
   bridge.state = "starting";
   bridge.lastMessage = `starting bridge for ${camera.label}`;
   console.log(
@@ -271,20 +314,34 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   bridge.process = child;
   bridge.pid = child.pid || null;
   bridge.lastStartAt = Date.now();
+  bridge.lastProgressAt = null;
+  bridge.lastFrame = 0;
+  bridge.lastOutputTimeUs = 0;
+  bridge.progressBuffer = "";
   bridge.restartCount += 1;
 
   child.stdout.on("data", (chunk) => {
-    const text = String(chunk).trim();
-    if (text) {
-      bridge.state = "running";
-      bridge.lastMessage = text.split(/\r?\n/).pop();
+    bridge.progressBuffer += String(chunk);
+    const lines = bridge.progressBuffer.split(/\r?\n/);
+    bridge.progressBuffer = lines.pop() || "";
+    for (const line of lines) {
+      const separator = line.indexOf("=");
+      if (separator < 1) continue;
+      const key = line.slice(0, separator);
+      const value = line.slice(separator + 1);
+      if (key === "frame") bridge.lastFrame = toNumber(value, bridge.lastFrame);
+      if (key === "out_time_us") bridge.lastOutputTimeUs = toNumber(value, bridge.lastOutputTimeUs);
+      if (key === "progress") {
+        bridge.lastProgressAt = Date.now();
+        bridge.state = value === "end" ? "stopping" : "running";
+        bridge.lastMessage = value === "end" ? "ffmpeg output ended" : "bridge running";
+      }
     }
   });
 
   child.stderr.on("data", (chunk) => {
     const text = String(chunk).trim();
     if (text) {
-      bridge.state = "running";
       bridge.lastMessage = text.split(/\r?\n/).pop();
       if (/error|failed|unable|invalid|no route/i.test(text)) {
         bridge.lastError = text.split(/\r?\n/).pop();
@@ -316,9 +373,10 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
 
     const normalStop = code === 0 || signal === "SIGINT" || signal === "SIGKILL";
     if (normalStop) {
-      bridge.state = "idle";
-      bridge.lastMessage = "bridge stopped";
-      bridge.restartAfter = 0;
+      const waitingToRestart = bridge.restartAfter > Date.now();
+      bridge.state = waitingToRestart ? "retry_wait" : "idle";
+      bridge.lastMessage = waitingToRestart ? "waiting before bridge restart" : "bridge stopped";
+      if (!waitingToRestart) bridge.restartAfter = 0;
       console.log(`[ESP32-Bridge:${camera.cameraId}] stopped`);
       return;
     }
@@ -360,12 +418,24 @@ function evaluateBridge(camera) {
   }
 
   const online = parseBoolean(getCameraTopicValue(camera, "online")) === true;
+  const mqttClient = getClientSnapshot(camera.mqttClientId);
+  const sourceState = getCameraTopicValue(camera, "state");
   const sourceRtspUrl = getSourceRtspUrl(camera);
   const sourceConfig = parseJson(getCameraTopicValue(camera, "config")) || {};
   const streamEnabled = sourceConfig.stream_enabled !== false;
 
   if (!online) {
     stopBridgeProcess(bridge, "waiting for ESP32 online status");
+    return;
+  }
+
+  if (mqttClient && !mqttClient.connected) {
+    stopBridgeProcess(bridge, "waiting for ESP32 MQTT reconnect");
+    return;
+  }
+
+  if (["paused", "updating", "recovering", "camera_error", "wifi_down"].includes(sourceState)) {
+    stopBridgeProcess(bridge, `ESP32 source state is ${sourceState}`);
     return;
   }
 
@@ -425,6 +495,12 @@ function getEsp32BridgeSnapshot(cameraId) {
     lastStopAt: bridge.lastStopAt ? new Date(bridge.lastStopAt).toISOString() : null,
     commandPreview: bridge.commandPreview || "",
     restartCount: bridge.restartCount,
+    lastProgressAt: bridge.lastProgressAt ? new Date(bridge.lastProgressAt).toISOString() : null,
+    progressAgeSeconds: bridge.lastProgressAt
+      ? Math.max(0, Math.floor((Date.now() - bridge.lastProgressAt) / 1000))
+      : null,
+    encodedFrames: bridge.lastFrame,
+    outputTimeUs: bridge.lastOutputTimeUs,
   };
 }
 

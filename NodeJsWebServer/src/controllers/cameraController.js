@@ -1,5 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
+const { randomUUID } = require("crypto");
 
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
@@ -33,6 +34,41 @@ function parseJson(value) {
   } catch {
     return null;
   }
+}
+
+function normalizeCommandSettings(config, settings) {
+  const fields = new Map((config.controls?.fields || []).map((field) => [field.key, field]));
+  const normalized = {};
+
+  for (const [key, rawValue] of Object.entries(settings)) {
+    const field = fields.get(key);
+    if (!field) throw new Error(`unsupported_setting:${key}`);
+
+    if (field.type === "checkbox") {
+      const booleanValue = typeof rawValue === "boolean"
+        ? rawValue
+        : parseBoolean(String(rawValue));
+      if (booleanValue == null) throw new Error(`invalid_boolean:${key}`);
+      normalized[key] = booleanValue;
+      continue;
+    }
+
+    if (field.type === "number" || field.type === "select") {
+      const numberValue = Number(rawValue);
+      if (!Number.isFinite(numberValue)) throw new Error(`invalid_number:${key}`);
+      if (field.min != null && numberValue < field.min) throw new Error(`value_below_minimum:${key}`);
+      if (field.max != null && numberValue > field.max) throw new Error(`value_above_maximum:${key}`);
+      if (field.type === "select" && !field.options?.some((option) => Number(option.value) === numberValue)) {
+        throw new Error(`invalid_option:${key}`);
+      }
+      normalized[key] = numberValue;
+      continue;
+    }
+
+    normalized[key] = String(rawValue);
+  }
+
+  return normalized;
 }
 
 function collectCameraTopics(topicBase) {
@@ -72,6 +108,17 @@ function buildCameraOverview(config) {
   const publisherConnectedValue = getLatestTopicValue(statusTopics, "publisher_connected");
   const mqttConnectedValue = getLatestTopicValue(statusTopics, "mqtt_connected");
   const reconnectCountValue = getLatestTopicValue(statusTopics, "reconnect_count");
+  const wifiReconnectCountValue = getLatestTopicValue(statusTopics, "wifi_reconnect_count");
+  const mqttReconnectCountValue = getLatestTopicValue(statusTopics, "mqtt_reconnect_count");
+  const cameraRecoveryCountValue = getLatestTopicValue(statusTopics, "camera_recovery_count");
+  const mqttPublishFailuresValue = getLatestTopicValue(statusTopics, "mqtt_publish_failures");
+  const wifiRssiValue = getLatestTopicValue(statusTopics, "wifi_rssi");
+  const uptimeValue = getLatestTopicValue(statusTopics, "uptime_seconds");
+  const freeHeapValue = getLatestTopicValue(statusTopics, "free_heap_bytes");
+  const commandIdValue = getLatestTopicValue(statusTopics, "command/id");
+  const commandNameValue = getLatestTopicValue(statusTopics, "command/name");
+  const commandResultValue = getLatestTopicValue(statusTopics, "command/result");
+  const commandMessageValue = getLatestTopicValue(statusTopics, "command/message");
   const streamBytesValue = getLatestTopicValue(statusTopics, "stream_bytes_total");
   const streamUptimeValue = getLatestTopicValue(statusTopics, "stream_uptime_seconds");
   const streamDataAgeValue = getLatestTopicValue(statusTopics, "stream_last_data_age_seconds");
@@ -93,6 +140,7 @@ function buildCameraOverview(config) {
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
 
   const mqttClient = getClientSnapshot(config.mqttClientId);
+  const reportedOnline = parseBoolean(onlineValue);
   const streamConfig = parseJson(configValue);
   const bridge = config.kind === "esp32" || config.kind === "dfr1154"
     ? getEsp32BridgeSnapshot(config.cameraId)
@@ -144,7 +192,9 @@ function buildCameraOverview(config) {
     mediamtx: config.mediaMTX,
     bridge,
     status: {
-      online: parseBoolean(onlineValue),
+      online: mqttClient
+        ? Boolean(mqttClient.connected && reportedOnline !== false)
+        : reportedOnline,
       state: stateValue || "unknown",
       error: errorValue || "",
       pong: pongValue || "",
@@ -156,6 +206,19 @@ function buildCameraOverview(config) {
       publisherConnected: parseBoolean(publisherConnectedValue),
       mqttConnected: parseBoolean(mqttConnectedValue),
       reconnectCount: Number(reconnectCountValue || 0),
+      wifiReconnectCount: Number(wifiReconnectCountValue || 0),
+      mqttReconnectCount: Number(mqttReconnectCountValue || 0),
+      cameraRecoveryCount: Number(cameraRecoveryCountValue || 0),
+      mqttPublishFailures: Number(mqttPublishFailuresValue || 0),
+      wifiRssi: wifiRssiValue === "" ? null : Number(wifiRssiValue),
+      uptimeSeconds: Number(uptimeValue || 0),
+      freeHeapBytes: Number(freeHeapValue || 0),
+      lastCommand: {
+        id: commandIdValue || "",
+        name: commandNameValue || "",
+        result: commandResultValue || "",
+        message: commandMessageValue || "",
+      },
       streamBytesTotal: Number(streamBytesValue || 0),
       streamUptimeSeconds: Number(streamUptimeValue || 0),
       streamLastDataAgeSeconds: streamDataAgeValue === "" ? null : Number(streamDataAgeValue),
@@ -308,31 +371,51 @@ async function sendCommand(req, res) {
     return res.status(400).json({ ok: false, error: "invalid_camera_id" });
   }
 
+  const mqttClient = getClientSnapshot(config.mqttClientId);
+  if (!mqttClient?.connected) {
+    return res.status(409).json({ ok: false, error: "camera_mqtt_offline" });
+  }
+
   const topicFor = (suffix) => `${config.mqttTopicBase}/cmd/${suffix}`;
+  const requestId = randomUUID();
 
   try {
     switch (action) {
       case "start":
       case "stop":
       case "restart":
-        await publish(topicFor(action), payload || "1");
+        await publish(
+          topicFor(action),
+          JSON.stringify({ _request_id: requestId, value: payload ?? 1 }),
+          { qos: 1 }
+        );
         break;
       case "ping":
-        await publish(topicFor("ping"), payload || new Date().toISOString());
+        await publish(
+          topicFor("ping"),
+          JSON.stringify({ _request_id: requestId, value: payload ?? new Date().toISOString() }),
+          { qos: 1 }
+        );
         break;
       case "set":
         if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
           return res.status(400).json({ ok: false, error: "invalid_settings" });
         }
-        await publish(topicFor("set"), JSON.stringify(settings));
+        await publish(
+          topicFor("set"),
+          JSON.stringify({ ...normalizeCommandSettings(config, settings), _request_id: requestId }),
+          { qos: 1 }
+        );
         break;
       default:
         return res.status(400).json({ ok: false, error: "invalid_action" });
     }
 
-    res.json({ ok: true, overview: buildOverview(req) });
+    res.json({ ok: true, requestId, overview: buildOverview(req) });
   } catch (error) {
-    res.status(500).json({ ok: false, error: String(error?.message || error) });
+    const message = String(error?.message || error);
+    const invalidSetting = /^(?:unsupported_setting|invalid_boolean|invalid_number|value_below_minimum|value_above_maximum|invalid_option):/.test(message);
+    res.status(invalidSetting ? 400 : 500).json({ ok: false, error: message });
   }
 }
 
