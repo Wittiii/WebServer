@@ -1,7 +1,7 @@
 const { spawn } = require("child_process");
 
 const { getCameraConfigs } = require("../config/cameraConfig");
-const { getClientSnapshot, publish, topics } = require("../mqttBroker");
+const { publish, topics } = require("../mqttBroker");
 
 const bridges = new Map();
 
@@ -418,7 +418,6 @@ function evaluateBridge(camera) {
   }
 
   const online = parseBoolean(getCameraTopicValue(camera, "online")) === true;
-  const mqttClient = getClientSnapshot(camera.mqttClientId);
   const sourceState = getCameraTopicValue(camera, "state");
   const sourceRtspUrl = getSourceRtspUrl(camera);
   const sourceConfig = parseJson(getCameraTopicValue(camera, "config")) || {};
@@ -426,11 +425,6 @@ function evaluateBridge(camera) {
 
   if (!online) {
     stopBridgeProcess(bridge, "waiting for ESP32 online status");
-    return;
-  }
-
-  if (mqttClient && !mqttClient.connected) {
-    stopBridgeProcess(bridge, "waiting for ESP32 MQTT reconnect");
     return;
   }
 
