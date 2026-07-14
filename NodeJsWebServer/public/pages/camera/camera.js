@@ -600,7 +600,10 @@ function renderTimelapseSection(camera) {
 
   if (timelapseSummaryEl) {
     const timelapse = camera.timelapse || {};
-    const archiveTotals = timelapseState?.cameraId === camera.cameraId ? timelapseState.totals : null;
+    const currentTimelapseState = timelapseState?.cameraId === camera.cameraId
+      ? timelapseState
+      : null;
+    const archiveTotals = currentTimelapseState?.totals || null;
     const rows = [
       ["Status", timelapse.state || "-"],
       ["Aufnahme", timelapse.enabled === true ? "aktiv" : timelapse.enabled === false ? "deaktiviert" : "-"],
