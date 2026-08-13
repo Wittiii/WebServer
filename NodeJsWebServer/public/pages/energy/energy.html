@@ -140,6 +140,23 @@
           <div><span>Letzter Geraetezeitpunkt</span><strong id="energy-source-time">--</strong></div>
           <div><span>Status</span><strong id="energy-source-status">Wartet auf Daten</strong></div>
         </div>
+        <form id="energy-topic-form" class="energy-topic-form">
+          <label for="energy-topic-input">Daten-Topic aendern</label>
+          <div class="energy-topic-controls">
+            <input
+              id="energy-topic-input"
+              type="text"
+              maxlength="512"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="tele/tasmota_605AF0/SENSOR"
+              required
+            >
+            <button id="energy-topic-save" type="submit">Topic speichern</button>
+          </div>
+          <small>Das Topic muss exakt dem Tasmota SENSOR-Topic entsprechen. MQTT-Wildcards sind nicht erlaubt.</small>
+          <p id="energy-topic-status" class="status-line"></p>
+        </form>
       </section>
     </div>
 

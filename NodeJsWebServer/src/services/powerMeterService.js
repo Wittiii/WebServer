@@ -1,7 +1,7 @@
 const db = require("../database/db");
 
 const DEFAULT_TOPIC = "tele/tasmota_605AF0/SENSOR";
-const sensorTopic = String(process.env.POWER_METER_SENSOR_TOPIC || DEFAULT_TOPIC).trim();
+const environmentTopic = String(process.env.POWER_METER_SENSOR_TOPIC || DEFAULT_TOPIC).trim();
 const sampleIntervalMs = Math.max(0, Number(process.env.POWER_METER_SAMPLE_SECONDS || 10) * 1000);
 const staleAfterMs = Math.max(10000, Number(process.env.POWER_METER_STALE_SECONDS || 90) * 1000);
 const retentionDays = Math.max(1, Number(process.env.POWER_METER_RETENTION_DAYS || 365));
@@ -19,9 +19,43 @@ const latestReading = db.prepare(`
   SELECT * FROM power_meter_readings WHERE topic = ? ORDER BY received_at_ms DESC LIMIT 1
 `);
 
+const storedSettings = db.prepare(`
+  SELECT sensor_topic FROM power_meter_settings WHERE id = 1
+`);
+
+const saveSettings = db.prepare(`
+  INSERT INTO power_meter_settings (id, sensor_topic, updated_at)
+  VALUES (1, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    sensor_topic = excluded.sensor_topic,
+    updated_at = excluded.updated_at
+`);
+
+let sensorTopic = storedSettings.get()?.sensor_topic || environmentTopic;
 let currentReading = null;
 let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
 let lastCleanupAt = 0;
+
+function normalizeSensorTopic(value) {
+  const topic = String(value ?? "").trim();
+  if (!topic || topic.length > 512 || topic.includes("\0") || topic.includes("#") || topic.includes("+")) {
+    const error = new Error("invalid_sensor_topic");
+    error.code = "invalid_sensor_topic";
+    throw error;
+  }
+  return topic;
+}
+
+function setSensorTopic(value) {
+  const topic = normalizeSensorTopic(value);
+  saveSettings.run(topic, new Date().toISOString());
+  if (topic === sensorTopic) return sensorTopic;
+
+  sensorTopic = topic;
+  currentReading = null;
+  lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
+  return sensorTopic;
+}
 
 function finite(value) {
   const number = Number(value);
@@ -200,5 +234,7 @@ function getPowerMeterOverview(period = "24h", now = Date.now()) {
 module.exports = {
   getPowerMeterOverview,
   ingestPowerMeterMessage,
+  normalizeSensorTopic,
   parseSensorPayload,
+  setSensorTopic,
 };

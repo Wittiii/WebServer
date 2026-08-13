@@ -118,6 +118,14 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS power_meter_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    sensor_topic TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS object_automation_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id INTEGER NOT NULL,

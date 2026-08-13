@@ -26,6 +26,10 @@ const elements = {
   startTime: document.getElementById("energy-start-time"),
   sourceTime: document.getElementById("energy-source-time"),
   sourceStatus: document.getElementById("energy-source-status"),
+  topicForm: document.getElementById("energy-topic-form"),
+  topicInput: document.getElementById("energy-topic-input"),
+  topicSave: document.getElementById("energy-topic-save"),
+  topicStatus: document.getElementById("energy-topic-status"),
   chart: document.getElementById("energy-power-chart"),
   chartEmpty: document.getElementById("energy-chart-empty"),
   error: document.getElementById("energy-error"),
@@ -161,6 +165,9 @@ function render(data) {
   elements.onlineBadge.classList.toggle("status-offline", !online);
   setText(elements.onlineBadge, online ? "LIVE" : "OFFLINE");
   setText(elements.topic, data.configuredTopic || "--");
+  if (elements.topicInput && document.activeElement !== elements.topicInput) {
+    elements.topicInput.value = data.configuredTopic || "";
+  }
   setText(elements.priceHint, `${number(data.priceEurKwh, 3)} EUR/kWh`);
 
   if (!reading) {
@@ -228,6 +235,38 @@ document.querySelectorAll("[data-period]").forEach((button) => {
     });
     refresh();
   });
+});
+
+elements.topicForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const sensorTopic = elements.topicInput.value.trim();
+  if (!sensorTopic) return;
+
+  elements.topicSave.disabled = true;
+  setText(elements.topicStatus, "Topic wird gespeichert ...");
+  try {
+    const response = await fetch("/energy/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ sensorTopic }),
+    });
+    if (response.status === 401 || response.redirected) {
+      window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    const result = await response.json();
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error === "invalid_sensor_topic" ? "Ungueltiges MQTT-Topic" : result.error);
+    }
+    elements.topicInput.value = result.configuredTopic;
+    setText(elements.topicStatus, "Topic gespeichert. Warte auf neue SENSOR-Daten.");
+    await refresh();
+  } catch (error) {
+    setText(elements.topicStatus, `Topic konnte nicht gespeichert werden: ${error.message}`);
+  } finally {
+    elements.topicSave.disabled = false;
+  }
 });
 
 window.addEventListener("resize", drawChart);

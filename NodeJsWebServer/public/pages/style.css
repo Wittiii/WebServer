@@ -1685,6 +1685,46 @@ body::before {
   font-size: 0.78rem;
 }
 
+.energy-topic-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.energy-topic-form label {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.energy-topic-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.energy-topic-controls input {
+  min-width: 0;
+  font-family: monospace;
+}
+
+.energy-topic-controls button {
+  border-color: var(--energy);
+  background: var(--energy);
+  color: #171105;
+}
+
+.energy-topic-form small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.energy-topic-form .status-line {
+  min-height: 1.25rem;
+  margin: 0;
+}
+
 .energy-error-line {
   min-height: 1.4rem;
   color: var(--danger);
@@ -1742,5 +1782,9 @@ body::before {
   .energy-source-card strong,
   .energy-source-card code {
     text-align: left;
+  }
+
+  .energy-topic-controls {
+    grid-template-columns: 1fr;
   }
 }
