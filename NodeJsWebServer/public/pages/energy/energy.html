@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stromverbrauch - Operations Deck</title>
+  <link rel="stylesheet" href="/pages/style.css">
+</head>
+<body class="theme-operations page-energy">
+  <div id="navbar"></div>
+
+  <header class="hero energy-hero">
+    <div class="container hero-inner">
+      <div class="hero-copy energy-hero-copy">
+        <p class="energy-eyebrow">TASMOTA ENERGY MONITOR</p>
+        <h1>Stromverbrauch</h1>
+        <p class="hero-text">Live-Messung, Tagesbilanz und Verlauf der angeschlossenen Steckdose.</p>
+        <div class="energy-live-row">
+          <div>
+            <span id="energy-live-power" class="energy-live-value">--</span>
+            <span class="energy-live-unit">W</span>
+          </div>
+          <span id="energy-online-badge" class="status-badge energy-status-badge">WARTET</span>
+        </div>
+        <p id="energy-last-update" class="energy-freshness">Noch keine Messung empfangen.</p>
+      </div>
+      <div class="hero-side energy-dial-card">
+        <div class="energy-dial" id="energy-dial">
+          <div class="energy-dial-core">
+            <span>Heute</span>
+            <strong id="energy-today">--</strong>
+            <small>kWh</small>
+          </div>
+        </div>
+        <div class="energy-cost-line">
+          <span>Geschaetzte Kosten</span>
+          <strong id="energy-cost-today">--</strong>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page-shell energy-shell">
+    <section class="energy-metric-grid" data-collapsible="false" aria-label="Aktuelle Messwerte">
+      <article class="energy-metric-card energy-metric-primary">
+        <span class="energy-metric-label">Wirkleistung</span>
+        <strong id="energy-power">--</strong>
+        <small>Watt</small>
+      </article>
+      <article class="energy-metric-card">
+        <span class="energy-metric-label">Spannung</span>
+        <strong id="energy-voltage">--</strong>
+        <small>Volt</small>
+      </article>
+      <article class="energy-metric-card">
+        <span class="energy-metric-label">Strom</span>
+        <strong id="energy-current">--</strong>
+        <small>Ampere</small>
+      </article>
+      <article class="energy-metric-card">
+        <span class="energy-metric-label">Leistungsfaktor</span>
+        <strong id="energy-factor">--</strong>
+        <small>cos phi</small>
+      </article>
+    </section>
+
+    <section class="panel energy-balance-panel" data-collapsible="false">
+      <div class="section-header energy-section-heading">
+        <div>
+          <p class="energy-eyebrow">ENERGIEBILANZ</p>
+          <h2>Verbrauch im Vergleich</h2>
+        </div>
+        <span id="energy-price-hint" class="energy-price-chip">-- EUR/kWh</span>
+      </div>
+      <div class="energy-balance-grid">
+        <div class="energy-balance-item">
+          <span>Heute</span>
+          <strong id="energy-balance-today">--</strong>
+          <small id="energy-balance-today-cost">--</small>
+        </div>
+        <div class="energy-balance-item">
+          <span>Gestern</span>
+          <strong id="energy-yesterday">--</strong>
+          <small id="energy-yesterday-cost">--</small>
+        </div>
+        <div class="energy-balance-item">
+          <span>Gesamt</span>
+          <strong id="energy-total">--</strong>
+          <small id="energy-total-since">Seit --</small>
+        </div>
+        <div class="energy-balance-item">
+          <span>Spitze heute</span>
+          <strong id="energy-peak">--</strong>
+          <small id="energy-average">Durchschnitt --</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel energy-chart-panel" data-collapsible="false">
+      <div class="section-header energy-section-heading">
+        <div>
+          <p class="energy-eyebrow">LASTPROFIL</p>
+          <h2>Leistungsverlauf</h2>
+        </div>
+        <div class="energy-period-tabs" role="group" aria-label="Zeitraum waehlen">
+          <button type="button" data-period="1h">1 Stunde</button>
+          <button type="button" data-period="24h" class="is-active">24 Stunden</button>
+          <button type="button" data-period="7d">7 Tage</button>
+          <button type="button" data-period="30d">30 Tage</button>
+        </div>
+      </div>
+      <div class="energy-chart-shell">
+        <canvas id="energy-power-chart" class="energy-chart" width="1080" height="340"></canvas>
+        <p id="energy-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Messpunkte fuer diesen Zeitraum.</p>
+      </div>
+      <div class="energy-chart-legend">
+        <span><i class="legend-power"></i> Durchschnittliche Leistung</span>
+        <span><i class="legend-peak"></i> Spitzenleistung</span>
+      </div>
+    </section>
+
+    <div class="grid-2 energy-lower-grid">
+      <section class="panel" data-collapsible="false">
+        <p class="energy-eyebrow">NETZQUALITAET</p>
+        <h2>Elektrische Werte</h2>
+        <div class="energy-quality-list">
+          <div><span>Scheinleistung</span><strong id="energy-apparent">-- VA</strong></div>
+          <div><span>Blindleistung</span><strong id="energy-reactive">-- var</strong></div>
+          <div><span>Spannungsbereich heute</span><strong id="energy-voltage-range">-- V</strong></div>
+          <div><span>Gespeicherte Messpunkte heute</span><strong id="energy-samples">--</strong></div>
+        </div>
+      </section>
+
+      <section class="panel" data-collapsible="false">
+        <p class="energy-eyebrow">DATENQUELLE</p>
+        <h2>WattMeter</h2>
+        <div class="energy-source-card">
+          <div><span>MQTT Topic</span><code id="energy-topic">--</code></div>
+          <div><span>Messbeginn</span><strong id="energy-start-time">--</strong></div>
+          <div><span>Letzter Geraetezeitpunkt</span><strong id="energy-source-time">--</strong></div>
+          <div><span>Status</span><strong id="energy-source-status">Wartet auf Daten</strong></div>
+        </div>
+      </section>
+    </div>
+
+    <p id="energy-error" class="status-line energy-error-line"></p>
+  </main>
+
+  <script src="/pages/main.js"></script>
+  <script type="module" src="/pages/energy/energy.js"></script>
+</body>
+</html>

@@ -28,6 +28,7 @@ const authGuard = require("./middlewares/authGuard.js");
 const homeRoutes = require("./routes/home/home");
 const dashboardRoutes = require("./routes/dashboard/dashboard.js");
 const cameraRoutes = require("./routes/camera/camera.js");
+const energyRoutes = require("./routes/energy/energy.js");
 const hydroponicRoutes = require("./routes/Hydroponic/hydroponic.js");
 const authRoutes = require("./routes/auth/auth");
 const objectsRoutes = require("./routes/database/database.js");
@@ -37,6 +38,7 @@ const cameraApiRoutes = require("./routes/camera/cameraApi");
 app.use("/", homeRoutes);
 app.use("/dashboard", authGuard, dashboardRoutes);
 app.use("/camera", authGuard, cameraRoutes);
+app.use("/energy", authGuard, energyRoutes);
 app.use("/hydroponic", authGuard, hydroponicRoutes);
 app.use("/login", authRoutes);
 

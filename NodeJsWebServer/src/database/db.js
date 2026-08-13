@@ -96,6 +96,28 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS power_meter_readings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL,
+    source_time TEXT,
+    total_start_time TEXT,
+    total_kwh REAL NOT NULL,
+    yesterday_kwh REAL NOT NULL,
+    today_kwh REAL NOT NULL,
+    power_w REAL NOT NULL,
+    apparent_power_va REAL NOT NULL,
+    reactive_power_var REAL NOT NULL,
+    power_factor REAL NOT NULL,
+    voltage_v REAL NOT NULL,
+    current_a REAL NOT NULL,
+    received_at_ms INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_power_meter_topic_time
+    ON power_meter_readings(topic, received_at_ms);
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS object_automation_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id INTEGER NOT NULL,

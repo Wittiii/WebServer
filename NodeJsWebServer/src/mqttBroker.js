@@ -3,6 +3,7 @@ const http = require('http');
 const ws = require('ws');
 const aedes = require('aedes')();
 const db = require('./database/db');
+const { ingestPowerMeterMessage } = require('./services/powerMeterService');
 
 const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
 const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
@@ -214,6 +215,11 @@ aedes.on('publish', (p, c) => {
   }
   const payloadStr = p.payload.toString();
   topics.set(p.topic, { lastMessage: payloadStr, timestamp: Date.now() });
+  try {
+    ingestPowerMeterMessage(p.topic, payloadStr);
+  } catch (e) {
+    console.error('[MQTT] power meter ingest error', e);
+  }
   try {
     storeReading(p.topic, payloadStr);
   } catch (e) {
