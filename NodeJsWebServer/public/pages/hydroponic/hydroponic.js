@@ -23,12 +23,29 @@ async function publishMqtt(topic, payload) {
 }
 
 
-async function loadReadings() {
-  if (!readingsList) return;
+async function fetchReadings(limit, includeFilters = true) {
+  const obj = getSelectedObject();
+  if (!obj) return [];
 
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (includeFilters) {
+    const key = getSelectedKey();
+    const range = getDateRange();
+    if (key) params.set('key', key);
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+  }
+
+  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`);
+  if (!res.ok) throw new Error('Fehler beim Laden');
+  const list = await res.json();
+  return Array.isArray(list) ? list : [];
+}
+
+async function loadReadings() {
   const obj = getSelectedObject();
   if (!obj) {
-    readingsList.innerHTML = '<li>Kein Objekt ausgewählt</li>';
     drawChart([]);
     lastReadingsCache = [];
     chartDataCache = [];
@@ -36,26 +53,45 @@ async function loadReadings() {
     return;
   }
 
-  readingsList.innerHTML = '<li>Lade ...</li>';
   try {
-    const key = getSelectedKey();
-    const range = getDateRange();
-    const params = new URLSearchParams();
-    params.set('limit', '0');
-    if (key) params.set('key', key);
-    if (range.from) params.set('from', range.from);
-    if (range.to) params.set('to', range.to);
-    const url = `/api/objects/${obj.id}/readings?${params.toString()}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Fehler beim Laden');
-    const list = await res.json();
+    const list = await fetchReadings(0, true);
 
-    if (!Array.isArray(list) || list.length === 0) {
-      readingsList.innerHTML = '<li>Keine Messwerte vorhanden</li>';
+    if (list.length === 0) {
       drawChart([]);
       lastReadingsCache = [];
       chartDataCache = [];
       chartHoverIndex = null;
+      return;
+    }
+
+    const ordered = list.slice().reverse();
+    chartDataCache = ordered;
+    chartHoverIndex = null;
+    drawChart(ordered);
+    lastReadingsCache = list;
+    checkThresholds(list);
+  } catch (err) {
+    drawChart([]);
+    lastReadingsCache = [];
+    chartDataCache = [];
+    chartHoverIndex = null;
+  }
+}
+
+async function loadRealtimeReadings() {
+  if (!readingsList || !isReadingsLogOpen()) return;
+
+  const obj = getSelectedObject();
+  if (!obj) {
+    readingsList.innerHTML = '<li>Kein Objekt ausgewählt</li>';
+    return;
+  }
+
+  readingsList.innerHTML = '<li>Lade die letzten 20 Messwerte ...</li>';
+  try {
+    const list = await fetchReadings(20, false);
+    if (list.length === 0) {
+      readingsList.innerHTML = '<li>Keine Messwerte vorhanden</li>';
       return;
     }
 
@@ -68,19 +104,8 @@ async function loadReadings() {
       const valWithUnit = unit ? `${val} ${escapeHtml(unit)}` : val;
       return `<li>${ts} - ${topic}${key}${valWithUnit}</li>`;
     }).join('');
-
-    const ordered = list.slice().reverse();
-    chartDataCache = ordered;
-    chartHoverIndex = null;
-    drawChart(ordered);
-    lastReadingsCache = list;
-    checkThresholds(list);
   } catch (err) {
     readingsList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
-    drawChart([]);
-    lastReadingsCache = [];
-    chartDataCache = [];
-    chartHoverIndex = null;
   }
 }
 
@@ -150,6 +175,8 @@ const dateFrom = document.getElementById('date-from');
 const dateTo = document.getElementById('date-to');
 const autoRefreshToggle = document.getElementById('auto-refresh');
 const autoRefreshSec = document.getElementById('auto-refresh-sec');
+const readingsLogSection = document.getElementById('log-section');
+const readingsLogToggle = document.getElementById('readings-log-toggle');
 const readingsRefresh = document.getElementById('readings-refresh');
 const deleteReadingsBtn = document.getElementById('delete-readings');
 const optimizeDatabaseBtn = document.getElementById('optimize-database');
@@ -193,6 +220,10 @@ let chartHoverIndex = null;
 let chartDataCache = [];
 let autoRefreshTimer = null;
 const GRAPH_LIMIT = 1000;
+
+function isReadingsLogOpen() {
+  return Boolean(readingsLogSection && !readingsLogSection.classList.contains('collapsed'));
+}
 const GRAPH_TAIL = GRAPH_LIMIT;
 let currentCommands = [];
 let topicsCache = [];
@@ -424,6 +455,7 @@ function startAutoRefresh() {
   const ms = Math.min(Math.max(sec, 2), 300) * 1000;
   autoRefreshTimer = setInterval(() => {
     loadReadings();
+    if (isReadingsLogOpen()) loadRealtimeReadings();
   }, ms);
 }
 

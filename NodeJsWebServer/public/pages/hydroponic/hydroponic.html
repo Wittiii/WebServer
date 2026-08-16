@@ -328,18 +328,25 @@
       </div>
     </section>
 
-    <section id="log-section" class="panel">
-      <h2>Echtzeit Messwerte Log</h2>
-      <div class="section-toolbar">
-        <div class="inline-actions">
-          <button id="readings-refresh" type="button">Aktualisieren</button>
-          <button id="delete-readings" type="button" class="obj-delete">Datenbank leeren</button>
-          <button id="optimize-database" type="button">Datenbank optimieren</button>
-        </div>
-        <span id="readings-status" class="status-line"></span>
+    <section id="log-section" class="panel collapsed">
+      <div class="section-header">
+        <h2>Echtzeit Messwerte Log</h2>
+        <button id="readings-log-toggle" type="button" aria-expanded="false" aria-controls="readings-log-body">
+          Einblenden
+        </button>
       </div>
-      <p id="database-storage-status" class="database-storage-status">Datenbankstatus wird geladen ...</p>
-      <ul id="readings-list" class="readings-list"></ul>
+      <div id="readings-log-body" class="section-body">
+        <div class="section-toolbar">
+          <div class="inline-actions">
+            <button id="readings-refresh" type="button">Aktualisieren</button>
+            <button id="delete-readings" type="button" class="obj-delete">Datenbank leeren</button>
+            <button id="optimize-database" type="button">Datenbank optimieren</button>
+          </div>
+          <span id="readings-status" class="status-line"></span>
+        </div>
+        <p id="database-storage-status" class="database-storage-status">Datenbankstatus wird geladen ...</p>
+        <ul id="readings-list" class="readings-list"></ul>
+      </div>
     </section>
   </main>
 

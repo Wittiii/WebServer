@@ -541,11 +541,27 @@ objectSelect?.addEventListener('change', () => {
   loadAutomations();
   populateThresholdInputs();
   loadHydroponicBrokerSummary();
+  if (isReadingsLogOpen()) loadRealtimeReadings();
+});
+
+readingsLogToggle?.addEventListener('click', async () => {
+  if (!readingsLogSection) return;
+  const opening = readingsLogSection.classList.contains('collapsed');
+  readingsLogSection.classList.toggle('collapsed', !opening);
+  readingsLogToggle.textContent = opening ? 'Ausblenden' : 'Einblenden';
+  readingsLogToggle.setAttribute('aria-expanded', String(opening));
+
+  if (opening) {
+    await Promise.all([
+      loadRealtimeReadings(),
+      loadDatabaseStorageStatus()
+    ]);
+  }
 });
 
 readingsRefresh?.addEventListener('click', () => {
   setReadingsStatus('');
-  loadReadings();
+  loadRealtimeReadings();
 });
 
 graphRefresh?.addEventListener('click', () => {
@@ -568,6 +584,7 @@ deleteReadingsBtn?.addEventListener('click', async () => {
     await loadDatabaseStorageStatus();
     setReadingsStatus('Messwerte gelöscht.');
     await loadReadings();
+    await loadRealtimeReadings();
   } catch (err) {
     setReadingsStatus(`Fehler: ${err.message || err}`, true);
   } finally {
@@ -670,7 +687,10 @@ dateTo?.addEventListener('change', () => {
 
 autoRefreshToggle?.addEventListener('change', () => {
   setupAutoRefresh();
-  if (autoRefreshToggle.checked) loadReadings();
+  if (autoRefreshToggle.checked) {
+    loadReadings();
+    if (isReadingsLogOpen()) loadRealtimeReadings();
+  }
 });
 
 autoRefreshSec?.addEventListener('change', () => {
@@ -1045,5 +1065,4 @@ commandCancel?.addEventListener('click', () => {
 
 resetAutomationForm();
 loadObjects();
-loadDatabaseStorageStatus();
 setupAutoRefresh();
