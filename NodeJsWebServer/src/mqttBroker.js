@@ -4,6 +4,7 @@ const ws = require('ws');
 const aedes = require('aedes')();
 const db = require('./database/db');
 const { ingestPowerMeterMessage } = require('./services/powerMeterService');
+const { extractValue } = require('./services/mqttPayloadService');
 
 const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
 const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
@@ -59,19 +60,6 @@ httpServer.listen(WS_PORT, () => {
   console.log(`[MQTT] Broker WS läuft auf ${WS_PORT}`);
 });
 
-
-function escapeRegExp(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function extractValue(payload, key) {
-  if (!key) return String(payload ?? '');
-  const text = String(payload ?? '');
-  const re = new RegExp(`${escapeRegExp(key)}\\s*=\\s*([^,]+)`, 'g');
-  let match, last;
-  while ((match = re.exec(text)) !== null) last = match[1].trim();
-  return last ?? '';
-}
 
 function getKeysForObject(objectId, topic, fallbackKey) {
   const rows = db

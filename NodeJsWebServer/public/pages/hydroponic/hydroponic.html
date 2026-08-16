@@ -83,7 +83,11 @@
             <input id="key-id" type="hidden">
             <div class="form-group">
               <label for="key-input">Key Name</label>
-              <input id="key-input" type="text" placeholder="z. B. EC_comp" required>
+              <input id="key-input" type="text" placeholder="z. B. EC_comp, ENERGY.Power oder temperature_c" required>
+              <small class="field-hint">
+                Bei einem Topic mit nur einem Wert kannst du einen eigenen Key wie <code>temperature_c</code> vergeben.
+                Fuer JSON nutze einen Pfad wie <code>ENERGY.Power</code>. Das Format <code>EC=1.23</code> nutzt den Key <code>EC</code>.
+              </small>
             </div>
             <div class="form-group">
               <label for="key-topic">Topic</label>

@@ -147,6 +147,17 @@ label {
   letter-spacing: 0.02em;
 }
 
+.field-hint {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.field-hint code {
+  color: var(--accent-2);
+}
+
 h1,
 h2,
 h3,
