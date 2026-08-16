@@ -1,6 +1,10 @@
 ﻿const db = require('../database/db');
 
 const { publishAutomationActions } = require('../services/automationService');
+const {
+  getDatabaseStats,
+  optimizeDatabase
+} = require('../services/databaseMaintenanceService');
 
 function normalizeCommands(value) {
   if (!value) return [];
@@ -335,6 +339,32 @@ const deleteReadings = (req, res) => {
     const info = db.prepare('DELETE FROM object_readings WHERE object_id = ?').run(id);
     res.json({ deleted: info.changes });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const databaseStatus = (req, res) => {
+  try {
+    res.json({ ok: true, ...getDatabaseStats() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const optimizeDatabaseFile = (req, res) => {
+  try {
+    res.json({ ok: true, ...optimizeDatabase() });
+  } catch (err) {
+    if (err.code === 'DATABASE_OPTIMIZATION_RUNNING') {
+      return res.status(409).json({ error: err.message });
+    }
+    if (err.code === 'DATABASE_OPTIMIZATION_INSUFFICIENT_SPACE') {
+      return res.status(507).json({
+        error: err.message,
+        requiredFreeBytes: err.requiredFreeBytes,
+        availableDiskBytes: err.availableDiskBytes
+      });
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -785,6 +815,8 @@ module.exports = {
   deleteObject,
   listReadings,
   deleteReadings,
+  databaseStatus,
+  optimizeDatabaseFile,
   listValueKeys,
   createValueKey,
   deleteValueKey,

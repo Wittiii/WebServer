@@ -360,6 +360,33 @@ async function deleteReadingsForObject(objectId) {
   return data;
 }
 
+function formatStorageBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function renderDatabaseStorageStatus(stats) {
+  if (!databaseStorageStatus) return;
+  const fileSize = formatStorageBytes(stats?.fileSizeBytes);
+  const reclaimable = formatStorageBytes(stats?.reclaimableBytes);
+  databaseStorageStatus.textContent = `SQLite-Datei: ${fileSize} | freigebbar: ${reclaimable}`;
+}
+
+async function loadDatabaseStorageStatus() {
+  if (!databaseStorageStatus) return;
+  try {
+    const res = await fetch('/api/objects/maintenance/database');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Datenbankstatus konnte nicht geladen werden');
+    renderDatabaseStorageStatus(data);
+  } catch (err) {
+    databaseStorageStatus.textContent = `Datenbankstatus: ${err.message || err}`;
+  }
+}
+
 async function saveTopicCommands(objectId, commands) {
   const res = await fetch(`/api/objects/${objectId}/commands`, {
     method: 'PUT',
@@ -538,12 +565,39 @@ deleteReadingsBtn?.addEventListener('click', async () => {
   deleteReadingsBtn.disabled = true;
   try {
     await deleteReadingsForObject(obj.id);
+    await loadDatabaseStorageStatus();
     setReadingsStatus('Messwerte gelöscht.');
     await loadReadings();
   } catch (err) {
     setReadingsStatus(`Fehler: ${err.message || err}`, true);
   } finally {
     deleteReadingsBtn.disabled = false;
+  }
+});
+
+optimizeDatabaseBtn?.addEventListener('click', async () => {
+  const confirmed = window.confirm(
+    'Die gesamte SQLite-Datenbank jetzt optimieren? Der Server reagiert waehrenddessen kurz nicht.'
+  );
+  if (!confirmed) return;
+
+  setReadingsStatus('Optimiere Datenbank ...');
+  optimizeDatabaseBtn.disabled = true;
+  try {
+    const res = await fetch('/api/objects/maintenance/database/optimize', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = data.error === 'database_optimization_insufficient_space'
+        ? `Zu wenig freier Speicher (${formatStorageBytes(data.availableDiskBytes)} verfuegbar).`
+        : data.error || 'Datenbankoptimierung fehlgeschlagen';
+      throw new Error(message);
+    }
+    renderDatabaseStorageStatus(data.after);
+    setReadingsStatus(`Datenbank optimiert. ${formatStorageBytes(data.reclaimedBytes)} freigegeben.`);
+  } catch (err) {
+    setReadingsStatus(`Fehler: ${err.message || err}`, true);
+  } finally {
+    optimizeDatabaseBtn.disabled = false;
   }
 });
 
@@ -991,5 +1045,5 @@ commandCancel?.addEventListener('click', () => {
 
 resetAutomationForm();
 loadObjects();
+loadDatabaseStorageStatus();
 setupAutoRefresh();
-

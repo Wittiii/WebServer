@@ -6,6 +6,8 @@ const {
   deleteObject,
   listReadings,
   deleteReadings,
+  databaseStatus,
+  optimizeDatabaseFile,
   listValueKeys,
   createValueKey,
   deleteValueKey,
@@ -24,6 +26,8 @@ const router = Router();
 
 router.get('/', listObjects);
 router.post('/', createObject);
+router.get('/maintenance/database', databaseStatus);
+router.post('/maintenance/database/optimize', optimizeDatabaseFile);
 router.put('/:id', updateObject);
 router.delete('/:id', deleteObject);
 router.get('/:id/readings', listReadings);
