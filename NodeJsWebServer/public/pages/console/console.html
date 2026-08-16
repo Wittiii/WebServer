@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Serverkonsole - Operations Deck</title>
+  <link rel="stylesheet" href="/pages/style.css">
+</head>
+<body class="theme-operations page-console">
+  <div id="navbar"></div>
+
+  <header class="hero console-hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <p class="console-kicker">RUNTIME OBSERVABILITY</p>
+        <h1>Serverkonsole</h1>
+        <p class="hero-text">Live-Ausgaben von Node.js, MQTT, Kamerabridges und Automatisierungen.</p>
+      </div>
+      <div class="hero-side console-hero-status">
+        <span id="console-connection-dot" class="console-connection-dot"></span>
+        <div>
+          <span>Live-Verbindung</span>
+          <strong id="console-connection-status">Verbinde...</strong>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container page-shell console-shell">
+    <section class="panel console-panel" data-collapsible="false">
+      <div class="console-toolbar">
+        <div class="console-toolbar-group console-filter-group">
+          <label for="console-search">Filter</label>
+          <input id="console-search" type="text" placeholder="MQTT Topic, Client, Fehler..." autocomplete="off">
+        </div>
+        <div class="console-toolbar-group">
+          <label for="console-level">Loglevel</label>
+          <select id="console-level">
+            <option value="all">Alle</option>
+            <option value="error">Fehler</option>
+            <option value="warn">Warnungen</option>
+            <option value="info">Informationen</option>
+            <option value="debug">Debug</option>
+          </select>
+        </div>
+        <div class="console-toolbar-actions">
+          <button id="console-pause" type="button" class="btn btn-secondary">Pausieren</button>
+          <button id="console-clear" type="button" class="btn btn-secondary">Ansicht leeren</button>
+        </div>
+      </div>
+
+      <div class="console-terminal-frame">
+        <div class="console-terminal-header">
+          <span><i></i><i></i><i></i></span>
+          <code>node-server / runtime</code>
+          <span id="console-entry-count">0 Zeilen</span>
+        </div>
+        <div id="console-output" class="console-output" role="log" tabindex="0">
+          <p id="console-empty" class="console-empty">Warte auf Serverausgaben...</p>
+        </div>
+      </div>
+
+      <div class="console-footer">
+        <label class="console-auto-scroll">
+          <input id="console-auto-scroll" type="checkbox" checked>
+          Automatisch nach unten scrollen
+        </label>
+        <span id="console-buffer-status">Logpuffer wird geladen...</span>
+      </div>
+    </section>
+  </main>
+
+  <script src="/pages/main.js"></script>
+  <script type="module" src="/pages/console/console.js"></script>
+</body>
+</html>

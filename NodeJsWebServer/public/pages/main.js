@@ -40,6 +40,7 @@ function buildNavItems(loggedIn) {
       '<li><a href="/">Home</a></li>',
       '<li><a href="/dashboard">Dashboard</a></li>',
       '<li><a href="/camera">Kamera</a></li>',
+      '<li><a href="/console">Konsole</a></li>',
       '<li><a href="/energy">Strom</a></li>',
       '<li><a href="/hydroponic">Hydroponik</a></li>',
       '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Logout</button></form></li>',

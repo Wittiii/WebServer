@@ -18,6 +18,8 @@ const elements = {
 
 const history = [];
 const MAX_TREND_POINTS = 20;
+let topicTreeInitialized = false;
+let openTopicPaths = new Set();
 
 function percent(value) {
   const numeric = Number(value || 0);
@@ -54,11 +56,12 @@ function countLeaves(node) {
   return (node.topic ? 1 : 0) + [...node.children.values()].reduce((sum, child) => sum + countLeaves(child), 0);
 }
 
-function renderTopicNodes(node, depth = 0) {
+function renderTopicNodes(node, depth = 0, parentPath = "") {
   return [...node.children.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([segment, child]) => {
-      const children = renderTopicNodes(child, depth + 1);
+      const topicPath = parentPath ? `${parentPath}/${segment}` : segment;
+      const children = renderTopicNodes(child, depth + 1, topicPath);
       const leaf = child.topic
         ? `<div class="mqtt-tree-value" title="${escapeHtml(child.topic.topic)}">
              <span>${escapeHtml(child.topic.lastMessage)}</span>
@@ -68,8 +71,9 @@ function renderTopicNodes(node, depth = 0) {
       if (!children) {
         return `<li class="mqtt-tree-leaf"><code>${escapeHtml(segment)}</code>${leaf}</li>`;
       }
+      const isOpen = topicTreeInitialized ? openTopicPaths.has(topicPath) : depth === 0;
       return `<li class="mqtt-tree-branch">
-        <details ${depth === 0 ? "open" : ""}>
+        <details data-topic-path="${escapeHtml(topicPath)}" ${isOpen ? "open" : ""}>
           <summary><code>${escapeHtml(segment)}</code><span>${countLeaves(child)} Topics</span></summary>
           ${leaf}<ul>${children}</ul>
         </details>
@@ -96,10 +100,17 @@ async function loadClients() {
 async function loadTopics() {
   const list = await fetch("/api/mqtt/topics").then((response) => response.json());
   if (!Array.isArray(list)) throw new Error("ungueltiges Topic-Format");
+  if (topicTreeInitialized) {
+    openTopicPaths = new Set(
+      [...elements.topics.querySelectorAll("details[open][data-topic-path]")]
+        .map((details) => details.dataset.topicPath),
+    );
+  }
   elements.topicsCount.textContent = String(list.length);
   elements.topics.innerHTML = list.length
     ? renderTopicNodes(createTopicTree(list))
     : "<li>Keine Topics registriert</li>";
+  topicTreeInitialized = true;
 }
 
 async function loadSystem() {
