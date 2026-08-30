@@ -1,7 +1,10 @@
 ﻿const path = require('path');
 const Database = require('better-sqlite3');
 
-const db = new Database(path.join(__dirname, 'app.db'));
+const databasePath = process.env.DATABASE_PATH
+  ? path.resolve(process.env.DATABASE_PATH)
+  : path.join(__dirname, 'app.db');
+const db = new Database(databasePath);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS objects (
@@ -124,6 +127,53 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_energy_layouts (
+    username TEXT PRIMARY KEY,
+    layout TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS victron_battery_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    estimation_enabled INTEGER NOT NULL,
+    profile TEXT NOT NULL,
+    system_voltage TEXT NOT NULL,
+    use_custom_range INTEGER NOT NULL DEFAULT 0,
+    empty_voltage_v REAL,
+    full_voltage_v REAL,
+    updated_at TEXT NOT NULL
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS victron_mppt_readings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL,
+    status TEXT NOT NULL,
+    charger_state TEXT NOT NULL,
+    error_code INTEGER NOT NULL,
+    battery_voltage_v REAL NOT NULL,
+    battery_current_a REAL NOT NULL,
+    battery_soc_percent REAL,
+    panel_power_w REAL NOT NULL,
+    yield_today_wh REAL NOT NULL,
+    load_current_a REAL NOT NULL,
+    rssi INTEGER NOT NULL,
+    received_at_ms INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_victron_mppt_topic_time
+    ON victron_mppt_readings(topic, received_at_ms);
+`);
+
+const victronColumns = db.prepare('PRAGMA table_info(victron_mppt_readings)').all().map(c => c.name);
+if (!victronColumns.includes('battery_soc_percent')) {
+  db.exec('ALTER TABLE victron_mppt_readings ADD COLUMN battery_soc_percent REAL');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS object_automation_rules (

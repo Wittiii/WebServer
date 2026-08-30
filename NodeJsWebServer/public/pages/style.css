@@ -1335,6 +1335,7 @@ body::before {
   --energy: #ffc857;
   --energy-hot: #ff7a59;
   --energy-cool: #63d8cf;
+  overflow-x: hidden;
 }
 
 .energy-hero {
@@ -1480,6 +1481,443 @@ body::before {
 .energy-shell {
   display: grid;
   gap: 1.25rem;
+}
+
+.energy-customizer-trigger {
+  position: fixed;
+  z-index: 70;
+  top: 50%;
+  right: 0;
+  display: grid;
+  min-width: 4.8rem;
+  place-items: center;
+  gap: 0.35rem;
+  padding: 0.8rem 0.7rem;
+  border: 1px solid rgba(255, 200, 87, 0.38);
+  border-right: 0;
+  border-radius: 1rem 0 0 1rem;
+  background: rgba(12, 21, 36, 0.94);
+  color: var(--energy);
+  box-shadow: -10px 12px 35px rgba(0, 0, 0, 0.28);
+  font-size: 0.75rem;
+  transform: translateY(-50%);
+  backdrop-filter: blur(14px);
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.energy-customizer-trigger:hover {
+  background: #162238;
+  transform: translate(-0.25rem, -50%);
+}
+
+.energy-customizer-trigger-mark {
+  position: relative;
+  width: 1.45rem;
+  height: 1rem;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.energy-customizer-trigger-mark::before {
+  content: '';
+  position: absolute;
+  top: 0.38rem;
+  right: 0;
+  left: 0;
+  border-top: 2px solid currentColor;
+}
+
+.energy-customizer-trigger-mark::after {
+  content: '';
+  position: absolute;
+  top: -0.25rem;
+  left: 0.25rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border: 2px solid #0c1524;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0.55rem 0.48rem 0 -2px currentColor, 0.85rem 0.95rem 0 -2px currentColor;
+}
+
+.energy-customizer-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  pointer-events: none;
+}
+
+.energy-customizer-backdrop[hidden] {
+  display: none;
+}
+
+.energy-customizer {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  right: 0;
+  display: flex;
+  width: min(24rem, calc(100vw - 1rem));
+  height: 100dvh;
+  flex-direction: column;
+  padding: 1.25rem;
+  border-left: 1px solid rgba(145, 167, 197, 0.18);
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.13), transparent 18rem),
+    #0b1423;
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.38);
+  transform: translateX(105%);
+  visibility: hidden;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), visibility 220ms;
+}
+
+.energy-customizer-open .energy-customizer {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.energy-customizer-open .energy-customizer-trigger {
+  transform: translate(110%, -50%);
+}
+
+.energy-customizer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.energy-customizer-header .energy-eyebrow,
+.energy-customizer-header h2 {
+  margin: 0;
+}
+
+.energy-customizer-header h2 {
+  margin-top: 0.25rem;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.4rem;
+}
+
+.energy-customizer-close {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.energy-customizer-intro,
+.energy-customizer-hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.energy-customizer-intro {
+  margin: 1rem 0 0.75rem;
+}
+
+.energy-customizer-save-state {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+  color: var(--energy-cool);
+  font-size: 0.75rem;
+}
+
+.energy-customizer-save-state > span {
+  width: 0.48rem;
+  height: 0.48rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(99, 216, 207, 0.08);
+}
+
+.energy-customizer-save-state p {
+  margin: 0;
+}
+
+.energy-customizer-save-state.is-saving {
+  color: var(--energy);
+}
+
+.energy-customizer-save-state.is-saving > span {
+  animation: energy-save-pulse 900ms ease-in-out infinite alternate;
+}
+
+.energy-customizer-save-state.is-error {
+  color: var(--danger);
+}
+
+@keyframes energy-save-pulse {
+  to { opacity: 0.35; transform: scale(0.78); }
+}
+
+.energy-customizer-list {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding: 0.1rem 0.15rem 0.75rem 0;
+  overflow-y: auto;
+}
+
+.energy-customizer-item {
+  padding: 0.75rem;
+  border: 1px solid rgba(145, 167, 197, 0.16);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.035);
+  transition: border-color 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+.energy-customizer-item:hover {
+  border-color: rgba(255, 200, 87, 0.3);
+}
+
+.energy-customizer-item.is-hidden {
+  opacity: 0.62;
+}
+
+.energy-customizer-item.is-dragging {
+  border-color: var(--energy-cool);
+  opacity: 0.45;
+  transform: scale(0.98);
+}
+
+.energy-customizer-item-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.energy-customizer-item-main > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.energy-customizer-item-main strong,
+.energy-customizer-item-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.energy-customizer-item-main strong {
+  font-size: 0.84rem;
+}
+
+.energy-customizer-item-main small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.energy-customizer-drag {
+  width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: transparent;
+  cursor: grab;
+}
+
+.energy-customizer-drag::before {
+  content: '::';
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.1em;
+}
+
+.energy-customizer-visibility {
+  min-width: 5.5rem;
+  padding: 0.42rem 0.55rem;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.energy-customizer-visibility.is-on {
+  border-color: rgba(99, 216, 207, 0.28);
+  background: rgba(99, 216, 207, 0.08);
+  color: var(--energy-cool);
+}
+
+.energy-customizer-item-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.energy-customizer-item-actions button {
+  padding: 0.42rem;
+  border-color: rgba(145, 167, 197, 0.14);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.energy-customizer-hint {
+  margin: auto 0 0;
+  padding-top: 0.75rem;
+}
+
+.energy-customizer-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.energy-layout-reset {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.energy-customizer-done {
+  border-color: var(--energy);
+  background: var(--energy);
+  color: #171105;
+  font-weight: 700;
+}
+
+.energy-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.energy-layout-grid > .energy-layout-full {
+  grid-column: 1 / -1;
+}
+
+.energy-layout-grid > .energy-layout-half {
+  grid-column: span 1;
+}
+
+.energy-layout-half.energy-metric-grid,
+.energy-layout-half .energy-metric-grid,
+.energy-layout-half .energy-balance-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.energy-layout-half.energy-lower-grid,
+.energy-layout-half .energy-victron-details {
+  grid-template-columns: 1fr;
+}
+
+.energy-layout-half .victron-battery-overview {
+  grid-template-columns: 1fr;
+}
+
+.energy-layout-half .victron-charge-stages {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.energy-layout-hidden-section {
+  display: none !important;
+}
+
+.energy-layout-grid > [data-layout-id] {
+  position: relative;
+  min-width: 0;
+  min-height: 4.2rem;
+  padding-top: 4.25rem;
+}
+
+.energy-layout-controls {
+  position: absolute;
+  z-index: 8;
+  top: 0.65rem;
+  right: 0.65rem;
+  left: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.7rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  background: transparent;
+}
+
+.energy-layout-widget-title {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.energy-layout-edit-only {
+  display: none;
+}
+
+.energy-layout-editing [data-layout-id] {
+  outline: 2px dashed transparent;
+  outline-offset: 0.2rem;
+  transition: opacity 160ms ease, outline-color 160ms ease;
+}
+
+.energy-layout-editing [data-layout-id]:hover {
+  outline-color: rgba(255, 200, 87, 0.32);
+}
+
+.energy-layout-editing [data-layout-id].is-dragging {
+  opacity: 0.45;
+  outline-color: var(--energy-cool);
+}
+
+.energy-layout-editing .energy-layout-controls {
+  border-color: rgba(255, 200, 87, 0.3);
+  background: rgba(12, 21, 36, 0.96);
+}
+
+.energy-layout-editing .energy-layout-edit-only {
+  display: inline-flex;
+}
+
+.energy-layout-controls button {
+  padding: 0.45rem 0.65rem;
+  border-color: rgba(145, 167, 197, 0.14);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.energy-layout-controls [data-layout-action="drag"] {
+  cursor: grab;
+}
+
+.energy-layout-controls [data-layout-action="drag"]:active {
+  cursor: grabbing;
+}
+
+.energy-layout-collapse {
+  border-color: rgba(99, 216, 207, 0.3) !important;
+  background: rgba(99, 216, 207, 0.08) !important;
+  color: var(--energy-cool) !important;
+}
+
+.energy-layout-collapsed > :not(.energy-layout-controls) {
+  display: none !important;
+}
+
+.energy-layout-collapsed .energy-layout-controls {
+  border-color: rgba(99, 216, 207, 0.25);
 }
 
 .energy-metric-grid {
@@ -1660,6 +2098,736 @@ body::before {
 
 .legend-power { background: var(--energy); }
 .legend-peak { background: var(--energy-hot); }
+.legend-victron { background: var(--energy-cool); }
+
+.energy-victron-panel {
+  background:
+    radial-gradient(circle at 88% 0, rgba(99, 216, 207, 0.1), transparent 28rem),
+    var(--surface);
+}
+
+.energy-victron-grid {
+  margin-bottom: 1.25rem;
+}
+
+.energy-victron-primary {
+  border-color: rgba(99, 216, 207, 0.42);
+  background: linear-gradient(145deg, rgba(99, 216, 207, 0.14), rgba(255, 200, 87, 0.035));
+}
+
+.victron-battery-overview {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.victron-battery-soc-card,
+.victron-charge-card {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid rgba(99, 216, 207, 0.2);
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, rgba(99, 216, 207, 0.075), transparent 58%),
+    rgba(6, 15, 27, 0.55);
+}
+
+.victron-battery-soc-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.victron-battery-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.victron-battery-heading h3 {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.25rem;
+}
+
+.victron-flow-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.9rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(145, 167, 197, 0.07);
+  color: var(--muted);
+  font-size: 0.73rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.victron-flow-badge.is-charging {
+  border-color: rgba(99, 216, 207, 0.38);
+  background: rgba(99, 216, 207, 0.1);
+  color: var(--energy-cool);
+}
+
+.victron-flow-badge.is-discharging {
+  border-color: rgba(255, 122, 89, 0.4);
+  background: rgba(255, 122, 89, 0.1);
+  color: #ff9b81;
+}
+
+.victron-battery-visual {
+  display: flex;
+  align-items: center;
+  width: min(19rem, 100%);
+  margin: 1.35rem 0 1rem;
+}
+
+.victron-battery-body {
+  position: relative;
+  display: grid;
+  width: calc(100% - 0.75rem);
+  min-height: 6.2rem;
+  overflow: hidden;
+  place-items: center;
+  border: 2px solid rgba(99, 216, 207, 0.58);
+  border-radius: 1rem;
+  background: rgba(4, 11, 21, 0.82);
+  box-shadow: inset 0 0 0 0.35rem rgba(4, 11, 21, 0.72);
+}
+
+.victron-battery-terminal {
+  width: 0.75rem;
+  height: 2.6rem;
+  border: 1px solid rgba(99, 216, 207, 0.45);
+  border-left: 0;
+  border-radius: 0 0.45rem 0.45rem 0;
+  background: rgba(99, 216, 207, 0.18);
+}
+
+.victron-battery-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background:
+    linear-gradient(90deg, rgba(99, 216, 207, 0.68), rgba(99, 216, 207, 0.95)),
+    var(--energy-cool);
+  box-shadow: 0 0 26px rgba(99, 216, 207, 0.2);
+  transition: width 450ms ease;
+}
+
+.victron-battery-visual.is-charging.has-soc .victron-battery-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.24) 48%, transparent 66%);
+  animation: victron-charge-sweep 2.4s ease-in-out infinite;
+}
+
+.victron-battery-body strong {
+  position: relative;
+  z-index: 1;
+  color: #f2fffc;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2rem;
+  text-shadow: 0 2px 14px rgba(2, 8, 15, 0.7);
+}
+
+.victron-battery-visual.is-unavailable .victron-battery-body {
+  border-style: dashed;
+  border-color: rgba(145, 167, 197, 0.34);
+  background:
+    repeating-linear-gradient(135deg, transparent 0 0.7rem, rgba(145, 167, 197, 0.035) 0.7rem 1.4rem),
+    rgba(4, 11, 21, 0.62);
+}
+
+.victron-battery-visual.is-unavailable .victron-battery-terminal {
+  border-color: rgba(145, 167, 197, 0.3);
+  background: rgba(145, 167, 197, 0.08);
+}
+
+.victron-battery-visual.is-unavailable .victron-battery-body strong {
+  color: var(--muted);
+}
+
+.victron-battery-visual.is-estimated .victron-battery-body {
+  border-color: rgba(255, 200, 87, 0.68);
+}
+
+.victron-battery-visual.is-estimated .victron-battery-terminal {
+  border-color: rgba(255, 200, 87, 0.48);
+  background: rgba(255, 200, 87, 0.15);
+}
+
+.victron-battery-visual.is-estimated .victron-battery-fill {
+  background: linear-gradient(90deg, rgba(99, 216, 207, 0.78), rgba(255, 200, 87, 0.9));
+}
+
+.victron-battery-note {
+  max-width: 34rem;
+  margin: auto 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.victron-soc-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.victron-soc-settings-open {
+  width: auto;
+  min-height: 2.2rem;
+  padding: 0.48rem 0.72rem;
+  border-color: rgba(255, 200, 87, 0.32);
+  background: rgba(255, 200, 87, 0.08);
+  color: var(--energy);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.victron-soc-settings-open:hover {
+  border-color: rgba(255, 200, 87, 0.56);
+  background: rgba(255, 200, 87, 0.14);
+}
+
+.victron-soc-actions > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.67rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.victron-charge-card {
+  display: grid;
+  align-content: start;
+}
+
+.victron-charge-power {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  margin: 0.1rem 0 1.35rem;
+}
+
+.victron-charge-power strong {
+  color: #e8fffb;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  letter-spacing: -0.055em;
+}
+
+.victron-charge-power span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.victron-charge-stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.victron-charge-stages > span {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+  padding: 0.85rem 0.65rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: rgba(145, 167, 197, 0.035);
+  color: var(--muted);
+}
+
+.victron-charge-stages i {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-bottom: 0.25rem;
+  border-radius: 50%;
+  background: rgba(145, 167, 197, 0.28);
+}
+
+.victron-charge-stages strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+}
+
+.victron-charge-stages small {
+  overflow: hidden;
+  font-size: 0.63rem;
+  text-overflow: ellipsis;
+}
+
+.victron-charge-stages > span.is-complete {
+  border-color: rgba(99, 216, 207, 0.2);
+  color: rgba(99, 216, 207, 0.72);
+}
+
+.victron-charge-stages > span.is-complete i {
+  background: rgba(99, 216, 207, 0.65);
+}
+
+.victron-charge-stages > span.is-active {
+  border-color: rgba(255, 200, 87, 0.5);
+  background: linear-gradient(145deg, rgba(255, 200, 87, 0.16), rgba(99, 216, 207, 0.05));
+  color: #fff4d6;
+  box-shadow: inset 0 -2px 0 var(--energy);
+}
+
+.victron-charge-stages > span.is-active i {
+  background: var(--energy);
+  box-shadow: 0 0 0 0.25rem rgba(255, 200, 87, 0.1), 0 0 18px rgba(255, 200, 87, 0.3);
+}
+
+@keyframes victron-charge-sweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(110%); }
+}
+
+.energy-victron-chart-heading {
+  margin-top: 0.5rem;
+}
+
+.energy-victron-chart-heading h3 {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.25rem;
+}
+
+.energy-victron-chart-shell {
+  box-shadow: inset 0 1px 0 rgba(99, 216, 207, 0.05);
+}
+
+.energy-victron-details {
+  gap: 2rem;
+  margin-top: 1.25rem;
+}
+
+.victron-mqtt-panel {
+  margin-top: 1.35rem;
+  overflow: hidden;
+  border: 1px solid rgba(99, 216, 207, 0.2);
+  border-radius: 1rem;
+  background: rgba(6, 15, 27, 0.48);
+}
+
+.victron-mqtt-panel summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  color: #e8fffb;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  list-style: none;
+}
+
+.victron-mqtt-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.victron-mqtt-panel summary::after {
+  content: '+';
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--energy-cool);
+  font-size: 1rem;
+  transition: transform 180ms ease;
+}
+
+.victron-mqtt-panel[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.victron-mqtt-panel summary:focus-visible {
+  outline: 2px solid var(--energy-cool);
+  outline-offset: -3px;
+}
+
+.victron-mqtt-panel summary strong {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(99, 216, 207, 0.22);
+  border-radius: 999px;
+  background: rgba(99, 216, 207, 0.08);
+  color: var(--energy-cool);
+  font-size: 0.7rem;
+}
+
+.victron-mqtt-panel > p {
+  margin: 0;
+  padding: 0 1.1rem 1rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.victron-mqtt-values {
+  display: grid;
+}
+
+.victron-mqtt-values > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(10rem, 0.65fr);
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.victron-mqtt-values > div:last-child {
+  border-bottom: 0;
+}
+
+.victron-mqtt-values > div > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.victron-mqtt-values > div > span:last-child {
+  align-content: start;
+  justify-items: end;
+  text-align: right;
+}
+
+.victron-mqtt-values code,
+.victron-mqtt-values > div > span:last-child strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.victron-mqtt-values code,
+.victron-mqtt-values small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.victron-mqtt-values > div > span:first-child > strong {
+  color: #e8fffb;
+  font-size: 0.8rem;
+}
+
+.victron-mqtt-values > div > span:last-child strong {
+  color: var(--energy-cool);
+  font-family: monospace;
+  font-size: 0.76rem;
+  white-space: pre-wrap;
+}
+
+.victron-mqtt-empty {
+  padding: 1.25rem 1.1rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.victron-soc-dialog {
+  width: min(44rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: min(50rem, calc(100vh - 2rem));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(99, 216, 207, 0.28);
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at 92% 0, rgba(99, 216, 207, 0.13), transparent 22rem),
+    #0a1423;
+  color: var(--text);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+
+.victron-soc-dialog[open] {
+  animation: victron-soc-dialog-in 180ms ease-out;
+}
+
+.victron-soc-dialog::backdrop {
+  background: rgba(2, 7, 14, 0.78);
+  backdrop-filter: blur(5px);
+}
+
+.victron-soc-form {
+  display: grid;
+  max-height: min(50rem, calc(100vh - 2rem));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.victron-soc-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.victron-soc-dialog-header h2 {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(1.25rem, 4vw, 1.65rem);
+}
+
+.victron-soc-dialog-close {
+  width: auto;
+  min-height: 2.3rem;
+  padding: 0.5rem 0.7rem;
+  border-color: var(--line);
+  background: rgba(145, 167, 197, 0.06);
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.victron-soc-dialog-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  overflow-y: auto;
+}
+
+.victron-soc-enable-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid rgba(99, 216, 207, 0.25);
+  border-radius: 0.9rem;
+  background: rgba(99, 216, 207, 0.07);
+  cursor: pointer;
+}
+
+.victron-soc-enable-card input,
+.victron-soc-custom-toggle input {
+  width: 1.15rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  min-height: 0;
+  margin: 0.15rem 0 0;
+  accent-color: var(--energy-cool);
+}
+
+.victron-soc-enable-card span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.victron-soc-enable-card strong {
+  color: #e8fffb;
+  font-size: 0.84rem;
+}
+
+.victron-soc-enable-card small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.victron-soc-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.victron-soc-form-grid > label {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.victron-soc-form-grid select,
+.victron-soc-form-grid input {
+  border-color: rgba(99, 216, 207, 0.2);
+  background: rgba(4, 11, 21, 0.76);
+}
+
+.victron-soc-profile-info {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.2rem 0.7rem;
+  padding: 0.8rem 0.9rem;
+  border-left: 2px solid var(--energy);
+  background: rgba(255, 200, 87, 0.045);
+}
+
+.victron-soc-profile-info > span {
+  grid-row: 1 / span 2;
+  color: var(--energy);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.victron-soc-profile-info strong {
+  color: #fff4d6;
+  font-size: 0.84rem;
+}
+
+.victron-soc-profile-info small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.victron-soc-custom-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.victron-soc-custom-toggle:has(input:checked) {
+  color: var(--energy-cool);
+}
+
+.victron-soc-form-grid[hidden] {
+  display: none;
+}
+
+.victron-soc-voltage-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.victron-soc-voltage-input input {
+  padding-right: 2.5rem;
+}
+
+.victron-soc-voltage-input strong {
+  z-index: 1;
+  margin-left: -2rem;
+  color: var(--energy-cool);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.victron-soc-preview {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 200, 87, 0.2);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(circle at 92% 20%, rgba(255, 200, 87, 0.1), transparent 10rem),
+    rgba(4, 11, 21, 0.7);
+}
+
+.victron-soc-preview > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.victron-soc-preview span {
+  color: var(--energy);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.victron-soc-preview strong {
+  color: #fff4d6;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.15rem;
+}
+
+.victron-soc-preview p,
+.victron-soc-warning,
+.victron-soc-settings-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.victron-soc-preview-live {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 200, 87, 0.14);
+}
+
+.victron-soc-preview-live strong {
+  color: var(--energy-cool);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.victron-soc-preview-track {
+  position: relative;
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(145, 167, 197, 0.12);
+}
+
+.victron-soc-preview-track i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--energy-hot), var(--energy), var(--energy-cool));
+}
+
+.victron-soc-warning {
+  padding-left: 0.8rem;
+  border-left: 2px solid rgba(255, 200, 87, 0.35);
+}
+
+.victron-soc-settings-status {
+  min-height: 1.15rem;
+  color: var(--energy-cool);
+}
+
+.victron-soc-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.7rem;
+  padding: 1rem 1.35rem;
+  border-top: 1px solid var(--line);
+  background: rgba(4, 11, 21, 0.52);
+}
+
+.victron-soc-dialog-footer button {
+  width: auto;
+}
+
+.victron-soc-dialog-footer button[type="submit"] {
+  border-color: var(--energy);
+  background: var(--energy);
+  color: #171105;
+  font-weight: 700;
+}
+
+@keyframes victron-soc-dialog-in {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 .energy-quality-list,
 .energy-source-card {
@@ -1801,8 +2969,141 @@ body::before {
     text-align: left;
   }
 
+  .victron-battery-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .victron-battery-heading,
+  .victron-charge-power {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .victron-charge-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .victron-soc-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .victron-soc-actions > span {
+    white-space: normal;
+  }
+
+  .victron-soc-dialog {
+    width: calc(100vw - 0.75rem);
+    max-height: calc(100vh - 0.75rem);
+  }
+
+  .victron-soc-form {
+    max-height: calc(100vh - 0.75rem);
+  }
+
+  .victron-soc-dialog-header,
+  .victron-soc-dialog-body,
+  .victron-soc-dialog-footer {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .victron-soc-dialog-close {
+    width: auto;
+  }
+
+  .victron-soc-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .victron-soc-preview > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .victron-soc-preview-live {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .victron-soc-preview-live strong {
+    text-align: left;
+  }
+
+  .victron-soc-dialog-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .victron-soc-dialog-footer button {
+    width: 100%;
+  }
+
+  .victron-mqtt-panel summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .victron-mqtt-panel summary strong {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .victron-mqtt-panel summary::after {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .victron-mqtt-values > div {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .victron-mqtt-values > div > span:last-child {
+    justify-items: start;
+    text-align: left;
+  }
+
   .energy-topic-controls {
     grid-template-columns: 1fr;
+  }
+
+  .energy-layout-grid > .energy-layout-half {
+    grid-column: 1 / -1;
+  }
+
+  .energy-customizer-trigger {
+    top: auto;
+    right: 0;
+    bottom: 1rem;
+    width: auto;
+    min-width: 4.4rem;
+    transform: none;
+  }
+
+  .energy-customizer-trigger:hover {
+    transform: translateX(-0.2rem);
+  }
+
+  .energy-customizer-open .energy-customizer-trigger {
+    transform: translateX(110%);
+  }
+
+  .energy-customizer-backdrop {
+    pointer-events: auto;
+    background: rgba(2, 7, 14, 0.62);
+    backdrop-filter: blur(2px);
+  }
+
+  .energy-customizer {
+    width: calc(100vw - 0.5rem);
+    padding: 1rem;
+  }
+
+  .energy-layout-editing .energy-layout-drag {
+    display: none;
   }
 }
 

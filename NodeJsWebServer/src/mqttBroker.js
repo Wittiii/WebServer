@@ -4,6 +4,7 @@ const ws = require('ws');
 const aedes = require('aedes')();
 const db = require('./database/db');
 const { ingestPowerMeterMessage } = require('./services/powerMeterService');
+const { ingestVictronMessage } = require('./services/victronMpptService');
 const { extractValue } = require('./services/mqttPayloadService');
 
 const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
@@ -207,6 +208,11 @@ aedes.on('publish', (p, c) => {
     ingestPowerMeterMessage(p.topic, payloadStr);
   } catch (e) {
     console.error('[MQTT] power meter ingest error', e);
+  }
+  try {
+    ingestVictronMessage(p.topic, payloadStr);
+  } catch (e) {
+    console.error('[MQTT] Victron MPPT ingest error', e);
   }
   try {
     storeReading(p.topic, payloadStr);

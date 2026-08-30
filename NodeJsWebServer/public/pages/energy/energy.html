@@ -41,7 +41,8 @@
   </header>
 
   <main class="container page-shell energy-shell">
-    <section class="energy-metric-grid" data-collapsible="false" aria-label="Aktuelle Messwerte">
+    <div id="energy-layout-grid" class="energy-layout-grid">
+    <section class="energy-metric-grid" data-layout-id="live-values" data-layout-title="Live-Messwerte" data-collapsible="false" aria-label="Aktuelle Messwerte">
       <article class="energy-metric-card energy-metric-primary">
         <span class="energy-metric-label">Wirkleistung</span>
         <strong id="energy-power">--</strong>
@@ -64,7 +65,7 @@
       </article>
     </section>
 
-    <section class="panel energy-balance-panel" data-collapsible="false">
+    <section class="panel energy-balance-panel" data-layout-id="energy-balance" data-layout-title="Energiebilanz" data-collapsible="false">
       <div class="section-header energy-section-heading">
         <div>
           <p class="energy-eyebrow">ENERGIEBILANZ</p>
@@ -96,7 +97,7 @@
       </div>
     </section>
 
-    <section class="panel energy-chart-panel" data-collapsible="false">
+    <section class="panel energy-chart-panel" data-layout-id="consumption-chart" data-layout-title="Verbrauchsverlauf" data-collapsible="false">
       <div class="section-header energy-section-heading">
         <div>
           <p class="energy-eyebrow">LASTPROFIL</p>
@@ -119,7 +120,135 @@
       </div>
     </section>
 
-    <div class="grid-2 energy-lower-grid">
+    <section class="panel energy-victron-panel" data-layout-id="victron" data-layout-title="Victron SmartSolar 150/45" data-collapsible="false">
+      <div class="section-header energy-section-heading">
+        <div>
+          <p class="energy-eyebrow">VICTRON SMARTSOLAR MPPT 150/45</p>
+          <h2>Solarerzeugung &amp; Batterie</h2>
+        </div>
+        <span id="victron-online-badge" class="status-badge energy-status-badge">WARTET</span>
+      </div>
+
+      <div class="energy-metric-grid energy-victron-grid" aria-label="Aktuelle Victron Messwerte">
+        <article class="energy-metric-card energy-victron-primary">
+          <span class="energy-metric-label">PV-Leistung</span>
+          <strong id="victron-panel-power">--</strong>
+          <small>Watt vom Solarpanel</small>
+        </article>
+        <article class="energy-metric-card">
+          <span class="energy-metric-label">Tagesertrag</span>
+          <strong id="victron-yield-today">--</strong>
+          <small>Wattstunden</small>
+        </article>
+        <article class="energy-metric-card">
+          <span class="energy-metric-label">Batterie</span>
+          <strong id="victron-battery-voltage">--</strong>
+          <small id="victron-battery-current">-- A Ladestrom</small>
+        </article>
+        <article class="energy-metric-card">
+          <span class="energy-metric-label">Ladephase</span>
+          <strong id="victron-charger-state">--</strong>
+          <small id="victron-error-code">Fehlercode --</small>
+        </article>
+      </div>
+
+      <div class="victron-battery-overview">
+        <div class="victron-battery-soc-card">
+          <div class="victron-battery-heading">
+            <div>
+              <p class="energy-eyebrow">BATTERIESTATUS</p>
+              <h3>Ladezustand</h3>
+            </div>
+            <span id="victron-battery-flow" class="victron-flow-badge">Wartet</span>
+          </div>
+          <div
+            class="victron-battery-visual"
+            id="victron-battery-visual"
+            role="progressbar"
+            aria-label="Batterieladezustand"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuetext="Nicht verfuegbar"
+          >
+            <div class="victron-battery-body">
+              <div id="victron-battery-fill" class="victron-battery-fill"></div>
+              <strong id="victron-battery-soc">-- %</strong>
+            </div>
+            <span class="victron-battery-terminal" aria-hidden="true"></span>
+          </div>
+          <p id="victron-battery-soc-note" class="victron-battery-note">Der MPPT liefert keinen direkten Batterie-SOC.</p>
+          <div class="victron-soc-actions">
+            <button id="victron-soc-settings-open" class="victron-soc-settings-open" type="button" aria-haspopup="dialog">
+              SOC einstellen
+            </button>
+            <span id="victron-soc-profile-summary">LiFePO4 | Automatisch</span>
+          </div>
+        </div>
+
+        <div class="victron-charge-card">
+          <p class="energy-eyebrow">LADEVORGANG</p>
+          <div class="victron-charge-power">
+            <strong id="victron-battery-power">-- W</strong>
+            <span id="victron-charge-description">Noch keine Batteriedaten</span>
+          </div>
+          <div id="victron-charge-stages" class="victron-charge-stages" aria-label="Victron Ladephasen">
+            <span data-victron-stage="bulk"><i></i><strong>Bulk</strong><small>Schnellladen</small></span>
+            <span data-victron-stage="absorption"><i></i><strong>Absorption</strong><small>Vollladen</small></span>
+            <span data-victron-stage="float"><i></i><strong>Float</strong><small>Erhaltung</small></span>
+            <span data-victron-stage="storage"><i></i><strong>Storage</strong><small>Schonbetrieb</small></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-header energy-section-heading energy-victron-chart-heading">
+        <div>
+          <p class="energy-eyebrow">PV-LEISTUNGSPROFIL</p>
+          <h3>Solarleistung im Verlauf</h3>
+        </div>
+        <div class="energy-period-tabs" role="group" aria-label="Victron Zeitraum waehlen">
+          <button type="button" data-victron-period="1h">1 Stunde</button>
+          <button type="button" data-victron-period="24h" class="is-active">24 Stunden</button>
+          <button type="button" data-victron-period="7d">7 Tage</button>
+          <button type="button" data-victron-period="30d">30 Tage</button>
+        </div>
+      </div>
+      <div class="energy-chart-shell energy-victron-chart-shell">
+        <canvas id="victron-power-chart" class="energy-chart" width="1080" height="340"></canvas>
+        <p id="victron-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Victron-Messpunkte fuer diesen Zeitraum.</p>
+      </div>
+      <div class="energy-chart-legend">
+        <span><i class="legend-victron"></i> Durchschnittliche PV-Leistung</span>
+        <span><i class="legend-peak"></i> Spitzenleistung</span>
+      </div>
+
+      <div class="grid-2 energy-victron-details">
+        <div class="energy-quality-list">
+          <div><span>Spitze heute</span><strong id="victron-peak-today">-- W</strong></div>
+          <div><span>Durchschnitt heute</span><strong id="victron-average-today">-- W</strong></div>
+          <div><span>Batteriespannung heute</span><strong id="victron-voltage-range">-- V</strong></div>
+          <div><span>Laststrom</span><strong id="victron-load-current">-- A</strong></div>
+        </div>
+        <div class="energy-source-card">
+          <div><span>MQTT Topic</span><code id="victron-topic">--</code></div>
+          <div><span>BLE Status</span><strong id="victron-source-status">Wartet auf Daten</strong></div>
+          <div><span>Signalstaerke</span><strong id="victron-rssi">-- dBm</strong></div>
+          <div><span>Letzte Messung</span><strong id="victron-last-update">--</strong></div>
+        </div>
+      </div>
+
+      <details class="victron-mqtt-panel">
+        <summary>
+          <span>Alle MQTT-Werte der DFR1154-Bridge</span>
+          <strong id="victron-mqtt-count">0 Topics</strong>
+        </summary>
+        <p>Live-Snapshot aller momentan empfangenen Victron-Topics. Neue Bridge-Werte erscheinen hier automatisch.</p>
+        <div id="victron-mqtt-values" class="victron-mqtt-values">
+          <span class="victron-mqtt-empty">Noch keine Victron MQTT-Werte empfangen.</span>
+        </div>
+      </details>
+    </section>
+
+    <div class="grid-2 energy-lower-grid" data-layout-id="meter-details" data-layout-title="Netzqualitaet und Datenquelle">
       <section class="panel" data-collapsible="false">
         <p class="energy-eyebrow">NETZQUALITAET</p>
         <h2>Elektrische Werte</h2>
@@ -159,9 +288,137 @@
         </form>
       </section>
     </div>
+    </div>
 
     <p id="energy-error" class="status-line energy-error-line"></p>
   </main>
+
+  <dialog id="victron-soc-dialog" class="victron-soc-dialog" aria-labelledby="victron-soc-dialog-title">
+    <form id="victron-soc-form" class="victron-soc-form">
+      <header class="victron-soc-dialog-header">
+        <div>
+          <p class="energy-eyebrow">BATTERIEPROFIL</p>
+          <h2 id="victron-soc-dialog-title">SOC aus Spannung schaetzen</h2>
+        </div>
+        <button id="victron-soc-settings-close" class="victron-soc-dialog-close" type="button" aria-label="Dialog schliessen">Schliessen</button>
+      </header>
+
+      <div class="victron-soc-dialog-body">
+        <label class="victron-soc-enable-card">
+          <input id="victron-soc-enabled" type="checkbox" checked>
+          <span>
+            <strong>Spannungs-Schaetzung aktiv</strong>
+            <small>Ein echter MQTT-SOC hat weiterhin automatisch Vorrang.</small>
+          </span>
+        </label>
+
+        <div class="victron-soc-form-grid">
+          <label>
+            <span>Batterietyp</span>
+            <select id="victron-soc-profile">
+              <option value="lifepo4">LiFePO4 (empfohlen)</option>
+              <option value="agm">AGM / Blei</option>
+              <option value="gel">Gel</option>
+              <option value="custom">Frei konfiguriert</option>
+            </select>
+          </label>
+          <label>
+            <span>Systemspannung</span>
+            <select id="victron-soc-system-voltage">
+              <option value="auto">Automatisch erkennen</option>
+              <option value="12">12 V / LiFePO4 12,8 V</option>
+              <option value="24">24 V / LiFePO4 25,6 V</option>
+              <option value="36">36 V / LiFePO4 38,4 V</option>
+              <option value="48">48 V / LiFePO4 51,2 V</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="victron-soc-profile-info">
+          <span>PROFIL</span>
+          <strong id="victron-soc-profile-name">LiFePO4</strong>
+          <small id="victron-soc-profile-description">Lithium-Eisenphosphat, 4S / 8S / 12S / 16S</small>
+        </div>
+
+        <label class="victron-soc-custom-toggle">
+          <input id="victron-soc-use-custom" type="checkbox">
+          <span>Eigene Leer- und Vollspannung verwenden</span>
+        </label>
+
+        <div id="victron-soc-custom-fields" class="victron-soc-form-grid" hidden>
+          <label>
+            <span>Leer bei</span>
+            <div class="victron-soc-voltage-input">
+              <input id="victron-soc-empty-voltage" type="number" min="1" max="99" step="0.01" inputmode="decimal">
+              <strong>V</strong>
+            </div>
+          </label>
+          <label>
+            <span>Voll bei</span>
+            <div class="victron-soc-voltage-input">
+              <input id="victron-soc-full-voltage" type="number" min="1.2" max="100" step="0.01" inputmode="decimal">
+              <strong>V</strong>
+            </div>
+          </label>
+        </div>
+
+        <div class="victron-soc-preview">
+          <div>
+            <span>AKTIVER BEREICH</span>
+            <strong id="victron-soc-preview-range">11,20 - 13,50 V</strong>
+          </div>
+          <p id="victron-soc-preview-system">LiFePO4 12,8 V automatisch erkannt</p>
+          <div class="victron-soc-preview-live">
+            <span>AKTUELLER SCHAETZWERT</span>
+            <strong id="victron-soc-preview-result">Noch keine Batteriespannung</strong>
+          </div>
+          <div class="victron-soc-preview-track" aria-hidden="true"><i></i></div>
+        </div>
+
+        <p class="victron-soc-warning">
+          Die Prozentzahl bleibt eine Naeherung. Beim Laden in Bulk oder Absorption kann die Batteriespannung den SOC zu hoch erscheinen lassen.
+        </p>
+        <p id="victron-soc-settings-status" class="status-line victron-soc-settings-status" aria-live="polite"></p>
+      </div>
+
+      <footer class="victron-soc-dialog-footer">
+        <button id="victron-soc-settings-cancel" type="button" class="energy-layout-reset">Abbrechen</button>
+        <button id="victron-soc-settings-save" type="submit">Profil speichern</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <button
+    id="energy-customizer-trigger"
+    class="energy-customizer-trigger"
+    type="button"
+    aria-controls="energy-customizer"
+    aria-expanded="false"
+  >
+    <span class="energy-customizer-trigger-mark" aria-hidden="true"></span>
+    Ansicht
+  </button>
+  <div id="energy-customizer-backdrop" class="energy-customizer-backdrop" hidden></div>
+  <aside id="energy-customizer" class="energy-customizer" aria-hidden="true" aria-label="Stromansicht anpassen">
+    <header class="energy-customizer-header">
+      <div>
+        <p class="energy-eyebrow">STROM-TAB</p>
+        <h2>Ansicht anpassen</h2>
+      </div>
+      <button id="energy-customizer-close" class="energy-customizer-close" type="button" aria-label="Menue schliessen">Schliessen</button>
+    </header>
+    <p class="energy-customizer-intro">Ziehe die Karten in die gewuenschte Reihenfolge oder passe sie direkt an.</p>
+    <div class="energy-customizer-save-state" aria-live="polite">
+      <span></span>
+      <p id="energy-layout-status">Automatische Speicherung aktiv</p>
+    </div>
+    <div id="energy-customizer-list" class="energy-customizer-list" aria-label="Widgets sortieren"></div>
+    <p class="energy-customizer-hint">Tipp: Bei geoeffnetem Menue kannst du Widgets auch direkt auf der Seite am Griff verschieben.</p>
+    <footer class="energy-customizer-footer">
+      <button id="energy-layout-reset" class="energy-layout-reset" type="button">Standard wiederherstellen</button>
+      <button id="energy-customizer-done" class="energy-customizer-done" type="button">Fertig</button>
+    </footer>
+  </aside>
 
   <script src="/pages/main.js"></script>
   <script type="module" src="/pages/energy/energy.js"></script>
