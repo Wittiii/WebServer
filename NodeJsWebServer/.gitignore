@@ -1,3 +1,9 @@
 /node-modules
 /app.db
 /data/
+
+# Laufzeitdatenbanken bleiben lokal und dürfen nie durch ein Update ersetzt werden.
+/src/database/*.db
+/src/database/*.db-*
+/src/database/*.sqlite
+/src/database/*.sqlite-*
