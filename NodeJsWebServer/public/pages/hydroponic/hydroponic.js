@@ -54,7 +54,9 @@ async function loadReadings() {
   }
 
   try {
-    const list = await fetchReadings(0, true);
+    // A few thousand points are enough for the canvas. Loading the complete
+    // sensor archive would block both the Raspberry Pi and the browser.
+    const list = await fetchReadings(2000, true);
 
     if (list.length === 0) {
       drawChart([]);

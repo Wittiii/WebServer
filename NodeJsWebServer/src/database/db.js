@@ -6,9 +6,16 @@ const databasePath = process.env.DATABASE_PATH
   : path.join(__dirname, 'app.db');
 const db = new Database(databasePath);
 
-// Let dashboard reads continue while MQTT samples are being persisted.
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
+// DELETE/FULL matches SQLite's conservative behavior and avoids periodic WAL
+// checkpoints on Raspberry Pi SD cards. WAL remains available as an opt-in.
+const requestedJournalMode = String(process.env.SQLITE_JOURNAL_MODE || 'DELETE').toUpperCase();
+const journalMode = requestedJournalMode === 'WAL' ? 'WAL' : 'DELETE';
+const requestedSynchronous = String(process.env.SQLITE_SYNCHRONOUS || 'FULL').toUpperCase();
+const synchronous = ['OFF', 'NORMAL', 'FULL', 'EXTRA'].includes(requestedSynchronous)
+  ? requestedSynchronous
+  : 'FULL';
+db.pragma(`journal_mode = ${journalMode}`);
+db.pragma(`synchronous = ${synchronous}`);
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
 
@@ -196,7 +203,13 @@ db.exec(`
     last_reading_ms INTEGER NOT NULL,
     PRIMARY KEY (topic, day)
   ) WITHOUT ROWID;
+`);
 
+const haveVictronDailyYields = db
+  .prepare('SELECT 1 FROM victron_daily_yields LIMIT 1')
+  .get();
+if (!haveVictronDailyYields) {
+  db.exec(`
   INSERT OR IGNORE INTO victron_daily_yields (
     topic, day, yield_wh, first_reading_ms, last_reading_ms
   )
@@ -207,7 +220,8 @@ db.exec(`
          MAX(received_at_ms)
   FROM victron_mppt_readings
   GROUP BY topic, date(received_at_ms / 1000, 'unixepoch', 'localtime');
-`);
+  `);
+}
 
 const victronColumns = db.prepare('PRAGMA table_info(victron_mppt_readings)').all().map(c => c.name);
 if (!victronColumns.includes('battery_soc_percent')) {

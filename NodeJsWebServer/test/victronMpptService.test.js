@@ -51,8 +51,8 @@ test.after(() => {
   fs.rmSync(databasePath, { force: true });
 });
 
-test("configures SQLite for concurrent sensor writes and indexed lookups", () => {
-  assert.equal(db.pragma("journal_mode", { simple: true }), "wal");
+test("configures SQLite for durable sensor writes and indexed lookups", () => {
+  assert.equal(db.pragma("journal_mode", { simple: true }), "delete");
   const indexes = new Set(
     db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((row) => row.name)
   );

@@ -116,11 +116,6 @@ let lastCleanupAt = 0;
 const historyCache = new Map();
 let overviewStatsCache = null;
 
-function invalidateAnalyticsCache() {
-  historyCache.clear();
-  overviewStatsCache = null;
-}
-
 function parseVictronPayload(topic, payload, receivedAt = Date.now()) {
   if (topic !== sensorTopic) return null;
 
@@ -190,7 +185,6 @@ function ingestVictronMessage(topic, payload, receivedAt = Date.now()) {
   const reading = parsed.reading;
   storeReading(reading);
   lastStoredAt = receivedAt;
-  invalidateAnalyticsCache();
   return true;
 }
 
@@ -227,7 +221,7 @@ function getHistory(period, now) {
   const normalizedPeriod = normalizePeriod(period);
   const { durationMs, bucketMs } = PERIODS[normalizedPeriod];
   const cached = historyCache.get(normalizedPeriod);
-  if (cached && cached.lastStoredAt === lastStoredAt && cached.expiresAt > now) {
+  if (cached && cached.expiresAt > now) {
     return cached.value;
   }
   const rows = historyStatement.all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
@@ -246,7 +240,6 @@ function getHistory(period, now) {
     })),
   };
   historyCache.set(normalizedPeriod, {
-    lastStoredAt,
     expiresAt: now + Math.min(bucketMs, 60000),
     value,
   });
@@ -259,10 +252,10 @@ function getVictronOverview(period = "24h", now = Date.now()) {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
   const todayStartMs = todayStart.getTime();
-  if (!overviewStatsCache || overviewStatsCache.lastStoredAt !== lastStoredAt || overviewStatsCache.todayStartMs !== todayStartMs) {
+  if (!overviewStatsCache || overviewStatsCache.expiresAt <= now || overviewStatsCache.todayStartMs !== todayStartMs) {
     overviewStatsCache = {
-      lastStoredAt,
       todayStartMs,
+      expiresAt: now + 15000,
       stats: todayStatsStatement.get(sensorTopic, todayStartMs),
       totalYield: totalYieldStatement.get(sensorTopic),
     };

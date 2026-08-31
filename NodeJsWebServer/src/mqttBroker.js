@@ -13,6 +13,18 @@ const USER = process.env.MQTT_USER;
 const PASS = process.env.MQTT_PASS;
 const DEFAULT_CLIENT_STALE_MS = Math.max(15000, Number(process.env.MQTT_CLIENT_STALE_MS || 120000));
 const logMessagePayloads = String(process.env.MQTT_LOG_MESSAGES || 'true').toLowerCase() !== 'false';
+const logMessageIntervalMs = Math.max(0, Number(process.env.MQTT_LOG_INTERVAL_MS || 500));
+const lastMessageLogAt = new Map();
+
+function shouldLogMessage(clientId, topic, now = Date.now()) {
+  if (!logMessagePayloads) return false;
+  if (logMessageIntervalMs === 0) return true;
+  const key = `${clientId}\0${topic}`;
+  const previous = lastMessageLogAt.get(key) || 0;
+  if (now - previous < logMessageIntervalMs) return false;
+  lastMessageLogAt.set(key, now);
+  return true;
+}
 
 // Auth: nur wenn USER/PASS gesetzt
 aedes.authenticate = (client, username, password, done) => {
@@ -215,7 +227,7 @@ aedes.on('publish', (p, c) => {
   const payloadStr = p.payload.toString();
   if (c) {
     touchClient(c, { connected: true, lastTopic: p.topic, disconnectReason: null });
-    if (logMessagePayloads) {
+    if (shouldLogMessage(c.id, p.topic)) {
       console.log(`[MQTT] ${c.id} -> ${p.topic}: ${payloadStr}`);
     }
   }

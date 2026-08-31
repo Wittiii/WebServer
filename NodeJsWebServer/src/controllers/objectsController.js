@@ -6,6 +6,8 @@ const {
   optimizeDatabase
 } = require('../services/databaseMaintenanceService');
 
+const MAX_READINGS_PER_REQUEST = 5000;
+
 function normalizeCommands(value) {
   if (!value) return [];
   try {
@@ -289,8 +291,12 @@ const listReadings = (req, res) => {
   const to = typeof req.query?.to === 'string' ? req.query.to.trim() : '';
   const limitParam = String(req.query?.limit ?? '').trim();
   const limitRaw = Number(limitParam);
-  const noLimit = limitParam === '0' || limitParam.toLowerCase() === 'all';
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 5000) : 100;
+  const requestedAll = limitParam === '0' || limitParam.toLowerCase() === 'all';
+  const limit = requestedAll
+    ? MAX_READINGS_PER_REQUEST
+    : Number.isFinite(limitRaw)
+      ? Math.min(Math.max(limitRaw, 1), MAX_READINGS_PER_REQUEST)
+      : 100;
 
   try {
     const params = [id];
@@ -318,10 +324,8 @@ const listReadings = (req, res) => {
     }
 
     sql += ' ORDER BY id DESC';
-    if (!noLimit) {
-      sql += ' LIMIT ?';
-      params.push(limit);
-    }
+    sql += ' LIMIT ?';
+    params.push(limit);
 
     const rows = db.prepare(sql).all(...params);
 

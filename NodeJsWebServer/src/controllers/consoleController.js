@@ -29,13 +29,23 @@ function streamConsoleLogs(req, res) {
   res.flushHeaders();
   res.write("retry: 3000\n\n");
 
+  let writable = true;
+
   function send(entry) {
-    res.write(`id: ${entry.id}\nevent: log\ndata: ${JSON.stringify(entry)}\n\n`);
+    if (!writable || res.writableEnded) return;
+    writable = res.write(`id: ${entry.id}\nevent: log\ndata: ${JSON.stringify(entry)}\n\n`);
+    if (!writable) {
+      res.once("drain", () => {
+        writable = true;
+      });
+    }
   }
 
   for (const entry of listEntries({ after, limit: 5000 })) send(entry);
   const unsubscribe = subscribe(send);
-  const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 15000);
+  const heartbeat = setInterval(() => {
+    if (writable && !res.writableEnded) res.write(": heartbeat\n\n");
+  }, 15000);
 
   req.on("close", () => {
     clearInterval(heartbeat);

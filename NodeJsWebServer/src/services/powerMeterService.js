@@ -159,7 +159,6 @@ function ingestPowerMeterMessage(topic, payload, receivedAt = Date.now()) {
     new Date(reading.receivedAt).toISOString()
   );
   lastStoredAt = receivedAt;
-  invalidateAnalyticsCache();
   return true;
 }
 
@@ -201,7 +200,7 @@ function getHistory(period = "24h", now = Date.now()) {
   const normalizedPeriod = normalizePeriod(period);
   const { durationMs, bucketMs } = PERIODS[normalizedPeriod];
   const cached = historyCache.get(normalizedPeriod);
-  if (cached && cached.lastStoredAt === lastStoredAt && cached.expiresAt > now) {
+  if (cached && cached.expiresAt > now) {
     return cached.value;
   }
   const rows = historyStatement.all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
@@ -220,7 +219,6 @@ function getHistory(period = "24h", now = Date.now()) {
     })),
   };
   historyCache.set(normalizedPeriod, {
-    lastStoredAt,
     expiresAt: now + Math.min(bucketMs, 60000),
     value,
   });
@@ -232,10 +230,10 @@ function getPowerMeterOverview(period = "24h", now = Date.now()) {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
   const todayStartMs = todayStart.getTime();
-  if (!todayStatsCache || todayStatsCache.lastStoredAt !== lastStoredAt || todayStatsCache.todayStartMs !== todayStartMs) {
+  if (!todayStatsCache || todayStatsCache.expiresAt <= now || todayStatsCache.todayStartMs !== todayStartMs) {
     todayStatsCache = {
-      lastStoredAt,
       todayStartMs,
+      expiresAt: now + 15000,
       value: todayStatsStatement.get(sensorTopic, todayStartMs),
     };
   }
