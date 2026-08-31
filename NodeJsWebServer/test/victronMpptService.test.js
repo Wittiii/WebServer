@@ -73,6 +73,10 @@ test("stores MPPT readings and returns live values plus history", () => {
   now.setHours(12, 0, 0, 0);
   const timestamp = now.getTime();
 
+  assert.equal(
+    ingestVictronMessage(topic, payload({ panel_power_w: 35, yield_today_wh: 100 }), timestamp - 86400000),
+    true
+  );
   assert.equal(ingestVictronMessage(topic, payload({ panel_power_w: 42 }), timestamp - 120000), true);
   assert.equal(
     ingestVictronMessage(
@@ -93,6 +97,8 @@ test("stores MPPT readings and returns live values plus history", () => {
   assert.equal(overview.battery.powerW, 13.42 * 4.2);
   assert.equal(overview.todayStats.peakPanelPowerW, 84);
   assert.equal(overview.todayStats.yieldTodayWh, 410);
+  assert.equal(overview.totalStats.yieldWh, 510);
+  assert.equal(overview.totalStats.startTime, timestamp - 86400000);
   assert.equal(overview.history.points.length, 2);
   assert.equal(overview.history.points.at(-1).batterySocPercent, 74);
 });

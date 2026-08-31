@@ -203,6 +203,17 @@ function getVictronOverview(period = "24h", now = Date.now()) {
     FROM victron_mppt_readings
     WHERE topic = ? AND received_at_ms >= ?
   `).get(sensorTopic, todayStart.getTime());
+  const totalYield = db.prepare(`
+    SELECT SUM(daily_yield_wh) AS total_yield_wh,
+           MIN(first_reading_ms) AS total_start_time
+    FROM (
+      SELECT MAX(yield_today_wh) AS daily_yield_wh,
+             MIN(received_at_ms) AS first_reading_ms
+      FROM victron_mppt_readings
+      WHERE topic = ? AND received_at_ms <= ?
+      GROUP BY date(received_at_ms / 1000, 'unixepoch', 'localtime')
+    )
+  `).get(sensorTopic, now);
 
   let socPercent = normalizeSoc(reading?.batterySocPercent);
   let socSource = socPercent === null ? "unavailable" : "mqtt";
@@ -241,6 +252,10 @@ function getVictronOverview(period = "24h", now = Date.now()) {
       maximumBatteryVoltageV: stats.maximum_battery_voltage_v || 0,
       yieldTodayWh: stats.yield_today_wh || reading?.yieldTodayWh || 0,
       samples: stats.samples || 0,
+    },
+    totalStats: {
+      yieldWh: totalYield.total_yield_wh || reading?.yieldTodayWh || 0,
+      startTime: totalYield.total_start_time || reading?.receivedAt || null,
     },
     history: getHistory(period, now),
   };

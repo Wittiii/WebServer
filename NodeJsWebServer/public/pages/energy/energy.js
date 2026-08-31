@@ -35,6 +35,8 @@ const elements = {
   victronOnlineBadge: document.getElementById("victron-online-badge"),
   victronPanelPower: document.getElementById("victron-panel-power"),
   victronYieldToday: document.getElementById("victron-yield-today"),
+  victronYieldTotal: document.getElementById("victron-yield-total"),
+  victronYieldTotalSince: document.getElementById("victron-yield-total-since"),
   victronBatteryVoltage: document.getElementById("victron-battery-voltage"),
   victronBatteryCurrent: document.getElementById("victron-battery-current"),
   victronChargerState: document.getElementById("victron-charger-state"),
@@ -786,6 +788,8 @@ function renderVictron(data) {
 
   setText(elements.victronPanelPower, `${number(reading.panelPowerW, 0)} W`);
   setText(elements.victronYieldToday, `${number(reading.yieldTodayWh, 0)} Wh`);
+  setText(elements.victronYieldTotal, `${number((data.totalStats?.yieldWh || 0) / 1000, 3)} kWh`);
+  setText(elements.victronYieldTotalSince, `Seit ${dateTime(data.totalStats?.startTime)}`);
   setText(elements.victronBatteryVoltage, `${number(reading.batteryVoltageV, 2)} V`);
   setText(elements.victronBatteryCurrent, `${number(reading.batteryCurrentA, 2)} A Batteriestrom`);
   setText(elements.victronChargerState, chargerStateLabels[reading.chargerState] || reading.chargerState || "--");
