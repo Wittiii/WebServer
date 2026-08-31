@@ -1,6 +1,7 @@
 /node-modules
 /app.db
 /data/
+/src/config/.env
 
 # Laufzeitdatenbanken bleiben lokal und dürfen nie durch ein Update ersetzt werden.
 /src/database/*.db
