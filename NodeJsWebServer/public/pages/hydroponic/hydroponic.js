@@ -453,9 +453,16 @@ function startAutoRefresh() {
   stopAutoRefresh();
   const sec = Number(autoRefreshSec?.value) || 10;
   const ms = Math.min(Math.max(sec, 2), 300) * 1000;
-  autoRefreshTimer = setInterval(() => {
-    loadReadings();
-    if (isReadingsLogOpen()) loadRealtimeReadings();
+  let refreshInFlight = false;
+  autoRefreshTimer = setInterval(async () => {
+    if (document.hidden || refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      await loadReadings();
+      if (isReadingsLogOpen()) await loadRealtimeReadings();
+    } finally {
+      refreshInFlight = false;
+    }
   }, ms);
 }
 

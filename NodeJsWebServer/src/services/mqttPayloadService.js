@@ -52,4 +52,37 @@ function extractValue(payload, key) {
   return text.includes("=") ? "" : text;
 }
 
-module.exports = { extractValue, readJsonPath };
+function createValueExtractor(payload) {
+  const text = String(payload ?? "").trim();
+  let parsed;
+  let isJson = false;
+
+  try {
+    parsed = JSON.parse(text);
+    isJson = true;
+  } catch {
+    // Keep legacy scalar and key=value payload handling below.
+  }
+
+  return (key) => {
+    const normalizedKey = String(key ?? "").trim();
+    if (!normalizedKey || normalizedKey === "$value") return text;
+
+    if (isJson) {
+      if (parsed === null || typeof parsed !== "object") {
+        return typeof parsed === "string" ? serializeValue(parsed) : text;
+      }
+      const jsonValue = readJsonPath(parsed, normalizedKey);
+      return jsonValue === undefined ? "" : serializeValue(jsonValue);
+    }
+
+    const expression = new RegExp(`${escapeRegExp(normalizedKey)}\\s*=\\s*([^,]+)`, "g");
+    let match;
+    let lastValue = "";
+    while ((match = expression.exec(text)) !== null) lastValue = match[1].trim();
+    if (lastValue) return lastValue;
+    return text.includes("=") ? "" : text;
+  };
+}
+
+module.exports = { createValueExtractor, extractValue, readJsonPath };

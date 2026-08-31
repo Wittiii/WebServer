@@ -51,6 +51,7 @@ const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
 let timelapseState = null;
 let timelapseRefreshInFlight = false;
+let overviewRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
 let timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false";
 
@@ -785,14 +786,20 @@ function renderActiveCamera(options = {}) {
 }
 
 async function loadOverview() {
-  setOverviewState(await fetchCameraOverview());
-  if (!activeCameraId) {
-    activeCameraId = overviewState.primaryCameraId;
+  if (overviewRefreshInFlight) return;
+  overviewRefreshInFlight = true;
+  try {
+    setOverviewState(await fetchCameraOverview());
+    if (!activeCameraId) {
+      activeCameraId = overviewState.primaryCameraId;
+    }
+    if (!getActiveCamera() && overviewState.primaryCameraId) {
+      activeCameraId = overviewState.primaryCameraId;
+    }
+    renderActiveCamera();
+  } finally {
+    overviewRefreshInFlight = false;
   }
-  if (!getActiveCamera() && overviewState.primaryCameraId) {
-    activeCameraId = overviewState.primaryCameraId;
-  }
-  renderActiveCamera();
 }
 
 async function sendCommand(cameraId, action, body = {}) {
@@ -948,6 +955,7 @@ timelapseDeleteImagesEl?.addEventListener("click", async () => {
 });
 
 setInterval(async () => {
+  if (document.hidden) return;
   try {
     await loadOverview();
   } catch (error) {
@@ -984,3 +992,7 @@ setInterval(async () => {
     timelapseRefreshInFlight = false;
   }
 }, 5000);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) loadOverview().catch(() => {});
+});

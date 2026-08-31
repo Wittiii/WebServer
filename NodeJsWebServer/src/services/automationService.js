@@ -5,6 +5,40 @@ const POLL_MS = 15000;
 let timer = null;
 let running = false;
 
+const latestValueReading = db.prepare(`
+  SELECT value_text
+  FROM object_readings
+  WHERE object_id = ? AND value_key = ?
+  ORDER BY id DESC
+  LIMIT 1
+`);
+const updateRuleAfterFire = db.prepare(`
+  UPDATE object_automation_rules
+  SET last_condition_state = ?, last_fired_at = ?, updated_at = ?
+  WHERE id = ?
+`);
+const updateRuleState = db.prepare(`
+  UPDATE object_automation_rules
+  SET last_condition_state = ?, updated_at = ?
+  WHERE id = ?
+`);
+const updateRuleFiredAt = db.prepare(`
+  UPDATE object_automation_rules
+  SET last_fired_at = ?, updated_at = ?
+  WHERE id = ?
+`);
+const activeRulesWithActions = db.prepare(`
+  SELECT r.id, r.object_id, r.enabled, r.trigger_type, r.value_key, r.operator,
+         r.compare_value, r.schedule_time, r.weekdays_json, r.window_start,
+         r.window_end, r.cooldown_seconds, r.hysteresis_value,
+         r.last_fired_at, r.last_condition_state,
+         a.position, a.action_type, a.action_label, a.action_topic, a.action_payload
+  FROM object_automation_rules r
+  LEFT JOIN object_automation_rule_actions a ON a.rule_id = r.id
+  WHERE r.enabled = 1
+  ORDER BY r.id ASC, a.position ASC, a.id ASC
+`);
+
 function parseNumber(value) {
   const normalized = String(value ?? "").trim().replace(",", ".");
   if (!normalized) return null;
@@ -189,13 +223,7 @@ async function fireActions(actions) {
 async function evaluateValueRule(rule, now) {
   if (!rule.value_key || !rule.operator) return;
 
-  const reading = db.prepare(`
-    SELECT value_text
-    FROM object_readings
-    WHERE object_id = ? AND value_key = ?
-    ORDER BY id DESC
-    LIMIT 1
-  `).get(rule.object_id, rule.value_key);
+  const reading = latestValueReading.get(rule.object_id, rule.value_key);
 
   if (!reading) return;
 
@@ -211,20 +239,12 @@ async function evaluateValueRule(rule, now) {
 
   if (entersCondition && !isCooldownActive(rule, now)) {
     const fired = await fireActions(rule.actions);
-    db.prepare(`
-      UPDATE object_automation_rules
-      SET last_condition_state = ?, last_fired_at = ?, updated_at = ?
-      WHERE id = ?
-    `).run(currentState, fired ? nowIso : rule.last_fired_at, nowIso, rule.id);
+    updateRuleAfterFire.run(currentState, fired ? nowIso : rule.last_fired_at, nowIso, rule.id);
     return;
   }
 
   if (currentState !== previousState) {
-    db.prepare(`
-      UPDATE object_automation_rules
-      SET last_condition_state = ?, updated_at = ?
-      WHERE id = ?
-    `).run(currentState, nowIso, rule.id);
+    updateRuleState.run(currentState, nowIso, rule.id);
   }
 }
 
@@ -243,45 +263,33 @@ async function evaluateTimeRule(rule, now) {
   if (!fired) return;
 
   const nowIso = now.toISOString();
-  db.prepare(`
-    UPDATE object_automation_rules
-    SET last_fired_at = ?, updated_at = ?
-    WHERE id = ?
-  `).run(nowIso, nowIso, rule.id);
+  updateRuleFiredAt.run(nowIso, nowIso, rule.id);
 }
 
 function loadActiveRules() {
-  const rules = db.prepare(`
-    SELECT id, object_id, enabled, trigger_type, value_key, operator, compare_value,
-           schedule_time, weekdays_json, window_start, window_end,
-           cooldown_seconds, hysteresis_value,
-           last_fired_at, last_condition_state
-    FROM object_automation_rules
-    WHERE enabled = 1
-    ORDER BY id ASC
-  `).all();
-
-  if (rules.length === 0) return [];
-
-  const ruleIds = rules.map((rule) => rule.id);
-  const placeholders = ruleIds.map(() => "?").join(", ");
-  const actions = db.prepare(`
-    SELECT rule_id, position, action_type, action_label, action_topic, action_payload
-    FROM object_automation_rule_actions
-    WHERE rule_id IN (${placeholders})
-    ORDER BY rule_id ASC, position ASC, id ASC
-  `).all(...ruleIds);
-
-  const actionsByRule = new Map();
-  for (const action of actions) {
-    if (!actionsByRule.has(action.rule_id)) actionsByRule.set(action.rule_id, []);
-    actionsByRule.get(action.rule_id).push(action);
+  const rulesById = new Map();
+  for (const row of activeRulesWithActions.all()) {
+    let rule = rulesById.get(row.id);
+    if (!rule) {
+      rule = { ...row, actions: [] };
+      delete rule.position;
+      delete rule.action_type;
+      delete rule.action_label;
+      delete rule.action_topic;
+      delete rule.action_payload;
+      rulesById.set(row.id, rule);
+    }
+    if (row.action_topic) {
+      rule.actions.push({
+        position: row.position,
+        action_type: row.action_type,
+        action_label: row.action_label,
+        action_topic: row.action_topic,
+        action_payload: row.action_payload,
+      });
+    }
   }
-
-  return rules.map((rule) => ({
-    ...rule,
-    actions: actionsByRule.get(rule.id) || [],
-  }));
+  return [...rulesById.values()];
 }
 
 async function processRules() {

@@ -20,6 +20,7 @@ let editingWidgetId = null;
 let widgetStates = new Map();
 let widgetFeedback = new Map();
 const objectMetaCache = new Map();
+let widgetRefreshInFlight = false;
 
 function setWidgetStatus(text, isError = false) {
   if (!widgetStatusEl) return;
@@ -311,9 +312,16 @@ function renderWidgetManagement() {
 }
 
 async function refreshWidgetStates() {
-  const resolved = await Promise.all(widgets.map((widget) => resolveWidgetState(widget)));
-  widgetStates = new Map(resolved.map((state, index) => [widgets[index].id, state]));
-  renderWidgets();
+  if (widgetRefreshInFlight) return;
+  widgetRefreshInFlight = true;
+  try {
+    const snapshot = widgets.slice();
+    const resolved = await Promise.all(snapshot.map((widget) => resolveWidgetState(widget)));
+    widgetStates = new Map(resolved.map((state, index) => [snapshot[index].id, state]));
+    renderWidgets();
+  } finally {
+    widgetRefreshInFlight = false;
+  }
 }
 
 async function moveWidget(widgetId, direction) {
@@ -524,5 +532,6 @@ initDashboardOverview();
 initQuickBoard();
 
 setInterval(() => {
+  if (document.hidden) return;
   refreshWidgetStates().catch(() => {});
 }, 15000);

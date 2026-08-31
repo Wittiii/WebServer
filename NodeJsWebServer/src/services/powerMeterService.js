@@ -30,11 +30,40 @@ const saveSettings = db.prepare(`
     sensor_topic = excluded.sensor_topic,
     updated_at = excluded.updated_at
 `);
+const deleteOldReadings = db.prepare("DELETE FROM power_meter_readings WHERE received_at_ms < ?");
+const historyStatement = db.prepare(`
+  SELECT
+    CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
+    AVG(power_w) AS power_w,
+    MAX(power_w) AS peak_power_w,
+    AVG(voltage_v) AS voltage_v,
+    AVG(current_a) AS current_a,
+    AVG(power_factor) AS power_factor,
+    MAX(today_kwh) AS today_kwh
+  FROM power_meter_readings
+  WHERE topic = ? AND received_at_ms >= ?
+  GROUP BY CAST(received_at_ms / ? AS INTEGER)
+  ORDER BY timestamp ASC
+`);
+const todayStatsStatement = db.prepare(`
+  SELECT AVG(power_w) AS average_power_w, MAX(power_w) AS peak_power_w,
+         MIN(voltage_v) AS minimum_voltage_v, MAX(voltage_v) AS maximum_voltage_v,
+         COUNT(*) AS samples
+  FROM power_meter_readings
+  WHERE topic = ? AND received_at_ms >= ?
+`);
 
 let sensorTopic = storedSettings.get()?.sensor_topic || environmentTopic;
 let currentReading = null;
 let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
 let lastCleanupAt = 0;
+const historyCache = new Map();
+let todayStatsCache = null;
+
+function invalidateAnalyticsCache() {
+  historyCache.clear();
+  todayStatsCache = null;
+}
 
 function normalizeSensorTopic(value) {
   const topic = String(value ?? "").trim();
@@ -54,6 +83,7 @@ function setSensorTopic(value) {
   sensorTopic = topic;
   currentReading = null;
   lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
+  invalidateAnalyticsCache();
   return sensorTopic;
 }
 
@@ -101,7 +131,7 @@ function cleanupOldReadings(now) {
   if (now - lastCleanupAt < 24 * 60 * 60 * 1000) return;
   lastCleanupAt = now;
   const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-  db.prepare("DELETE FROM power_meter_readings WHERE received_at_ms < ?").run(cutoff);
+  deleteOldReadings.run(cutoff);
 }
 
 function ingestPowerMeterMessage(topic, payload, receivedAt = Date.now()) {
@@ -129,6 +159,7 @@ function ingestPowerMeterMessage(topic, payload, receivedAt = Date.now()) {
     new Date(reading.receivedAt).toISOString()
   );
   lastStoredAt = receivedAt;
+  invalidateAnalyticsCache();
   return true;
 }
 
@@ -169,22 +200,13 @@ function normalizePeriod(period) {
 function getHistory(period = "24h", now = Date.now()) {
   const normalizedPeriod = normalizePeriod(period);
   const { durationMs, bucketMs } = PERIODS[normalizedPeriod];
-  const rows = db.prepare(`
-    SELECT
-      CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
-      AVG(power_w) AS power_w,
-      MAX(power_w) AS peak_power_w,
-      AVG(voltage_v) AS voltage_v,
-      AVG(current_a) AS current_a,
-      AVG(power_factor) AS power_factor,
-      MAX(today_kwh) AS today_kwh
-    FROM power_meter_readings
-    WHERE topic = ? AND received_at_ms >= ?
-    GROUP BY CAST(received_at_ms / ? AS INTEGER)
-    ORDER BY timestamp ASC
-  `).all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
+  const cached = historyCache.get(normalizedPeriod);
+  if (cached && cached.lastStoredAt === lastStoredAt && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const rows = historyStatement.all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
 
-  return {
+  const value = {
     period: normalizedPeriod,
     bucketMs,
     points: rows.map((row) => ({
@@ -197,19 +219,27 @@ function getHistory(period = "24h", now = Date.now()) {
       todayKwh: row.today_kwh,
     })),
   };
+  historyCache.set(normalizedPeriod, {
+    lastStoredAt,
+    expiresAt: now + Math.min(bucketMs, 60000),
+    value,
+  });
+  return value;
 }
 
 function getPowerMeterOverview(period = "24h", now = Date.now()) {
   const reading = getCurrentReading();
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
-  const stats = db.prepare(`
-    SELECT AVG(power_w) AS average_power_w, MAX(power_w) AS peak_power_w,
-           MIN(voltage_v) AS minimum_voltage_v, MAX(voltage_v) AS maximum_voltage_v,
-           COUNT(*) AS samples
-    FROM power_meter_readings
-    WHERE topic = ? AND received_at_ms >= ?
-  `).get(sensorTopic, todayStart.getTime());
+  const todayStartMs = todayStart.getTime();
+  if (!todayStatsCache || todayStatsCache.lastStoredAt !== lastStoredAt || todayStatsCache.todayStartMs !== todayStartMs) {
+    todayStatsCache = {
+      lastStoredAt,
+      todayStartMs,
+      value: todayStatsStatement.get(sensorTopic, todayStartMs),
+    };
+  }
+  const stats = todayStatsCache.value;
 
   return {
     ok: true,

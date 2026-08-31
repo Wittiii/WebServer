@@ -20,6 +20,8 @@ const history = [];
 const MAX_TREND_POINTS = 20;
 let topicTreeInitialized = false;
 let openTopicPaths = new Set();
+let refreshInFlight = false;
+let resizeFrame = null;
 
 function percent(value) {
   const numeric = Number(value || 0);
@@ -173,20 +175,35 @@ function drawTrend() {
 }
 
 async function refresh() {
-  const results = await Promise.allSettled([loadClients(), loadTopics(), loadSystem()]);
-  results.forEach((result) => {
-    if (result.status === "rejected") console.error("Dashboard refresh:", result.reason);
-  });
-  history.push({
-    clients: Number(elements.clientsCount?.textContent || 0),
-    topics: Number(elements.topicsCount?.textContent || 0),
-  });
-  if (history.length > MAX_TREND_POINTS) history.shift();
-  drawTrend();
+  if (document.hidden || refreshInFlight) return;
+  refreshInFlight = true;
+  try {
+    const results = await Promise.allSettled([loadClients(), loadTopics(), loadSystem()]);
+    results.forEach((result) => {
+      if (result.status === "rejected") console.error("Dashboard refresh:", result.reason);
+    });
+    history.push({
+      clients: Number(elements.clientsCount?.textContent || 0),
+      topics: Number(elements.topicsCount?.textContent || 0),
+    });
+    if (history.length > MAX_TREND_POINTS) history.shift();
+    drawTrend();
+  } finally {
+    refreshInFlight = false;
+  }
 }
 
 export function initDashboardOverview() {
   refresh();
   setInterval(refresh, 10000);
-  window.addEventListener("resize", drawTrend);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refresh();
+  });
+  window.addEventListener("resize", () => {
+    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
+      drawTrend();
+    });
+  });
 }

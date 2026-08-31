@@ -51,6 +51,16 @@ test.after(() => {
   fs.rmSync(databasePath, { force: true });
 });
 
+test("configures SQLite for concurrent sensor writes and indexed lookups", () => {
+  assert.equal(db.pragma("journal_mode", { simple: true }), "wal");
+  const indexes = new Set(
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((row) => row.name)
+  );
+  assert.equal(indexes.has("idx_object_readings_object_key_id"), true);
+  assert.equal(indexes.has("idx_objects_mqtt_topic"), true);
+  assert.equal(indexes.has("idx_victron_mppt_time"), true);
+});
+
 test("parses only the configured Victron JSON topic", () => {
   assert.equal(parseVictronPayload("camera/other/victron/mppt/json", payload()), null);
   assert.equal(parseVictronPayload(topic, "not-json"), null);
@@ -99,6 +109,7 @@ test("stores MPPT readings and returns live values plus history", () => {
   assert.equal(overview.todayStats.yieldTodayWh, 410);
   assert.equal(overview.totalStats.yieldWh, 510);
   assert.equal(overview.totalStats.startTime, timestamp - 86400000);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM victron_daily_yields").get().count, 2);
   assert.equal(overview.history.points.length, 2);
   assert.equal(overview.history.points.at(-1).batterySocPercent, 74);
 });

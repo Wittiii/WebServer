@@ -5,13 +5,14 @@ const aedes = require('aedes')();
 const db = require('./database/db');
 const { ingestPowerMeterMessage } = require('./services/powerMeterService');
 const { ingestVictronMessage } = require('./services/victronMpptService');
-const { extractValue } = require('./services/mqttPayloadService');
+const { createValueExtractor } = require('./services/mqttPayloadService');
 
 const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
 const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
 const USER = process.env.MQTT_USER;
 const PASS = process.env.MQTT_PASS;
 const DEFAULT_CLIENT_STALE_MS = Math.max(15000, Number(process.env.MQTT_CLIENT_STALE_MS || 120000));
+const logMessagePayloads = String(process.env.MQTT_LOG_MESSAGES || '').toLowerCase() === 'true';
 
 // Auth: nur wenn USER/PASS gesetzt
 aedes.authenticate = (client, username, password, done) => {
@@ -62,44 +63,57 @@ httpServer.listen(WS_PORT, () => {
 });
 
 
+const findObjectsForTopic = db.prepare(`
+  SELECT id, value_key FROM objects WHERE mqtt_topic = ?
+  UNION
+  SELECT o.id, o.value_key
+  FROM object_topic_commands tc
+  JOIN objects o ON o.id = tc.object_id
+  WHERE tc.topic = ?
+  UNION
+  SELECT o.id, o.value_key
+  FROM object_value_keys vk
+  JOIN objects o ON o.id = vk.object_id
+  WHERE vk.topic = ?
+`);
+const findKeysForObject = db.prepare(`
+  SELECT DISTINCT value_key
+  FROM object_value_keys
+  WHERE object_id = ? AND (topic IS NULL OR topic = ?)
+  ORDER BY id ASC
+`);
+const insertObjectReading = db.prepare(`
+  INSERT INTO object_readings (object_id, topic, value_key, value_text, raw_payload, created_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+
 function getKeysForObject(objectId, topic, fallbackKey) {
-  const rows = db
-    .prepare(
-      'SELECT DISTINCT value_key FROM object_value_keys WHERE object_id = ? AND (topic IS NULL OR topic = ?) ORDER BY id ASC'
-    )
-    .all(objectId, topic);
+  const rows = findKeysForObject.all(objectId, topic);
   if (rows.length > 0) return rows.map((r) => r.value_key);
   if (fallbackKey) return [fallbackKey];
   return [];
 }
 
+const storeObjectReadings = db.transaction((rows, topic, raw, now, extractValue) => {
+  for (const obj of rows) {
+    const keys = getKeysForObject(obj.id, topic, obj.value_key);
+    for (const key of keys) {
+      const valueText = extractValue(key);
+      if (!valueText) continue;
+      insertObjectReading.run(obj.id, topic, key, valueText, raw, now);
+    }
+  }
+});
+
 function storeReading(topic, payload) {
-  const rows = db.prepare(`
-    SELECT DISTINCT o.id, o.value_key
-    FROM objects o
-    LEFT JOIN object_topic_commands tc ON tc.object_id = o.id
-    LEFT JOIN object_value_keys vk ON vk.object_id = o.id AND vk.topic = ?
-    WHERE o.mqtt_topic = ? OR tc.topic = ? OR vk.topic = ?
-  `).all(topic, topic, topic, topic);
+  const rows = findObjectsForTopic.all(topic, topic, topic);
   if (rows.length === 0) return;
 
   const raw = String(payload ?? '');
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
-    INSERT INTO object_readings (object_id, topic, value_key, value_text, raw_payload, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
+  const extractValue = createValueExtractor(raw);
 
-  for (const obj of rows) {
-    const keys = getKeysForObject(obj.id, topic, obj.value_key);
-    if (keys.length === 0) continue;
-
-    for (const key of keys) {
-      const valueText = extractValue(raw, key);
-      if (!valueText) continue;
-      stmt.run(obj.id, topic, key, valueText, raw, now);
-    }
-  }
+  storeObjectReadings(rows, topic, raw, now, extractValue);
 }
 
 
@@ -198,11 +212,13 @@ aedes.on('ping', (_packet, c) => {
   touchClient(c, { connected: true, disconnectReason: null });
 });
 aedes.on('publish', (p, c) => {
+  const payloadStr = p.payload.toString();
   if (c) {
     touchClient(c, { connected: true, lastTopic: p.topic, disconnectReason: null });
-    console.log(`[MQTT] ${c.id} -> ${p.topic}: ${p.payload.toString()}`);
+    if (logMessagePayloads) {
+      console.log(`[MQTT] ${c.id} -> ${p.topic}: ${payloadStr}`);
+    }
   }
-  const payloadStr = p.payload.toString();
   topics.set(p.topic, { lastMessage: payloadStr, timestamp: Date.now() });
   try {
     ingestPowerMeterMessage(p.topic, payloadStr);

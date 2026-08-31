@@ -6,6 +6,12 @@ const databasePath = process.env.DATABASE_PATH
   : path.join(__dirname, 'app.db');
 const db = new Database(databasePath);
 
+// Let dashboard reads continue while MQTT samples are being persisted.
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 5000');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +35,8 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_object_readings_object ON object_readings(object_id);
   CREATE INDEX IF NOT EXISTS idx_object_readings_topic ON object_readings(topic);
+  CREATE INDEX IF NOT EXISTS idx_object_readings_object_key_id
+    ON object_readings(object_id, value_key, id DESC);
 `)
 
 const haveValueKeys = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='object_value_keys'").get();
@@ -76,6 +84,11 @@ if (!haveValueKeys) {
 }
 
 db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_object_value_keys_topic_object
+    ON object_value_keys(topic, object_id);
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS object_topic_commands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     object_id INTEGER NOT NULL,
@@ -118,6 +131,8 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_power_meter_topic_time
     ON power_meter_readings(topic, received_at_ms);
+  CREATE INDEX IF NOT EXISTS idx_power_meter_time
+    ON power_meter_readings(received_at_ms);
 `);
 
 db.exec(`
@@ -168,6 +183,30 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_victron_mppt_topic_time
     ON victron_mppt_readings(topic, received_at_ms);
+  CREATE INDEX IF NOT EXISTS idx_victron_mppt_time
+    ON victron_mppt_readings(received_at_ms);
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS victron_daily_yields (
+    topic TEXT NOT NULL,
+    day TEXT NOT NULL,
+    yield_wh REAL NOT NULL,
+    first_reading_ms INTEGER NOT NULL,
+    last_reading_ms INTEGER NOT NULL,
+    PRIMARY KEY (topic, day)
+  ) WITHOUT ROWID;
+
+  INSERT OR IGNORE INTO victron_daily_yields (
+    topic, day, yield_wh, first_reading_ms, last_reading_ms
+  )
+  SELECT topic,
+         date(received_at_ms / 1000, 'unixepoch', 'localtime'),
+         MAX(yield_today_wh),
+         MIN(received_at_ms),
+         MAX(received_at_ms)
+  FROM victron_mppt_readings
+  GROUP BY topic, date(received_at_ms / 1000, 'unixepoch', 'localtime');
 `);
 
 const victronColumns = db.prepare('PRAGMA table_info(victron_mppt_readings)').all().map(c => c.name);
@@ -260,6 +299,8 @@ if (!columns.includes('mqtt_topic')) {
 if (!columns.includes('commands')) {
   db.exec('ALTER TABLE objects ADD COLUMN commands TEXT');
 }
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_objects_mqtt_topic ON objects(mqtt_topic)');
 
 
 

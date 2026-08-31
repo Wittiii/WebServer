@@ -35,11 +35,91 @@ const insertReading = db.prepare(`
 const latestReading = db.prepare(`
   SELECT * FROM victron_mppt_readings WHERE topic = ? ORDER BY received_at_ms DESC LIMIT 1
 `);
+const upsertDailyYield = db.prepare(`
+  INSERT INTO victron_daily_yields (topic, day, yield_wh, first_reading_ms, last_reading_ms)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(topic, day) DO UPDATE SET
+    yield_wh = MAX(yield_wh, excluded.yield_wh),
+    first_reading_ms = MIN(first_reading_ms, excluded.first_reading_ms),
+    last_reading_ms = MAX(last_reading_ms, excluded.last_reading_ms)
+`);
+const deleteOldReadings = db.prepare("DELETE FROM victron_mppt_readings WHERE received_at_ms < ?");
+const deleteOldDailyYields = db.prepare("DELETE FROM victron_daily_yields WHERE last_reading_ms < ?");
+const historyStatement = db.prepare(`
+  SELECT
+    CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
+    AVG(panel_power_w) AS panel_power_w,
+    MAX(panel_power_w) AS peak_panel_power_w,
+    AVG(battery_voltage_v) AS battery_voltage_v,
+    AVG(battery_current_a) AS battery_current_a,
+    AVG(battery_soc_percent) AS battery_soc_percent,
+    MAX(yield_today_wh) AS yield_today_wh
+  FROM victron_mppt_readings
+  WHERE topic = ? AND received_at_ms >= ?
+  GROUP BY CAST(received_at_ms / ? AS INTEGER)
+  ORDER BY timestamp ASC
+`);
+const todayStatsStatement = db.prepare(`
+  SELECT AVG(panel_power_w) AS average_panel_power_w,
+         MAX(panel_power_w) AS peak_panel_power_w,
+         MIN(battery_voltage_v) AS minimum_battery_voltage_v,
+         MAX(battery_voltage_v) AS maximum_battery_voltage_v,
+         MAX(yield_today_wh) AS yield_today_wh,
+         COUNT(*) AS samples
+  FROM victron_mppt_readings
+  WHERE topic = ? AND received_at_ms >= ?
+`);
+const totalYieldStatement = db.prepare(`
+  SELECT SUM(yield_wh) AS total_yield_wh,
+         MIN(first_reading_ms) AS total_start_time
+  FROM victron_daily_yields
+  WHERE topic = ?
+`);
+
+function localDayKey(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const storeReading = db.transaction((reading) => {
+  insertReading.run(
+    reading.topic,
+    reading.status,
+    reading.chargerState,
+    reading.errorCode,
+    reading.batteryVoltageV,
+    reading.batteryCurrentA,
+    reading.batterySocPercent,
+    reading.panelPowerW,
+    reading.yieldTodayWh,
+    reading.loadCurrentA,
+    reading.rssi,
+    reading.receivedAt,
+    new Date(reading.receivedAt).toISOString()
+  );
+  upsertDailyYield.run(
+    reading.topic,
+    localDayKey(reading.receivedAt),
+    reading.yieldTodayWh,
+    reading.receivedAt,
+    reading.receivedAt
+  );
+});
 
 let currentReading = null;
 let currentStatus = null;
 let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
 let lastCleanupAt = 0;
+const historyCache = new Map();
+let overviewStatsCache = null;
+
+function invalidateAnalyticsCache() {
+  historyCache.clear();
+  overviewStatsCache = null;
+}
 
 function parseVictronPayload(topic, payload, receivedAt = Date.now()) {
   if (topic !== sensorTopic) return null;
@@ -92,7 +172,8 @@ function cleanupOldReadings(now) {
   if (now - lastCleanupAt < 24 * 60 * 60 * 1000) return;
   lastCleanupAt = now;
   const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-  db.prepare("DELETE FROM victron_mppt_readings WHERE received_at_ms < ?").run(cutoff);
+  deleteOldReadings.run(cutoff);
+  deleteOldDailyYields.run(cutoff);
 }
 
 function ingestVictronMessage(topic, payload, receivedAt = Date.now()) {
@@ -107,22 +188,9 @@ function ingestVictronMessage(topic, payload, receivedAt = Date.now()) {
   if (receivedAt - lastStoredAt < sampleIntervalMs) return true;
 
   const reading = parsed.reading;
-  insertReading.run(
-    reading.topic,
-    reading.status,
-    reading.chargerState,
-    reading.errorCode,
-    reading.batteryVoltageV,
-    reading.batteryCurrentA,
-    reading.batterySocPercent,
-    reading.panelPowerW,
-    reading.yieldTodayWh,
-    reading.loadCurrentA,
-    reading.rssi,
-    reading.receivedAt,
-    new Date(reading.receivedAt).toISOString()
-  );
+  storeReading(reading);
   lastStoredAt = receivedAt;
+  invalidateAnalyticsCache();
   return true;
 }
 
@@ -158,22 +226,13 @@ function normalizePeriod(period) {
 function getHistory(period, now) {
   const normalizedPeriod = normalizePeriod(period);
   const { durationMs, bucketMs } = PERIODS[normalizedPeriod];
-  const rows = db.prepare(`
-    SELECT
-      CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
-      AVG(panel_power_w) AS panel_power_w,
-      MAX(panel_power_w) AS peak_panel_power_w,
-      AVG(battery_voltage_v) AS battery_voltage_v,
-      AVG(battery_current_a) AS battery_current_a,
-      AVG(battery_soc_percent) AS battery_soc_percent,
-      MAX(yield_today_wh) AS yield_today_wh
-    FROM victron_mppt_readings
-    WHERE topic = ? AND received_at_ms >= ?
-    GROUP BY CAST(received_at_ms / ? AS INTEGER)
-    ORDER BY timestamp ASC
-  `).all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
+  const cached = historyCache.get(normalizedPeriod);
+  if (cached && cached.lastStoredAt === lastStoredAt && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const rows = historyStatement.all(bucketMs, bucketMs, sensorTopic, now - durationMs, bucketMs);
 
-  return {
+  const value = {
     period: normalizedPeriod,
     bucketMs,
     points: rows.map((row) => ({
@@ -186,6 +245,12 @@ function getHistory(period, now) {
       yieldTodayWh: row.yield_today_wh,
     })),
   };
+  historyCache.set(normalizedPeriod, {
+    lastStoredAt,
+    expiresAt: now + Math.min(bucketMs, 60000),
+    value,
+  });
+  return value;
 }
 
 function getVictronOverview(period = "24h", now = Date.now()) {
@@ -193,27 +258,16 @@ function getVictronOverview(period = "24h", now = Date.now()) {
   const status = currentStatus?.value || reading?.status || "waiting";
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
-  const stats = db.prepare(`
-    SELECT AVG(panel_power_w) AS average_panel_power_w,
-           MAX(panel_power_w) AS peak_panel_power_w,
-           MIN(battery_voltage_v) AS minimum_battery_voltage_v,
-           MAX(battery_voltage_v) AS maximum_battery_voltage_v,
-           MAX(yield_today_wh) AS yield_today_wh,
-           COUNT(*) AS samples
-    FROM victron_mppt_readings
-    WHERE topic = ? AND received_at_ms >= ?
-  `).get(sensorTopic, todayStart.getTime());
-  const totalYield = db.prepare(`
-    SELECT SUM(daily_yield_wh) AS total_yield_wh,
-           MIN(first_reading_ms) AS total_start_time
-    FROM (
-      SELECT MAX(yield_today_wh) AS daily_yield_wh,
-             MIN(received_at_ms) AS first_reading_ms
-      FROM victron_mppt_readings
-      WHERE topic = ? AND received_at_ms <= ?
-      GROUP BY date(received_at_ms / 1000, 'unixepoch', 'localtime')
-    )
-  `).get(sensorTopic, now);
+  const todayStartMs = todayStart.getTime();
+  if (!overviewStatsCache || overviewStatsCache.lastStoredAt !== lastStoredAt || overviewStatsCache.todayStartMs !== todayStartMs) {
+    overviewStatsCache = {
+      lastStoredAt,
+      todayStartMs,
+      stats: todayStatsStatement.get(sensorTopic, todayStartMs),
+      totalYield: totalYieldStatement.get(sensorTopic),
+    };
+  }
+  const { stats, totalYield } = overviewStatsCache;
 
   let socPercent = normalizeSoc(reading?.batterySocPercent);
   let socSource = socPercent === null ? "unavailable" : "mqtt";

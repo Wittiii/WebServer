@@ -104,6 +104,8 @@ let layoutEditMode = false;
 let draggedLayoutId = null;
 let draggedCustomizerId = null;
 let layoutSaveChain = Promise.resolve();
+let refreshInFlight = false;
+let resizeFrame = null;
 
 const defaultEnergyLayout = [
   { id: "live-values", width: "full", visible: true, collapsed: false },
@@ -857,7 +859,9 @@ function render(data) {
   drawChart();
 }
 
-async function refresh() {
+async function refresh(force = false) {
+  if ((!force && document.hidden) || refreshInFlight) return;
+  refreshInFlight = true;
   try {
     const query = new URLSearchParams({ period: selectedPeriod, victronPeriod: selectedVictronPeriod });
     const response = await fetch(`/energy/overview?${query}`, {
@@ -875,6 +879,8 @@ async function refresh() {
     render(data);
   } catch (error) {
     setText(elements.error, `Stromdaten konnten nicht geladen werden: ${error.message}`);
+  } finally {
+    refreshInFlight = false;
   }
 }
 
@@ -884,7 +890,7 @@ document.querySelectorAll("[data-period]").forEach((button) => {
     document.querySelectorAll("[data-period]").forEach((entry) => {
       entry.classList.toggle("is-active", entry === button);
     });
-    refresh();
+    refresh(true);
   });
 });
 
@@ -894,7 +900,7 @@ document.querySelectorAll("[data-victron-period]").forEach((button) => {
     document.querySelectorAll("[data-victron-period]").forEach((entry) => {
       entry.classList.toggle("is-active", entry === button);
     });
-    refresh();
+    refresh(true);
   });
 });
 
@@ -966,7 +972,7 @@ elements.victronSocForm?.addEventListener("submit", async (event) => {
     latestVictronEstimation = result.settings;
     populateVictronSocForm(result.settings);
     setText(elements.victronSocSettingsStatus, "Batterieprofil gespeichert.");
-    await refresh();
+    await refresh(true);
     setTimeout(closeVictronSocDialog, 350);
   } catch (error) {
     setText(elements.victronSocSettingsStatus, `Speichern fehlgeschlagen: ${error.message}`);
@@ -1132,7 +1138,7 @@ elements.topicForm?.addEventListener("submit", async (event) => {
     }
     elements.topicInput.value = result.configuredTopic;
     setText(elements.topicStatus, "Topic gespeichert. Warte auf neue SENSOR-Daten.");
-    await refresh();
+    await refresh(true);
   } catch (error) {
     setText(elements.topicStatus, `Topic konnte nicht gespeichert werden: ${error.message}`);
   } finally {
@@ -1141,9 +1147,16 @@ elements.topicForm?.addEventListener("submit", async (event) => {
 });
 
 window.addEventListener("resize", () => {
-  drawChart();
-  drawVictronChart();
+  if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = null;
+    drawChart();
+    drawVictronChart();
+  });
 });
-refresh();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh(true);
+});
+refresh(true);
 loadEnergyLayout();
 setInterval(refresh, 5000);
