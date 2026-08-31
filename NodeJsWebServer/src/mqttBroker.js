@@ -12,7 +12,7 @@ const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
 const USER = process.env.MQTT_USER;
 const PASS = process.env.MQTT_PASS;
 const DEFAULT_CLIENT_STALE_MS = Math.max(15000, Number(process.env.MQTT_CLIENT_STALE_MS || 120000));
-const logMessagePayloads = String(process.env.MQTT_LOG_MESSAGES || '').toLowerCase() === 'true';
+const logMessagePayloads = String(process.env.MQTT_LOG_MESSAGES || 'true').toLowerCase() !== 'false';
 
 // Auth: nur wenn USER/PASS gesetzt
 aedes.authenticate = (client, username, password, done) => {
