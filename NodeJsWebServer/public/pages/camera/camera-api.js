@@ -22,8 +22,9 @@ export async function postCameraCommand(cameraId, action, body = {}) {
   }));
 }
 
-export async function fetchTimelapse(cameraId) {
-  return readJson(await fetch(`/api/camera/timelapse?cameraId=${encodeURIComponent(cameraId)}`, {
+export async function fetchTimelapse(cameraId, offset = 0) {
+  const query = new URLSearchParams({ cameraId, offset, limit: 200 });
+  return readJson(await fetch(`/api/camera/timelapse?${query}`, {
     credentials: "same-origin",
   }));
 }

@@ -1,11 +1,13 @@
 const db = require("../database/db");
+const { finiteNumber: finite, configuredNumber, isValidTimestamp } = require("./sensorReadingUtils");
+const { createRetentionCleanup } = require("./retentionCleanupService");
 
 const DEFAULT_TOPIC = "tele/tasmota_605AF0/SENSOR";
 const environmentTopic = String(process.env.POWER_METER_SENSOR_TOPIC || DEFAULT_TOPIC).trim();
-const sampleIntervalMs = Math.max(0, Number(process.env.POWER_METER_SAMPLE_SECONDS || 10) * 1000);
-const staleAfterMs = Math.max(10000, Number(process.env.POWER_METER_STALE_SECONDS || 90) * 1000);
-const retentionDays = Math.max(1, Number(process.env.POWER_METER_RETENTION_DAYS || 365));
-const electricityPrice = Math.max(0, Number(process.env.POWER_METER_PRICE_EUR_KWH || 0.35));
+const sampleIntervalMs = configuredNumber(process.env.POWER_METER_SAMPLE_SECONDS, 10) * 1000;
+const staleAfterMs = configuredNumber(process.env.POWER_METER_STALE_SECONDS, 90, 10) * 1000;
+const retentionDays = configuredNumber(process.env.POWER_METER_RETENTION_DAYS, 365, 1);
+const electricityPrice = configuredNumber(process.env.POWER_METER_PRICE_EUR_KWH, 0.35);
 
 const insertReading = db.prepare(`
   INSERT INTO power_meter_readings (
@@ -30,7 +32,10 @@ const saveSettings = db.prepare(`
     sensor_topic = excluded.sensor_topic,
     updated_at = excluded.updated_at
 `);
-const deleteOldReadings = db.prepare("DELETE FROM power_meter_readings WHERE received_at_ms < ?");
+const deleteOldReadings = db.prepare(`DELETE FROM power_meter_readings WHERE id IN (
+  SELECT id FROM power_meter_readings WHERE received_at_ms < ? ORDER BY received_at_ms LIMIT ?
+)`);
+const cleanupBatch = createRetentionCleanup(deleteOldReadings);
 const historyStatement = db.prepare(`
   SELECT
     CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
@@ -55,8 +60,7 @@ const todayStatsStatement = db.prepare(`
 
 let sensorTopic = storedSettings.get()?.sensor_topic || environmentTopic;
 let currentReading = null;
-let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
-let lastCleanupAt = 0;
+let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms ?? null;
 const historyCache = new Map();
 let todayStatsCache = null;
 
@@ -82,18 +86,13 @@ function setSensorTopic(value) {
 
   sensorTopic = topic;
   currentReading = null;
-  lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
+  lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms ?? null;
   invalidateAnalyticsCache();
   return sensorTopic;
 }
 
-function finite(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
 function parseSensorPayload(topic, payload, receivedAt = Date.now()) {
-  if (topic !== sensorTopic) return null;
+  if (topic !== sensorTopic || !isValidTimestamp(receivedAt)) return null;
 
   let parsed;
   try {
@@ -103,7 +102,7 @@ function parseSensorPayload(topic, payload, receivedAt = Date.now()) {
   }
 
   const energy = parsed?.ENERGY;
-  if (!energy || typeof energy !== "object") return null;
+  if (!energy || typeof energy !== "object" || Array.isArray(energy)) return null;
 
   const values = {
     totalKwh: finite(energy.Total),
@@ -128,10 +127,8 @@ function parseSensorPayload(topic, payload, receivedAt = Date.now()) {
 }
 
 function cleanupOldReadings(now) {
-  if (now - lastCleanupAt < 24 * 60 * 60 * 1000) return;
-  lastCleanupAt = now;
   const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-  deleteOldReadings.run(cutoff);
+  cleanupBatch(now, cutoff);
 }
 
 function ingestPowerMeterMessage(topic, payload, receivedAt = Date.now()) {
@@ -140,7 +137,9 @@ function ingestPowerMeterMessage(topic, payload, receivedAt = Date.now()) {
 
   currentReading = reading;
   cleanupOldReadings(receivedAt);
-  if (receivedAt - lastStoredAt < sampleIntervalMs) return true;
+  // A Pi's wall clock can move backwards after NTP synchronization. Do not
+  // suspend persistence until it catches up with the previous timestamp.
+  if (lastStoredAt !== null && receivedAt >= lastStoredAt && receivedAt - lastStoredAt < sampleIntervalMs) return true;
 
   insertReading.run(
     reading.topic,

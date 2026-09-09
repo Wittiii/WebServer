@@ -1,6 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
-const { spawn } = require("child_process");
+const { getMediaThreads, runMediaProcess } = require("./mediaProcessService");
+const { listTimelapseFiles, recordTimelapseFrame } = require("./timelapseService");
 
 const { getCameraConfigs } = require("../config/cameraConfig");
 const { publish, topics } = require("../mqttBroker");
@@ -10,10 +11,12 @@ const GIB = 1024 ** 3;
 const jobs = new Map();
 let supervisorTimer = null;
 let captureOwner = null;
+let stopping = false;
 
 function toNumber(value, fallback) {
+  if (value == null || String(value).trim() === "") return Number(fallback);
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return Number.isFinite(parsed) ? parsed : Number(fallback);
 }
 
 function parseBoolean(value) {
@@ -83,7 +86,7 @@ function getSettings(camera) {
       currentConfig.server_capture_interval_seconds || currentConfig.timelapse_interval_seconds ||
         getTopicValue(camera, "capture_request/interval_seconds") ||
         getTopicValue(camera, "timelapse/interval_seconds"),
-      process.env[`${prefix}_TIMELAPSE_INTERVAL_SECONDS`] || 60
+      toNumber(process.env[`${prefix}_TIMELAPSE_INTERVAL_SECONDS`], 60)
     )
   );
   return { enabled, intervalSeconds };
@@ -110,19 +113,10 @@ function frameName(now = new Date()) {
   return `frame-${stamp}.jpg`;
 }
 
-async function refreshStorage(job) {
-  await fs.mkdir(job.outputDir, { recursive: true });
-  const entries = await fs.readdir(job.outputDir, { withFileTypes: true });
-  let total = 0;
-  let latestImage = "";
-  for (const entry of entries) {
-    if (!entry.isFile() || !/\.(?:jpe?g|mp4)$/i.test(entry.name)) continue;
-    const stats = await fs.stat(path.join(job.outputDir, entry.name));
-    total += stats.size;
-    if (/\.jpe?g$/i.test(entry.name) && entry.name > latestImage) latestImage = entry.name;
-  }
-  job.storageBytes = total;
-  job.lastImage = latestImage;
+async function refreshStorage(camera, job) {
+  const listing = await listTimelapseFiles(camera, camera);
+  job.storageBytes = listing.totalBytes;
+  job.lastImage = listing.latestImage?.name || "";
   job.lastStorageScanAt = Date.now();
   job.storageInitialized = true;
 }
@@ -195,11 +189,12 @@ function captureTimeoutMs(camera) {
   const prefix = camera.archive?.envPrefix || `CAMERA_${camera.kind.toUpperCase()}`;
   return Math.max(
     5000,
-    toNumber(process.env[`${prefix}_CAPTURE_TIMEOUT_MS`], process.env.CAMERA_TIMELAPSE_CAPTURE_TIMEOUT_MS || 20000)
+    toNumber(process.env[`${prefix}_CAPTURE_TIMEOUT_MS`], toNumber(process.env.CAMERA_TIMELAPSE_CAPTURE_TIMEOUT_MS, 20000))
   );
 }
 
 async function captureFrame(camera, job) {
+  if (stopping) return;
   captureOwner = camera.cameraId;
   job.captureInFlight = true;
   job.state = "capturing";
@@ -207,9 +202,10 @@ async function captureFrame(camera, job) {
   const name = frameName();
   const finalPath = path.join(job.outputDir, name);
   const temporaryPath = `${finalPath}.partial`;
+  job.controller = new AbortController();
 
   try {
-    await refreshStorage(job);
+    await refreshStorage(camera, job);
     await refreshDiskLimits(job);
     if (job.globalStorageLimitBytes && job.globalStorageBytes >= job.globalStorageLimitBytes) {
       throw new Error("global_storage_limit_reached");
@@ -219,37 +215,25 @@ async function captureFrame(camera, job) {
     }
 
     await fs.unlink(temporaryPath).catch(() => {});
-    await new Promise((resolve, reject) => {
-      const child = spawn(
+    const threads = String(getMediaThreads(process.env.TIMELAPSE_FFMPEG_THREADS));
+    await runMediaProcess(
         process.env.TIMELAPSE_FFMPEG_PATH || "ffmpeg",
         [
           "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
+          "-threads", threads, "-filter_threads", "1",
           "-rtsp_transport", "tcp",
           "-timeout", String(captureTimeoutMs(camera) * 1000),
           "-i", getMediaMtxUrl(camera),
-          "-map", "0:v:0", "-frames:v", "1", "-c:v", "mjpeg", "-q:v", "2",
+          "-map", "0:v:0", "-frames:v", "1", "-c:v", "mjpeg", "-threads", threads, "-q:v", "2",
           "-f", "image2", temporaryPath,
         ],
-        { stdio: ["ignore", "ignore", "pipe"] }
-      );
-      let stderr = "";
-      let timedOut = false;
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        child.kill("SIGKILL");
-      }, captureTimeoutMs(camera));
-      child.stderr.on("data", (chunk) => { stderr += String(chunk); });
-      child.on("error", (error) => { clearTimeout(timeout); reject(error); });
-      child.on("exit", (code) => {
-        clearTimeout(timeout);
-        if (code === 0) resolve();
-        else reject(new Error(timedOut ? "snapshot_timeout" : stderr.trim() || `snapshot_ffmpeg_failed_${code}`));
-      });
-    });
+        { timeoutMs: captureTimeoutMs(camera), signal: job.controller.signal, timeoutError: "snapshot_timeout" }
+    );
 
     const stats = await fs.stat(temporaryPath);
     if (!stats.isFile() || stats.size === 0) throw new Error("snapshot_file_empty");
     await fs.rename(temporaryPath, finalPath);
+    await recordTimelapseFrame(camera, camera, name, stats);
     job.storageBytes += stats.size;
     updateGlobalStorageBytes();
     job.serverFreeBytes = Math.max(0, job.serverFreeBytes - stats.size);
@@ -270,6 +254,7 @@ async function captureFrame(camera, job) {
       : job.intervalSeconds;
     job.nextCaptureAt = Date.now() + retrySeconds * 1000;
     job.captureInFlight = false;
+    job.controller = null;
     captureOwner = null;
     void publishStatus(camera, job, true);
   }
@@ -277,15 +262,16 @@ async function captureFrame(camera, job) {
 
 async function evaluateCamera(camera) {
   const job = getJob(camera.cameraId);
-  if (job.evaluating) return;
+  if (stopping || job.evaluating || job.captureInFlight) return;
   job.evaluating = true;
   try {
     const settings = getSettings(camera);
     Object.assign(job, settings, { outputDir: getOutputDir(camera) });
     if (Date.now() - job.lastStorageScanAt >= 30000) {
-      await refreshStorage(job);
+      await refreshStorage(camera, job);
       await refreshDiskLimits(job);
     }
+    if (stopping) return;
     if (!job.enabled) {
       job.state = "stopped";
       job.error = "";
@@ -302,7 +288,7 @@ async function evaluateCamera(camera) {
       if (captureOwner && captureOwner !== camera.cameraId) {
         job.state = "waiting_capture_slot";
       } else {
-        void captureFrame(camera, job);
+        job.capturePromise = captureFrame(camera, job);
       }
     }
     void publishStatus(camera, job);
@@ -316,17 +302,31 @@ async function evaluateCamera(camera) {
 }
 
 function supervisorTick() {
+  if (stopping) return;
   const cameras = getCameraConfigs("localhost").filter(
     (camera) => camera.archive?.type === "server_capture"
   );
-  for (const camera of cameras) void evaluateCamera(camera);
+  for (const camera of cameras) {
+    const job = getJob(camera.cameraId);
+    if (!job.evaluating) job.evaluationPromise = evaluateCamera(camera);
+  }
 }
 
 function startCameraTimelapseCaptureSupervisor() {
   if (supervisorTimer) return;
+  stopping = false;
   supervisorTick();
   supervisorTimer = setInterval(supervisorTick, 2000);
   console.log("[Timelapse] server capture supervisor started");
+}
+
+async function stopCameraTimelapseCaptureSupervisor() {
+  stopping = true;
+  clearInterval(supervisorTimer);
+  supervisorTimer = null;
+  const currentJobs = [...jobs.values()];
+  for (const job of currentJobs) job.controller?.abort();
+  await Promise.allSettled(currentJobs.flatMap((job) => [job.evaluationPromise, job.capturePromise]));
 }
 
 function getCameraTimelapseCaptureSnapshot(cameraId) {
@@ -354,4 +354,5 @@ function getCameraTimelapseCaptureSnapshot(cameraId) {
 module.exports = {
   getCameraTimelapseCaptureSnapshot,
   startCameraTimelapseCaptureSupervisor,
+  stopCameraTimelapseCaptureSupervisor,
 };

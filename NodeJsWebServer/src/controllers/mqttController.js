@@ -1,5 +1,4 @@
 const { listClientSnapshots, publish, topics } = require('../mqttBroker');
-const db = require('../database/db');
 
 function getClients(req, res) {
   const list = listClientSnapshots();
@@ -27,7 +26,11 @@ async function publishMessage(req, res) {
     await publish(topic.trim(), msg);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
+    if (err.code === 'invalid_topic' || err.code === 'payload_too_large') {
+      return res.status(400).json({ ok: false, error: err.code });
+    }
+    console.error('[MQTT] publish request failed', err);
+    res.status(500).json({ ok: false, error: 'publish_failed' });
   }
 }
 

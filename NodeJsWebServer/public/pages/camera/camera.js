@@ -552,7 +552,16 @@ function renderTimelapseData() {
     return;
   }
 
-  timelapseFileListEl.innerHTML = files
+  const pagination = currentTimelapseState.pagination;
+  const pager = pagination && (pagination.offset > 0 || pagination.hasMore)
+    ? `<li class="camera-timelapse-file-row">
+        <span>Dateien ${pagination.offset + 1}–${pagination.offset + files.length} von ${pagination.total}</span>
+        <div class="camera-timelapse-file-actions">
+          <button type="button" data-timelapse-offset="${Math.max(0, pagination.offset - pagination.limit)}" ${pagination.offset === 0 ? "disabled" : ""}>Zurueck</button>
+          <button type="button" data-timelapse-offset="${pagination.offset + pagination.limit}" ${!pagination.hasMore ? "disabled" : ""}>Weiter</button>
+        </div>
+      </li>` : "";
+  timelapseFileListEl.innerHTML = pager + files
     .map(
       (file) => `
         <li class="camera-timelapse-file-row">
@@ -569,6 +578,21 @@ function renderTimelapseData() {
       `
     )
     .join("");
+
+  timelapseFileListEl.querySelectorAll("[data-timelapse-offset]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const camera = getActiveCamera();
+      if (!camera) return;
+      button.disabled = true;
+      try {
+        await loadTimelapse(camera.cameraId, Number(button.dataset.timelapseOffset));
+        renderTimelapseSection(getActiveCamera());
+      } catch (error) {
+        button.disabled = false;
+        setStatusLine(timelapseStatusEl, `Archiv konnte nicht geladen werden: ${error.message}`, true);
+      }
+    });
+  });
 
   timelapseFileListEl.querySelectorAll("[data-timelapse-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -808,9 +832,12 @@ async function sendCommand(cameraId, action, body = {}) {
   return data;
 }
 
-async function loadTimelapse(cameraId) {
-  const data = await fetchTimelapse(cameraId);
-  timelapseState = data;
+async function loadTimelapse(cameraId, offset = null) {
+  const currentOffset = timelapseState?.cameraId === cameraId ? timelapseState.pagination?.offset || 0 : 0;
+  let data = await fetchTimelapse(cameraId, offset ?? currentOffset);
+  // Deleting the last file on a page should take the user back to the archive start.
+  if (!data.files?.length && data.pagination?.offset > 0) data = await fetchTimelapse(cameraId, 0);
+  if (cameraId === activeCameraId) timelapseState = data;
   return data;
 }
 

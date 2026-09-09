@@ -6,8 +6,8 @@ const databasePath = process.env.DATABASE_PATH
   : path.join(__dirname, 'app.db');
 const db = new Database(databasePath);
 
-// DELETE/FULL matches SQLite's conservative behavior and avoids periodic WAL
-// checkpoints on Raspberry Pi SD cards. WAL remains available as an opt-in.
+// Preserve the existing durability defaults. Journal-mode performance depends
+// on the actual storage and workload; WAL remains available as an opt-in.
 const requestedJournalMode = String(process.env.SQLITE_JOURNAL_MODE || 'DELETE').toUpperCase();
 const journalMode = requestedJournalMode === 'WAL' ? 'WAL' : 'DELETE';
 const requestedSynchronous = String(process.env.SQLITE_SYNCHRONOUS || 'FULL').toUpperCase();

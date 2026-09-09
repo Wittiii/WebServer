@@ -130,7 +130,7 @@ function sanitizeAutomationRule(input) {
   }
 
   if (triggerType === 'time') {
-    if (sanitizeTimeOfDay(scheduleTime) === null) {
+    if (!scheduleTime || sanitizeTimeOfDay(scheduleTime) === null) {
       return { error: 'scheduleTime ist ungueltig' };
     }
   }
@@ -294,8 +294,8 @@ const listReadings = (req, res) => {
   const requestedAll = limitParam === '0' || limitParam.toLowerCase() === 'all';
   const limit = requestedAll
     ? MAX_READINGS_PER_REQUEST
-    : Number.isFinite(limitRaw)
-      ? Math.min(Math.max(limitRaw, 1), MAX_READINGS_PER_REQUEST)
+    : limitParam && Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.trunc(limitRaw), 1), MAX_READINGS_PER_REQUEST)
       : 100;
 
   try {
@@ -724,6 +724,7 @@ const updateAutomationRule = (req, res) => {
         objectId
       );
 
+      if (info.changes === 0) return 0;
       db.prepare('DELETE FROM object_automation_rule_actions WHERE rule_id = ?').run(ruleId);
       const actionStmt = db.prepare(`
         INSERT INTO object_automation_rule_actions (
@@ -763,6 +764,9 @@ const deleteAutomationRule = (req, res) => {
 
   try {
     const transaction = db.transaction(() => {
+      const rule = db.prepare('SELECT id FROM object_automation_rules WHERE id = ? AND object_id = ?')
+        .get(ruleId, objectId);
+      if (!rule) return { changes: 0 };
       db.prepare('DELETE FROM object_automation_rule_actions WHERE rule_id = ?').run(ruleId);
       return db
         .prepare('DELETE FROM object_automation_rules WHERE id = ? AND object_id = ?')

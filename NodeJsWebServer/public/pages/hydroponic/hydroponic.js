@@ -107,7 +107,7 @@ async function loadRealtimeReadings() {
       return `<li>${ts} - ${topic}${key}${valWithUnit}</li>`;
     }).join('');
   } catch (err) {
-    readingsList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
+    readingsList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
   }
 }
 
@@ -913,7 +913,7 @@ async function loadKeys(preserveSelection = true) {
     renderAutomationKeyOptions();
     await loadReadings();
   } catch (err) {
-    if (keyList) keyList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
+    if (keyList) keyList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
   }
 }
 

@@ -287,7 +287,7 @@ async function loadObjects(preserveSelection = true) {
     populateThresholdInputs();
     loadHydroponicBrokerSummary();
   } catch (err) {
-    if (objectList) objectList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
+    if (objectList) objectList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
   }
 }
 
@@ -456,7 +456,7 @@ async function loadAutomations() {
     syncAutomationFieldVisibility();
   } catch (err) {
     automationRulesCache = [];
-    if (automationList) automationList.innerHTML = `<li>Fehler: ${err.message || err}</li>`;
+    if (automationList) automationList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
   }
 }
 
@@ -594,7 +594,7 @@ deleteReadingsBtn?.addEventListener('click', async () => {
 
 optimizeDatabaseBtn?.addEventListener('click', async () => {
   const confirmed = window.confirm(
-    'Die gesamte SQLite-Datenbank jetzt optimieren? Der Server reagiert waehrenddessen kurz nicht.'
+    'Die gesamte SQLite-Datenbank jetzt verkleinern? Je nach Datenbankgroesse reagiert der Server laengere Zeit nicht; auch die Messwerterfassung pausiert. Nur in einer Wartungszeit ausfuehren.'
   );
   if (!confirmed) return;
 

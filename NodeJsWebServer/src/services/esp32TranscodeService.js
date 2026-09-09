@@ -1,4 +1,5 @@
 const { spawn } = require("child_process");
+const { getMediaThreads } = require("./mediaProcessService");
 
 const { getCameraConfigs } = require("../config/cameraConfig");
 const { publish, topics } = require("../mqttBroker");
@@ -6,6 +7,7 @@ const { publish, topics } = require("../mqttBroker");
 const bridges = new Map();
 
 let supervisorTimer = null;
+let stopping = false;
 
 function parseBoolean(value) {
   if (typeof value === "boolean") return value;
@@ -26,6 +28,7 @@ function parseJson(value) {
 }
 
 function toNumber(value, fallback) {
+  if (value == null || String(value).trim() === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -96,12 +99,22 @@ function getBridgeDestinationUrl(camera) {
   return `rtsp://${getInternalRtspHost()}:${getInternalRtspPort()}/${camera.streamPath}`;
 }
 
+function isRtspSource(value) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "rtsp:" || url.protocol === "rtsps:") && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, options = {}) {
   const detectedSourceFps = toNumber(sourceConfig.stream_fps, 0);
   const outputFps = toNumber(process.env.ESP32_TRANSCODE_OUTPUT_FPS, 0) || detectedSourceFps;
   const gopSize = toNumber(process.env.ESP32_TRANSCODE_GOP, 0) || (outputFps > 0 ? outputFps * 2 : 24);
   const crf = options.crf ?? toNumber(process.env.ESP32_TRANSCODE_CRF, 23);
   const bitrate = String(process.env.ESP32_TRANSCODE_BITRATE || "").trim();
+  const threads = String(getMediaThreads(process.env.ESP32_TRANSCODE_THREADS));
 
   const args = [
     "-nostdin",
@@ -111,6 +124,10 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     "-progress",
     "pipe:1",
     "-nostats",
+    "-threads",
+    threads,
+    "-filter_threads",
+    "1",
     "-use_wallclock_as_timestamps",
     "1",
     "-fflags",
@@ -130,6 +147,8 @@ function getBridgeArgs(sourceRtspUrl, destinationRtspUrl, sourceConfig = {}, opt
     "-an",
     "-c:v",
     options.codec || process.env.ESP32_TRANSCODE_CODEC || "libx264",
+    "-threads",
+    threads,
     "-preset",
     options.preset || process.env.ESP32_TRANSCODE_PRESET || "superfast",
     "-tune",
@@ -193,6 +212,7 @@ function ensureBridge(cameraId) {
     lastFrame: 0,
     lastOutputTimeUs: 0,
     progressBuffer: "",
+    progressAdvanced: false,
     lastPublishedSignature: "",
     lastPublishedAt: 0,
   };
@@ -245,6 +265,7 @@ function stopBridgeProcess(bridge, reason) {
 }
 
 function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
+  if (stopping) return;
   const ffmpegPath = getFfmpegPath();
   const sourceConfig = parseJson(getCameraTopicValue(camera, "config")) || {};
   const dfr1154Options = camera.kind === "dfr1154"
@@ -309,6 +330,7 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
 
   const child = spawn(ffmpegPath, args, {
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
   bridge.process = child;
@@ -318,23 +340,38 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   bridge.lastFrame = 0;
   bridge.lastOutputTimeUs = 0;
   bridge.progressBuffer = "";
+  bridge.progressAdvanced = false;
   bridge.restartCount += 1;
 
   child.stdout.on("data", (chunk) => {
+    if (bridge.process !== child) return;
     bridge.progressBuffer += String(chunk);
     const lines = bridge.progressBuffer.split(/\r?\n/);
-    bridge.progressBuffer = lines.pop() || "";
+    bridge.progressBuffer = (lines.pop() || "").slice(-16384);
     for (const line of lines) {
       const separator = line.indexOf("=");
       if (separator < 1) continue;
       const key = line.slice(0, separator);
       const value = line.slice(separator + 1);
-      if (key === "frame") bridge.lastFrame = toNumber(value, bridge.lastFrame);
-      if (key === "out_time_us") bridge.lastOutputTimeUs = toNumber(value, bridge.lastOutputTimeUs);
+      if (key === "frame") {
+        const frame = toNumber(value, bridge.lastFrame);
+        bridge.progressAdvanced ||= frame > bridge.lastFrame;
+        bridge.lastFrame = frame;
+      }
+      if (key === "out_time_us") {
+        const outputTime = toNumber(value, bridge.lastOutputTimeUs);
+        bridge.progressAdvanced ||= outputTime > bridge.lastOutputTimeUs;
+        bridge.lastOutputTimeUs = outputTime;
+      }
       if (key === "progress") {
-        bridge.lastProgressAt = Date.now();
-        bridge.state = value === "end" ? "stopping" : "running";
-        bridge.lastMessage = value === "end" ? "ffmpeg output ended" : "bridge running";
+        if (bridge.progressAdvanced) bridge.lastProgressAt = Date.now();
+        bridge.progressAdvanced = false;
+        if (value === "end") {
+          stopBridgeProcess(bridge, "ffmpeg output ended");
+        } else if (bridge.state !== "stopping") {
+          bridge.state = bridge.lastProgressAt ? "running" : "starting";
+          bridge.lastMessage = bridge.lastProgressAt ? "bridge running" : "waiting for first encoded frame";
+        }
       }
     }
   });
@@ -351,6 +388,8 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   });
 
   child.on("error", (error) => {
+    if (bridge.process !== child) return;
+    clearStopTimer(bridge);
     bridge.lastError = String(error?.message || error);
     bridge.lastMessage = `spawn failed: ${bridge.lastError}`;
     bridge.state = "error";
@@ -443,10 +482,17 @@ function evaluateBridge(camera) {
     return;
   }
 
+  if (!isRtspSource(sourceRtspUrl)) {
+    bridge.lastError = "invalid_rtsp_source_url";
+    stopBridgeProcess(bridge, bridge.lastError);
+    return;
+  }
+
   startBridgeProcess(bridge, camera, sourceRtspUrl, getBridgeDestinationUrl(camera));
 }
 
 function supervisorTick() {
+  if (stopping) return;
   const cameras = getCameraConfigs("localhost").filter(
     (camera) => camera.kind === "esp32" || camera.kind === "dfr1154"
   );
@@ -466,9 +512,24 @@ function supervisorTick() {
 
 function startEsp32TranscodeSupervisor() {
   if (supervisorTimer) return;
+  stopping = false;
   supervisorTick();
   supervisorTimer = setInterval(supervisorTick, getCheckIntervalMs());
   console.log("[ESP32-Bridge] supervisor started");
+}
+
+async function stopEsp32TranscodeSupervisor() {
+  stopping = true;
+  clearInterval(supervisorTimer);
+  supervisorTimer = null;
+  await Promise.all([...bridges.values()].map((bridge) => {
+    const child = bridge.process;
+    if (!child) return;
+    return new Promise((resolve) => {
+      child.once("close", resolve);
+      stopBridgeProcess(bridge, "server shutting down");
+    });
+  }));
 }
 
 function getEsp32BridgeSnapshot(cameraId) {
@@ -501,4 +562,5 @@ function getEsp32BridgeSnapshot(cameraId) {
 module.exports = {
   getEsp32BridgeSnapshot,
   startEsp32TranscodeSupervisor,
+  stopEsp32TranscodeSupervisor,
 };

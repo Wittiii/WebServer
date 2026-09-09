@@ -1,9 +1,8 @@
 const db = require("../database/db");
-const { publish } = require("../mqttBroker");
 
 const POLL_MS = 15000;
 let timer = null;
-let running = false;
+let runningTask = null;
 
 const latestValueReading = db.prepare(`
   SELECT value_text
@@ -169,6 +168,10 @@ function computeValueState(rule, readingValue, previousState) {
       return null;
     }
 
+    if (!(hysteresis > 0)) {
+      return Number(evaluatePlainComparison(readingValue, compareValue, operator));
+    }
+
     if (operator === ">" || operator === ">=") {
       const enter = operator === ">" ? currentNum > compareNum : currentNum >= compareNum;
       const leave = currentNum < compareNum - hysteresis;
@@ -190,7 +193,8 @@ function computeValueState(rule, readingValue, previousState) {
     return delta > hysteresis ? 1 : 0;
   }
 
-  return evaluatePlainComparison(readingValue, compareValue, operator);
+  const result = evaluatePlainComparison(readingValue, compareValue, operator);
+  return result === null ? null : Number(result);
 }
 
 async function publishAutomationActions(actions) {
@@ -200,6 +204,8 @@ async function publishAutomationActions(actions) {
 
   let sentCount = 0;
   let failedCount = 0;
+  // Loading the controller must not start MQTT listeners as a side effect.
+  const { publish } = require("../mqttBroker");
   for (const action of actions) {
     const topic = String(action.action_topic ?? action.actionTopic ?? "").trim();
     if (!topic) continue;
@@ -239,7 +245,8 @@ async function evaluateValueRule(rule, now) {
 
   if (entersCondition && !isCooldownActive(rule, now)) {
     const fired = await fireActions(rule.actions);
-    updateRuleAfterFire.run(currentState, fired ? nowIso : rule.last_fired_at, nowIso, rule.id);
+    // Keep a failed transition pending so the next poll can retry it.
+    if (fired) updateRuleAfterFire.run(currentState, nowIso, nowIso, rule.id);
     return;
   }
 
@@ -292,12 +299,9 @@ function loadActiveRules() {
   return [...rulesById.values()];
 }
 
-async function processRules() {
-  if (running) return;
-  running = true;
-
-  try {
-    const now = new Date();
+function processRules(now = new Date()) {
+  if (runningTask) return runningTask;
+  runningTask = (async () => {
     const rules = loadActiveRules();
 
     for (const rule of rules) {
@@ -312,9 +316,10 @@ async function processRules() {
         console.error("[automation] rule failed", rule.id, error);
       }
     }
-  } finally {
-    running = false;
-  }
+  })().finally(() => {
+    runningTask = null;
+  });
+  return runningTask;
 }
 
 function startAutomationEngine() {
@@ -329,4 +334,10 @@ function startAutomationEngine() {
   });
 }
 
-module.exports = { startAutomationEngine, publishAutomationActions };
+async function stopAutomationEngine() {
+  if (timer) clearInterval(timer);
+  timer = null;
+  await runningTask;
+}
+
+module.exports = { startAutomationEngine, stopAutomationEngine, processRules, publishAutomationActions };

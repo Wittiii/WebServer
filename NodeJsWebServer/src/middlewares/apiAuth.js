@@ -1,4 +1,5 @@
 function apiAuth(req, res, next) {
+  res.set('Cache-Control', 'no-store');
   if (req.session?.user) return next();
   return res.status(401).json({ ok: false, error: 'not_authenticated' });
 }

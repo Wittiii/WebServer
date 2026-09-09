@@ -1,12 +1,7 @@
 const db = require("../database/db");
 const { getBatteryEstimation } = require("./victronBatterySettingsService");
-
-function finite(value) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "string" && value.trim() === "") return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
+const { finiteNumber: finite, configuredNumber, isValidTimestamp } = require("./sensorReadingUtils");
+const { createRetentionCleanup } = require("./retentionCleanupService");
 
 function normalizeSoc(value) {
   const number = finite(value);
@@ -20,9 +15,9 @@ const configuredBaseTopic = String(
 const sensorTopic = String(
   process.env.VICTRON_MPPT_JSON_TOPIC || `${configuredBaseTopic}/victron/mppt/json`
 ).trim();
-const sampleIntervalMs = Math.max(0, Number(process.env.VICTRON_MPPT_SAMPLE_SECONDS || 10) * 1000);
-const staleAfterMs = Math.max(10000, Number(process.env.VICTRON_MPPT_STALE_SECONDS || 30) * 1000);
-const retentionDays = Math.max(1, Number(process.env.VICTRON_MPPT_RETENTION_DAYS || 365));
+const sampleIntervalMs = configuredNumber(process.env.VICTRON_MPPT_SAMPLE_SECONDS, 10) * 1000;
+const staleAfterMs = configuredNumber(process.env.VICTRON_MPPT_STALE_SECONDS, 30, 10) * 1000;
+const retentionDays = configuredNumber(process.env.VICTRON_MPPT_RETENTION_DAYS, 365, 1);
 
 const insertReading = db.prepare(`
   INSERT INTO victron_mppt_readings (
@@ -43,8 +38,10 @@ const upsertDailyYield = db.prepare(`
     first_reading_ms = MIN(first_reading_ms, excluded.first_reading_ms),
     last_reading_ms = MAX(last_reading_ms, excluded.last_reading_ms)
 `);
-const deleteOldReadings = db.prepare("DELETE FROM victron_mppt_readings WHERE received_at_ms < ?");
-const deleteOldDailyYields = db.prepare("DELETE FROM victron_daily_yields WHERE last_reading_ms < ?");
+const deleteOldReadings = db.prepare(`DELETE FROM victron_mppt_readings WHERE id IN (
+  SELECT id FROM victron_mppt_readings WHERE received_at_ms < ? ORDER BY received_at_ms LIMIT ?
+)`);
+const cleanupBatch = createRetentionCleanup(deleteOldReadings);
 const historyStatement = db.prepare(`
   SELECT
     CAST(received_at_ms / ? AS INTEGER) * ? AS timestamp,
@@ -111,13 +108,12 @@ const storeReading = db.transaction((reading) => {
 
 let currentReading = null;
 let currentStatus = null;
-let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms || 0;
-let lastCleanupAt = 0;
+let lastStoredAt = latestReading.get(sensorTopic)?.received_at_ms ?? null;
 const historyCache = new Map();
 let overviewStatsCache = null;
 
 function parseVictronPayload(topic, payload, receivedAt = Date.now()) {
-  if (topic !== sensorTopic) return null;
+  if (topic !== sensorTopic || !isValidTimestamp(receivedAt)) return null;
 
   let parsed;
   try {
@@ -164,11 +160,10 @@ function parseVictronPayload(topic, payload, receivedAt = Date.now()) {
 }
 
 function cleanupOldReadings(now) {
-  if (now - lastCleanupAt < 24 * 60 * 60 * 1000) return;
-  lastCleanupAt = now;
   const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
-  deleteOldReadings.run(cutoff);
-  deleteOldDailyYields.run(cutoff);
+  cleanupBatch(now, cutoff);
+  // Daily aggregates are the lifetime yield, not raw history. Retaining one
+  // small row per day prevents the total from shrinking after raw-data cleanup.
 }
 
 function ingestVictronMessage(topic, payload, receivedAt = Date.now()) {
@@ -180,7 +175,7 @@ function ingestVictronMessage(topic, payload, receivedAt = Date.now()) {
 
   currentReading = parsed.reading;
   cleanupOldReadings(receivedAt);
-  if (receivedAt - lastStoredAt < sampleIntervalMs) return true;
+  if (lastStoredAt !== null && receivedAt >= lastStoredAt && receivedAt - lastStoredAt < sampleIntervalMs) return true;
 
   const reading = parsed.reading;
   storeReading(reading);

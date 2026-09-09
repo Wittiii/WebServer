@@ -269,11 +269,18 @@ async function getTimelapse(req, res) {
   try {
     const overview = buildCameraOverview(config);
     const listing = await listTimelapseFiles(overview, config);
+    const requestedLimit = Number(req.query.limit);
+    const requestedOffset = Number(req.query.offset);
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.max(1, Math.min(500, Math.floor(requestedLimit))) : 200;
+    const offset = Number.isFinite(requestedOffset) && requestedOffset >= 0
+      ? Math.floor(requestedOffset) : 0;
     res.json({
       ok: true,
       cameraId,
       timelapse: overview.timelapse,
-      files: listing.safeFiles,
+      files: listing.safeFiles.slice(offset, offset + limit),
+      pagination: { offset, limit, total: listing.files.length, hasMore: offset + limit < listing.files.length },
       latestVideo: listing.latestVideo,
       latestImage: listing.latestImage,
       totals: {
@@ -309,7 +316,8 @@ async function buildTimelapse(req, res) {
       },
     });
   } catch (error) {
-    res.status(500).json({ ok: false, error: String(error?.message || error) });
+    const message = String(error?.message || error);
+    res.status(message === "timelapse_build_busy" ? 409 : 500).json({ ok: false, error: message });
   }
 }
 
@@ -341,7 +349,8 @@ async function deleteTimelapse(req, res) {
       },
     });
   } catch (error) {
-    res.status(500).json({ ok: false, error: String(error?.message || error) });
+    const message = String(error?.message || error);
+    res.status(message === "timelapse_build_busy" ? 409 : 500).json({ ok: false, error: message });
   }
 }
 
