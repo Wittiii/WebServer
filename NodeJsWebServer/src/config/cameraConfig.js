@@ -202,17 +202,18 @@ function createDfr1154CameraConfig(hostname, mediaConfig) {
         { key: "stream_enabled", label: "RTSP aktiv", type: "checkbox" },
         {
           key: "gainceiling",
-          label: "Maximale Verstaerkung",
+          label: "Maximale Verstaerkung (OV3660)",
           type: "select",
           section: "Sensorautomatik und Bildaufbereitung",
+          // These remain MQTT selection indices. DFR firmware maps them to
+          // OV3660 register limits; they must not be sent as raw sensor values.
           options: [
             { value: 0, label: "2x" },
             { value: 1, label: "4x" },
             { value: 2, label: "8x" },
-            { value: 3, label: "16x" },
+            { value: 3, label: "ca. 16x (OV3660-Standard)" },
             { value: 4, label: "32x" },
-            { value: 5, label: "64x" },
-            { value: 6, label: "128x" },
+            { value: 5, label: "ca. 64x (Maximum)" },
           ],
         },
         { key: "awb", label: "Automatischer Weissabgleich", type: "checkbox" },

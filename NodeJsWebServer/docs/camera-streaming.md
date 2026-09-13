@@ -120,6 +120,27 @@ Die Speicherbegrenzung wird ausschliesslich mit `CAMERA_TIMELAPSE_TOTAL_LIMIT_GB
 
 ## MQTT-Steuerung und Wiederanlauf
 
+### DFR1154: OV3660-Verstaerkungsgrenze
+
+Fuer den Nachtsicht-Fix wird DFR-Firmware `2026.09.12-dfr-ov3660-gain1` oder
+neuer benoetigt. Ein Server-Update allein behebt die falsche Sensoransteuerung
+in alter Firmware nicht. Die DFR-Auswahl **Maximale Verstaerkung (OV3660)**
+bietet die MQTT-Indizes 0..5 an (2x, 4x, 8x, ca. 16x/Standard, 32x, ca. 64x).
+Die nicht unterstuetzte Option 128x wurde entfernt. Die API lehnt andere Werte
+ab; rohe Registerwerte wie 248 gehoeren nicht in `gainceiling`-Befehle.
+
+Die Firmware wandelt diese Indizes in die Sensorwerte 32/64/128/248/512/1023 um
+und meldet den Zielwert zusaetzlich als `gainceiling_raw` in `status/config`.
+Der fruehere gespeicherte Defaultindex 0 wird beim ersten Start der korrigierten
+Firmware einmalig zu Index 3. IR-Modus, Aufloesung und andere Einstellungen
+bleiben bestehen; zum Test muessen AGC und AEC aktiviert sein.
+
+Diese Server-Aenderung betrifft nur die DFR-Bedienauswahl. Sie erfordert keine
+Datenbankmigration und fuehrt weder neue Abfragen noch geaenderte
+Stream-/Sensorintervalle ein.
+
+### Befehle und Wiederanlauf
+
 Der Webserver sendet Kameraeinstellungen mit QoS 1 an `camera/<id>/cmd/set`. Jede Anfrage enthaelt
 eine Request-ID. ESP32-CAM und DFR1154 melden das Ergebnis unter
 `camera/<id>/status/command/*` zurueck und speichern erfolgreiche Einstellungen in NVS.
