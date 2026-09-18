@@ -8,7 +8,7 @@ const sendBtn = document.getElementById('mqtt-send');
 function setStatus(text, isError = false) {
   if (!statusEl) return;
   statusEl.textContent = text;
-  statusEl.style.color = isError ? 'crimson' : 'green';
+  statusEl.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 async function publishMqtt(topic, payload) {
   const res = await fetch('/api/mqtt/publish', {
@@ -23,29 +23,48 @@ async function publishMqtt(topic, payload) {
 }
 
 
-async function fetchReadings(limit, includeFilters = true) {
+async function fetchReadings(limit, includeFilters = true, chart = false, signal) {
   const obj = getSelectedObject();
   if (!obj) return [];
 
   const params = new URLSearchParams();
   params.set('limit', String(limit));
+  if (chart) params.set('view', 'chart');
   if (includeFilters) {
     const key = getSelectedKey();
     const range = getDateRange();
+    if (range.from && range.to && range.from > range.to) throw new Error('„Von“ muss vor „Bis“ liegen.');
     if (key) params.set('key', key);
     if (range.from) params.set('from', range.from);
     if (range.to) params.set('to', range.to);
   }
 
-  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`);
-  if (!res.ok) throw new Error('Fehler beim Laden');
-  const list = await res.json();
+  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`, { signal });
+  if (res.status === 401 || res.status === 403) throw new Error('Bitte erneut anmelden. Deine Sitzung ist abgelaufen.');
+  if (!res.ok) throw new Error(`Messwerte konnten nicht geladen werden (HTTP ${res.status}). Bitte erneut versuchen.`);
+  const list = await res.json().catch(() => { throw new Error('Der Server hat keine lesbaren Messwerte geliefert. Bitte erneut versuchen.'); });
+  if (chart) {
+    return HydroChart.normalizeChartResponse(list, limit);
+  }
   return Array.isArray(list) ? list : [];
 }
 
+let chartRequestController = null;
 async function loadReadings() {
+  chartRequestController?.abort();
+  const controller = new AbortController();
+  chartRequestController = controller;
+  const graphStatus = document.getElementById('graph-status');
+  const retry = document.getElementById('graph-retry');
+  retry.hidden = true;
+  graphStatus.classList.remove('refresh-error');
+  chartCanvas?.setAttribute('aria-busy', 'true');
+  lastReadingsCache = [];
+  if (exportCsvBtn) exportCsvBtn.disabled = true;
   const obj = getSelectedObject();
   if (!obj) {
+    chartCanvas?.setAttribute('aria-busy', 'false');
+    graphStatus.textContent = 'Bitte zuerst ein Objekt auswählen.';
     drawChart([]);
     lastReadingsCache = [];
     chartDataCache = [];
@@ -54,9 +73,17 @@ async function loadReadings() {
   }
 
   try {
-    // A few thousand points are enough for the canvas. Loading the complete
-    // sensor archive would block both the Raspberry Pi and the browser.
-    const list = await fetchReadings(2000, true);
+    graphStatus.textContent = 'Zeitraum wird geladen …';
+    const result = await fetchReadings(2000, true, true, controller.signal);
+    if (controller !== chartRequestController) return;
+    const list = result.readings;
+    const coverage = result.from && result.to
+      ? `${new Date(result.from).toLocaleString()} – ${new Date(result.to).toLocaleString()}` : '';
+    graphStatus.textContent = result.legacy
+      ? `${list.length} Messwerte im bisherigen Serverformat${coverage ? ` · ${coverage}` : ''}. ${result.possiblyTruncated ? 'Die Liste ist möglicherweise auf die neuesten Werte gekürzt. ' : ''}Für die vollständige Zeitraum-Ansicht den Server aktualisieren und neu starten.`
+      : result.sampled
+      ? `${list.length} von ${result.total} Messwerten als Stichprobe über den gesamten Zeitraum (${coverage}). Kurze Spitzen können fehlen; für Details Zeitraum eingrenzen. CSV enthält die angezeigte Stichprobe.`
+      : list.length ? `${list.length} Messwerte · ${coverage}` : 'Keine Messwerte im gewählten Zeitraum.';
 
     if (list.length === 0) {
       drawChart([]);
@@ -71,12 +98,19 @@ async function loadReadings() {
     chartHoverIndex = null;
     drawChart(ordered);
     lastReadingsCache = list;
+    if (exportCsvBtn) exportCsvBtn.disabled = false;
     checkThresholds(list);
   } catch (err) {
+    if (controller !== chartRequestController || err.name === 'AbortError') return;
+    graphStatus.textContent = err.message || 'Messwerte konnten nicht geladen werden.';
+    graphStatus.classList.add('refresh-error');
+    retry.hidden = false;
     drawChart([]);
     lastReadingsCache = [];
     chartDataCache = [];
     chartHoverIndex = null;
+  } finally {
+    if (controller === chartRequestController) chartCanvas?.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -246,25 +280,31 @@ const AUTOMATION_WEEKDAY_LABELS = {
 function setObjectStatus(text, isError = false) {
   if (!objectStatus) return;
   objectStatus.textContent = text;
-  objectStatus.style.color = isError ? 'crimson' : 'green';
+  objectStatus.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 
 function setConfigStatus(text, isError = false) {
   if (!configStatus) return;
   configStatus.textContent = text;
-  configStatus.style.color = isError ? 'crimson' : 'green';
+  configStatus.style.color = isError ? 'var(--danger)' : 'var(--success)';
+}
+
+function setKeyStatus(text, isError = false) {
+  const status = document.getElementById('key-config-status');
+  status.textContent = text;
+  status.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 
 function setReadingsStatus(text, isError = false) {
   if (!readingsStatus) return;
   readingsStatus.textContent = text;
-  readingsStatus.style.color = isError ? 'crimson' : 'green';
+  readingsStatus.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 
 function setAutomationStatus(text, isError = false) {
   if (!automationStatus) return;
   automationStatus.textContent = text;
-  automationStatus.style.color = isError ? 'crimson' : 'green';
+  automationStatus.style.color = isError ? 'var(--danger)' : 'var(--success)';
 }
 
 function getThresholdKey() {
@@ -618,6 +658,7 @@ function drawChart(readings) {
   const unit = getSelectedKeyUnit();
 
   if (!Array.isArray(readings) || readings.length === 0) {
+    document.getElementById('chart-point-detail').textContent = 'Keine Messwerte zum Ablesen vorhanden.';
     chartMeta = null;
     hideChartTooltip();
     ctx.fillStyle = '#94a3b8';
@@ -630,11 +671,16 @@ function drawChart(readings) {
   const values = valuesByIndex.filter((v) => Number.isFinite(v));
 
   if (values.length === 0) {
+    document.getElementById('chart-point-detail').textContent = 'Dieser Messwert enthält keine numerischen Daten.';
     chartMeta = null;
     hideChartTooltip();
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('Keine numerischen Werte', 12, 20);
     return;
+  }
+
+  if (chartHoverIndex === null) {
+    document.getElementById('chart-point-detail').textContent = 'Tippe auf den Graphen oder nutze die Pfeiltasten, um einen Messwert abzulesen.';
   }
 
   let min = Math.min(...values);
@@ -858,6 +904,10 @@ function getUnitForKey(key) {
 }
 
 function setKeyFormMode(editing, keyObj) {
+  if (editing) {
+    document.getElementById('key-editor').open = true;
+    requestAnimationFrame(() => keyInput?.focus());
+  }
   if (keySave) keySave.textContent = editing ? 'Speichern' : 'Hinzufuegen';
   if (keyCancel) keyCancel.style.display = editing ? 'inline-block' : 'none';
   if (!editing) {
@@ -884,8 +934,17 @@ async function fetchKeys(objectId) {
   return Array.isArray(list) ? list : [];
 }
 
+let keyLoadVersion = 0;
 async function loadKeys(preserveSelection = true) {
+  const version = ++keyLoadVersion;
   const obj = getSelectedObject();
+  const selected = preserveSelection ? getSelectedKey() : '';
+  chartRequestController?.abort();
+  lastReadingsCache = [];
+  chartDataCache = [];
+  drawChart([]);
+  if (exportCsvBtn) exportCsvBtn.disabled = true;
+  keySelect.disabled = true;
   if (!obj) {
     keysCache = [];
     renderKeyList([]);
@@ -893,15 +952,17 @@ async function loadKeys(preserveSelection = true) {
     renderAutomationKeyOptions('');
     drawChart([]);
     setKeyFormMode(false);
+    document.getElementById('graph-status').textContent = 'Lege zuerst ein Objekt an, um Messwerte anzuzeigen.';
     return;
   }
 
   try {
+    document.getElementById('graph-status').textContent = 'Messwerte für das gewählte Objekt werden geladen …';
     const list = await fetchKeys(obj.id);
+    if (version !== keyLoadVersion) return;
     keysCache = list;
     renderKeyList(list);
 
-    const selected = preserveSelection ? getSelectedKey() : '';
     const nextKey = selected && list.some((k) => k.value_key === selected)
       ? selected
       : (list[0]?.value_key || '');
@@ -913,7 +974,14 @@ async function loadKeys(preserveSelection = true) {
     renderAutomationKeyOptions();
     await loadReadings();
   } catch (err) {
+    if (version !== keyLoadVersion) return;
+    keysCache = [];
+    renderKeySelect([], '');
+    document.getElementById('graph-status').textContent = err.message;
+    document.getElementById('graph-retry').hidden = false;
     if (keyList) keyList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
+  } finally {
+    if (version === keyLoadVersion) keySelect.disabled = false;
   }
 }
 

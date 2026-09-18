@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
+  <link rel="stylesheet" href="/pages/experience.css">
 </head>
 <body class="theme-operations page-dashboard">
   <div id="navbar"></div>
@@ -12,27 +13,30 @@
   <header class="hero">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <h1>IoT Dashboard</h1>
+        <p class="eyebrow">Smart IoT / Dashboard</p><h1>IoT Dashboard</h1><p class="hero-text">Geräte, Messwerte und Serverstatus auf einen Blick.</p>
       </div>
     </div>
   </header>
 
   <main class="container page-shell dashboard-shell">
     <div class="dashboard-main">
-      <div id="broker-summary" class="grid-2 summary-grid"></div>
+      <div class="dashboard-refresh-bar">
+        <p id="dashboard-refresh-status" role="status">Daten werden geladen …</p>
+        <button id="dashboard-refresh" type="button" class="btn-secondary">Jetzt aktualisieren</button>
+      </div>
 
       <div class="grid-3">
         <div class="stats-card">
-          <h3>Broker Status</h3>
-          <div class="stats-val"><span class="pulse-online"></span>ONLINE</div>
+          <h3>Datenabruf</h3>
+          <div class="stats-val" id="dashboard-connection">LÄDT</div>
         </div>
         <div class="stats-card">
           <h3>Aktive Clients</h3>
-          <div class="stats-val" id="stats-clients-count">0</div>
+          <div class="stats-val" id="stats-clients-count">–</div>
         </div>
         <div class="stats-card">
           <h3>Erfasste Topics</h3>
-          <div class="stats-val" id="stats-topics-count">0</div>
+          <div class="stats-val" id="stats-topics-count">–</div>
         </div>
       </div>
 
@@ -65,28 +69,36 @@
       <div class="grid-2 dashboard-columns">
         <section id="mqtt-clients" class="panel">
           <h2>MQTT Clients</h2>
+          <div class="dashboard-filters">
+            <label for="client-search">Client oder letztes Topic suchen</label>
+            <input id="client-search" type="search" placeholder="Name oder Topic …" aria-controls="client-list">
+            <label for="client-status-filter">Verbindung</label>
+            <select id="client-status-filter" aria-controls="client-list"><option value="all">Alle Clients</option><option value="online">Nur online</option><option value="offline">Nur offline</option></select>
+            <p id="client-result-count" role="status"></p>
+          </div>
           <ul id="client-list" class="readings-list"></ul>
         </section>
 
         <section id="mqtt-topics" class="panel">
           <h2>MQTT Topics</h2>
+          <div class="dashboard-filters">
+            <label for="topic-search">Topic oder Nachrichteninhalt suchen</label>
+            <input id="topic-search" type="search" placeholder="Pfad oder Messwert …" aria-controls="topic-list">
+            <div class="inline-actions"><button id="topics-expand" type="button" class="btn-secondary">Alle öffnen</button><button id="topics-collapse" type="button" class="btn-secondary">Alle schließen</button></div>
+            <p id="topic-result-count" role="status"></p>
+          </div>
           <ul id="topic-list" class="mqtt-topic-tree"></ul>
         </section>
       </div>
-
-      <section id="dashboard-trend" class="panel">
-        <h2>Trenddiagramm</h2>
-        <canvas id="dashboard-trend-chart" width="900" height="260" class="readings-chart"></canvas>
-      </section>
     </div>
 
     <aside class="dashboard-rail">
       <section id="dashboard-quick-board" class="panel">
         <h2>Schnellzugriff</h2>
-        <ul id="quick-widget-list" class="quick-widget-list"></ul>
+        <ul id="quick-widget-list" class="quick-widget-list" aria-live="polite"></ul>
       </section>
 
-      <section id="dashboard-quick-builder" class="panel">
+      <section id="dashboard-quick-builder" class="panel" data-collapsed="true">
         <h2>Karten verwalten</h2>
         <ul id="quick-widget-manage-list" class="quick-manage-list"></ul>
         <h3>Karte anlegen oder bearbeiten</h3>

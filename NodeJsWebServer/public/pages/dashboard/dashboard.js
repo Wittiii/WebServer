@@ -1,5 +1,6 @@
 import { initDashboardOverview } from "./dashboard-overview.js";
 import { escapeHtml } from "./dashboard-utils.js";
+import { fetchDashboardJson } from "./dashboard-data.mjs";
 
 const widgetForm = document.getElementById("quick-widget-form");
 const widgetTypeEl = document.getElementById("quick-widget-type");
@@ -21,6 +22,17 @@ let widgetStates = new Map();
 let widgetFeedback = new Map();
 const objectMetaCache = new Map();
 let widgetRefreshInFlight = false;
+const pendingCommands = new Set();
+let detailRequest = 0;
+let widgetMutationInFlight = false;
+let quickBoardReady = false;
+
+function setMutationBusy(busy) {
+  widgetMutationInFlight = busy;
+  widgetForm?.setAttribute("aria-busy", String(busy));
+  const submit = widgetForm?.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = busy;
+}
 
 function setWidgetStatus(text, isError = false) {
   if (!widgetStatusEl) return;
@@ -33,23 +45,18 @@ function createWidgetId() {
 }
 
 async function saveWidgets() {
-  const response = await fetch("/dashboard/widgets", {
+  const data = await fetchDashboardJson("/dashboard/widgets", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ widgets }),
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.ok !== true) {
-    throw new Error(data.error || `HTTP ${response.status}`);
+  if (data.ok !== true) {
+    throw new Error(data.error || "Speichern fehlgeschlagen");
   }
 }
 
 async function loadStoredWidgets() {
-  const response = await fetch("/dashboard/widgets");
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  const data = await response.json();
+  const data = await fetchDashboardJson("/dashboard/widgets");
   return Array.isArray(data?.widgets) ? data.widgets : [];
 }
 
@@ -64,14 +71,12 @@ function openQuickBuilder() {
 }
 
 async function fetchObjects() {
-  const response = await fetch("/api/objects");
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const list = await response.json();
+  const list = await fetchDashboardJson("/api/objects");
   return Array.isArray(list) ? list : [];
 }
 
 async function ensureObjectMeta(objectId) {
-  if (!Number.isFinite(objectId)) {
+  if (!Number.isFinite(objectId) || objectId <= 0) {
     return { keys: [], commands: [] };
   }
 
@@ -80,12 +85,15 @@ async function ensureObjectMeta(objectId) {
   }
 
   const metaPromise = Promise.all([
-    fetch(`/api/objects/${objectId}/keys`).then((r) => (r.ok ? r.json() : [])),
-    fetch(`/api/objects/${objectId}/commands`).then((r) => (r.ok ? r.json() : { commands: [] })),
+    fetchDashboardJson(`/api/objects/${objectId}/keys`),
+    fetchDashboardJson(`/api/objects/${objectId}/commands`),
   ]).then(([keys, commandPayload]) => ({
     keys: Array.isArray(keys) ? keys : [],
     commands: Array.isArray(commandPayload?.commands) ? commandPayload.commands : [],
-  }));
+  })).catch((error) => {
+    objectMetaCache.delete(objectId);
+    throw error;
+  });
 
   objectMetaCache.set(objectId, metaPromise);
   return metaPromise;
@@ -112,7 +120,20 @@ async function populateDetailOptions(preferredWidget = null) {
 
   const objectId = Number(widgetObjectEl.value);
   const type = widgetTypeEl.value;
-  const meta = await ensureObjectMeta(objectId);
+  const request = ++detailRequest;
+  widgetDetailEl.disabled = true;
+  widgetDetailEl.innerHTML = '<option value="">Optionen werden geladen …</option>';
+  let meta;
+  try {
+    meta = await ensureObjectMeta(objectId);
+  } catch (error) {
+    if (request !== detailRequest) return;
+    widgetDetailEl.innerHTML = '<option value="">Laden fehlgeschlagen – Objekt erneut wählen</option>';
+    throw error;
+  } finally {
+    if (request === detailRequest) widgetDetailEl.disabled = false;
+  }
+  if (request !== detailRequest) return;
 
   widgetDetailLabelEl.textContent = type === "command" ? "Befehl" : "Messwert";
 
@@ -213,16 +234,14 @@ async function resolveWidgetState(widget) {
 
   try {
     const params = new URLSearchParams({ key: widget.keyName, limit: "1" });
-    const response = await fetch(`/api/objects/${widget.objectId}/readings?${params.toString()}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const list = await response.json();
+    const list = await fetchDashboardJson(`/api/objects/${widget.objectId}/readings?${params.toString()}`);
     const reading = Array.isArray(list) ? list[0] : null;
 
     return {
       kind: "value",
       title: widget.title || widget.keyLabel || widget.keyName,
       objectName: widget.objectName || "Objekt",
-      value: reading?.value_text || "-",
+      value: reading?.value_text ?? "-",
       unit: widget.unit || "",
       timestamp: reading?.created_at ? new Date(reading.created_at).toLocaleString() : "Noch kein Wert",
       topic: reading?.topic || "",
@@ -254,20 +273,21 @@ function renderWidgets() {
   widgetListEl.innerHTML = widgets
     .map((widget) => {
       const state = widgetStates.get(widget.id) || {};
-      const statusLine = state.status
-        ? `<span class="${state.status.isError ? "quick-widget-error" : "quick-widget-ok"}">${escapeHtml(state.status.text)}</span>`
+      const feedback = widgetFeedback.get(widget.id) || state.status;
+      const statusLine = feedback
+        ? `<span class="${feedback.isError ? "quick-widget-error" : "quick-widget-ok"}">${escapeHtml(feedback.text)}</span>`
         : "";
 
       if (state.kind === "command") {
         return `
-          <li class="quick-widget-card" data-widget-id="${widget.id}">
+          <li class="quick-widget-card" data-widget-id="${escapeHtml(widget.id)}">
             <div class="quick-widget-top">
               <div class="quick-widget-title">
                 <strong>${escapeHtml(state.title || "Befehl")}</strong>
                 <span>${escapeHtml(state.objectName || "")}</span>
               </div>
             </div>
-            <button type="button" class="quick-widget-run" data-action="run">Senden</button>
+            <button type="button" class="quick-widget-run" data-action="run" ${pendingCommands.has(widget.id) ? "disabled" : ""}>${pendingCommands.has(widget.id) ? "Wird gesendet …" : "Senden"}</button>
             ${statusLine}
           </li>
         `;
@@ -275,14 +295,14 @@ function renderWidgets() {
 
       const unit = state.unit ? ` ${escapeHtml(state.unit)}` : "";
       return `
-        <li class="quick-widget-card" data-widget-id="${widget.id}">
+        <li class="quick-widget-card" data-widget-id="${escapeHtml(widget.id)}">
           <div class="quick-widget-top">
             <div class="quick-widget-title">
               <strong>${escapeHtml(state.title || "Messwert")}</strong>
               <span>${escapeHtml(state.objectName || "")}</span>
             </div>
           </div>
-          <div class="quick-widget-value">${escapeHtml(state.value || "-")}${unit}</div>
+          <div class="quick-widget-value">${escapeHtml(state.value ?? "-")}${unit}</div>
           <div class="quick-widget-meta">${escapeHtml(state.timestamp || "")}</div>
           ${statusLine}
         </li>
@@ -325,6 +345,7 @@ async function refreshWidgetStates() {
 }
 
 async function moveWidget(widgetId, direction) {
+  if (widgetMutationInFlight) return;
   const currentIndex = widgets.findIndex((widget) => widget.id === widgetId);
   if (currentIndex < 0) return;
 
@@ -332,6 +353,7 @@ async function moveWidget(widgetId, direction) {
   if (nextIndex < 0 || nextIndex >= widgets.length) return;
 
   const previousWidgets = widgets.slice();
+  setMutationBusy(true);
   const [moved] = widgets.splice(currentIndex, 1);
   widgets.splice(nextIndex, 0, moved);
   try {
@@ -341,6 +363,8 @@ async function moveWidget(widgetId, direction) {
     widgets = previousWidgets;
     setWidgetStatus(`Reihenfolge konnte nicht gespeichert werden: ${error.message || error}`, true);
     await refreshWidgetStates();
+  } finally {
+    setMutationBusy(false);
   }
 }
 
@@ -362,10 +386,13 @@ function startWidgetEdit(widgetId) {
 
 async function publishWidgetCommand(widgetId) {
   const widget = getWidgetById(widgetId);
-  if (!widget || widget.type !== "command") return;
+  if (!widget || widget.type !== "command" || pendingCommands.has(widgetId)) return;
+  pendingCommands.add(widgetId);
+  storeWidgetFeedback(widgetId, "Befehl wird übertragen …");
+  renderWidgets();
 
   try {
-    const response = await fetch("/api/mqtt/publish", {
+    const data = await fetchDashboardJson("/api/mqtt/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -373,20 +400,24 @@ async function publishWidgetCommand(widgetId) {
         payload: widget.commandPayload,
       }),
     });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok !== true) {
-      throw new Error(data.error || `HTTP ${response.status}`);
+    if (data.ok !== true) {
+      throw new Error(data.error || "Übertragung fehlgeschlagen");
     }
-    storeWidgetFeedback(widgetId, "Gesendet");
+    storeWidgetFeedback(widgetId, `An Broker gesendet · ${new Date().toLocaleTimeString()}`);
   } catch (error) {
-    storeWidgetFeedback(widgetId, error.message || "Fehler", true);
+    const uncertain = error.name === "TimeoutError" || error instanceof TypeError;
+    storeWidgetFeedback(widgetId, uncertain
+      ? "Übertragung nicht bestätigt. Gerätezustand vor erneutem Senden prüfen."
+      : error.message || "Fehler", true);
+  } finally {
+    pendingCommands.delete(widgetId);
+    renderWidgets();
   }
-
-  await refreshWidgetStates();
 }
 
 widgetForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (widgetMutationInFlight || widgetDetailEl.disabled) return;
   setWidgetStatus("");
 
   const objectId = Number(widgetObjectEl.value);
@@ -431,6 +462,7 @@ widgetForm?.addEventListener("submit", async (event) => {
 
   const existingIndex = widgets.findIndex((widget) => widget.id === widgetId);
   const previousWidgets = widgets.slice();
+  setMutationBusy(true);
   if (existingIndex >= 0) {
     widgets.splice(existingIndex, 1, nextWidget);
   } else {
@@ -446,10 +478,13 @@ widgetForm?.addEventListener("submit", async (event) => {
     widgets = previousWidgets;
     setWidgetStatus(`Schnellkarte konnte nicht gespeichert werden: ${error.message || error}`, true);
     await refreshWidgetStates();
+  } finally {
+    setMutationBusy(false);
   }
 });
 
 widgetCancelEl?.addEventListener("click", () => {
+  if (widgetMutationInFlight) return;
   resetWidgetForm();
   setWidgetStatus("");
 });
@@ -475,12 +510,14 @@ async function handleWidgetAction(event) {
   if (!widgetId) return;
 
   const action = button.dataset.action;
+  if (action !== "run" && widgetMutationInFlight) return;
   if (action === "edit") {
     startWidgetEdit(widgetId);
     return;
   }
 
   if (action === "delete") {
+    setMutationBusy(true);
     const previousWidgets = widgets.slice();
     widgets = widgets.filter((widget) => widget.id !== widgetId);
     widgetFeedback.delete(widgetId);
@@ -492,6 +529,8 @@ async function handleWidgetAction(event) {
       widgets = previousWidgets;
       setWidgetStatus(`Loeschen fehlgeschlagen: ${error.message || error}`, true);
       await refreshWidgetStates();
+    } finally {
+      setMutationBusy(false);
     }
     return;
   }
@@ -517,14 +556,20 @@ widgetListEl?.addEventListener("click", handleWidgetAction);
 widgetManageListEl?.addEventListener("click", handleWidgetAction);
 
 async function initQuickBoard() {
+  quickBoardReady = false;
+  const retry = document.getElementById("quick-widget-retry");
+  if (retry) retry.disabled = true;
   try {
     widgets = await loadStoredWidgets();
     await loadWidgetObjects();
     resetWidgetForm();
     openQuickBoard();
     await refreshWidgetStates();
+    quickBoardReady = true;
   } catch (error) {
     setWidgetStatus(`Schnellzugriff konnte nicht geladen werden: ${error.message || error}`, true);
+    widgetListEl.innerHTML = `<li class="quick-widget-error">${escapeHtml(error.message || "Laden fehlgeschlagen")} <button type="button" id="quick-widget-retry" class="btn-secondary">Erneut laden</button></li>`;
+    document.getElementById("quick-widget-retry").addEventListener("click", initQuickBoard);
   }
 }
 
@@ -532,6 +577,6 @@ initDashboardOverview();
 initQuickBoard();
 
 setInterval(() => {
-  if (document.hidden) return;
+  if (document.hidden || !quickBoardReady) return;
   refreshWidgetStates().catch(() => {});
 }, 15000);

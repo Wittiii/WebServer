@@ -46,6 +46,11 @@ const timelapseVideoHintEl = document.getElementById("timelapse-video-hint");
 let overviewState = null;
 let activeCameraId = null;
 let settingsDraftState = { cameraId: null, dirty: false, values: {}, touched: new Set() };
+const settingsDrafts = new Map();
+let cameraOperationInFlight = false;
+let archiveRequestVersion = 0;
+const overviewStatusEl = document.getElementById('camera-overview-status');
+const overviewRefreshEl = document.getElementById('camera-overview-refresh');
 const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
@@ -53,7 +58,29 @@ let timelapseState = null;
 let timelapseRefreshInFlight = false;
 let overviewRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
-let timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false";
+let timelapseCollapsed = true;
+try { timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false"; } catch {}
+
+function bindCameraAction(element, eventName, handler) {
+  element?.addEventListener(eventName, async (event) => {
+    if (eventName === 'submit') event.preventDefault();
+    if (cameraOperationInFlight) return;
+    cameraOperationInFlight = true;
+    const controls = [...document.querySelectorAll('.camera-picker button, [data-camera-action], #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh')];
+    const previous = controls.map((control) => [control, control.disabled]);
+    controls.forEach((control) => { control.disabled = true; });
+    element.setAttribute('aria-busy', 'true');
+    try {
+      await handler(event);
+    } finally {
+      previous.forEach(([control, disabled]) => { if (control.isConnected) control.disabled = disabled; });
+      element.setAttribute('aria-busy', 'false');
+      cameraOperationInFlight = false;
+      overviewRefreshEl.disabled = overviewRefreshInFlight;
+      renderPicker();
+    }
+  });
+}
 
 function getCameras() {
   return overviewState?.cameras || [];
@@ -89,6 +116,7 @@ function getReportedFieldValue(camera, field) {
 }
 
 function resetSettingsDraft(cameraId = null) {
+  settingsDrafts.delete(cameraId);
   settingsDraftState = { cameraId, dirty: false, values: {}, touched: new Set() };
 }
 
@@ -114,6 +142,17 @@ function captureSettingsDraft(target = null) {
     values,
     touched,
   };
+  settingsDrafts.set(camera.cameraId, settingsDraftState);
+  if (settingsFeedbackState.cameraId === camera.cameraId && settingsFeedbackState.isError) {
+    setSettingsFeedback(camera.cameraId, '');
+  }
+  syncSettingsStatus(camera);
+  const pickerButton = [...pickerEl.querySelectorAll('[data-camera-id]')].find((button) => button.dataset.cameraId === camera.cameraId);
+  if (pickerButton && !pickerButton.querySelector('small')) {
+    const badge = document.createElement('small');
+    badge.textContent = 'Entwurf';
+    pickerButton.append(badge);
+  }
 }
 
 function setPendingCameraSettings(cameraId, settings, requestId = null) {
@@ -240,6 +279,11 @@ function syncSettingsStatus(camera) {
     settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
   }
 
+  if (settingsDraftState.cameraId === camera.cameraId && settingsDraftState.dirty) {
+    setStatusLine(settingsStatusEl, 'Ungesendete Änderungen. Der Entwurf bleibt beim Kamerawechsel erhalten, bis du diese Seite verlässt.');
+    return;
+  }
+
   setStatusLine(settingsStatusEl, "");
 }
 
@@ -315,8 +359,11 @@ function renderPicker() {
           type="button"
           class="btn btn-secondary camera-picker-btn ${camera.cameraId === getActiveCamera()?.cameraId ? "camera-picker-active" : ""}"
           data-camera-id="${escapeHtml(camera.cameraId)}"
+          aria-pressed="${camera.cameraId === getActiveCamera()?.cameraId}"
+          ${cameraOperationInFlight ? 'disabled' : ''}
         >
           ${escapeHtml(camera.label)}
+          ${settingsDrafts.has(camera.cameraId) ? '<small>Entwurf</small>' : ''}
         </button>
       `
     )
@@ -324,8 +371,10 @@ function renderPicker() {
 
   pickerEl.querySelectorAll("[data-camera-id]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (cameraOperationInFlight || activeCameraId === button.dataset.cameraId) return;
+      archiveRequestVersion += 1;
       activeCameraId = button.dataset.cameraId;
-      resetSettingsDraft(activeCameraId);
+      settingsDraftState = settingsDrafts.get(activeCameraId) || { cameraId: activeCameraId, dirty: false, values: {}, touched: new Set() };
       if (timelapseState?.cameraId !== activeCameraId) timelapseState = null;
       renderActiveCamera({ forceSettings: true });
 
@@ -334,9 +383,11 @@ function renderPicker() {
         try {
           setStatusLine(timelapseStatusEl, `Lade Zeitraffer fuer ${selectedCamera.label}...`);
           await loadTimelapse(selectedCamera.cameraId);
+          if (activeCameraId !== selectedCamera.cameraId) return;
           renderTimelapseSection(selectedCamera);
           setStatusLine(timelapseStatusEl, "Zeitrafferdaten geladen.");
         } catch (error) {
+          if (activeCameraId !== selectedCamera.cameraId) return;
           setStatusLine(timelapseStatusEl, `Zeitraffer konnte nicht geladen werden: ${error.message}`, true);
         }
       }
@@ -498,7 +549,7 @@ function setTimelapsePanelCollapsed(isCollapsed, { persist = true } = {}) {
   timelapseToggleEl.textContent = timelapseCollapsed ? "Einblenden" : "Ausblenden";
   timelapseToggleEl.setAttribute("aria-expanded", String(!timelapseCollapsed));
   if (persist) {
-    localStorage.setItem(TIMELAPSE_COLLAPSED_STORAGE_KEY, String(timelapseCollapsed));
+    try { localStorage.setItem(TIMELAPSE_COLLAPSED_STORAGE_KEY, String(timelapseCollapsed)); } catch {}
   }
 }
 
@@ -580,7 +631,7 @@ function renderTimelapseData() {
     .join("");
 
   timelapseFileListEl.querySelectorAll("[data-timelapse-offset]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    bindCameraAction(button, "click", async () => {
       const camera = getActiveCamera();
       if (!camera) return;
       button.disabled = true;
@@ -595,7 +646,7 @@ function renderTimelapseData() {
   });
 
   timelapseFileListEl.querySelectorAll("[data-timelapse-delete]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    bindCameraAction(button, "click", async () => {
       const activeCamera = getActiveCamera();
       if (!activeCamera) return;
 
@@ -689,7 +740,8 @@ function fieldCurrentValue(camera, field) {
 
 function renderSettingsForm(camera, { force = false } = {}) {
   if (!settingsForm || !camera) return;
-  if (settingsForm.dataset.cameraId === camera.cameraId && settingsDraftState.dirty && !force) {
+  if (settingsForm.dataset.cameraId === camera.cameraId && !force &&
+      (settingsDraftState.dirty || settingsForm.contains(document.activeElement))) {
     return;
   }
 
@@ -754,7 +806,7 @@ function renderSettingsForm(camera, { force = false } = {}) {
         </div>
       `;
     })
-    .join("") + '<div class="form-group camera-form-actions"><button type="submit">Aenderungen senden</button></div>';
+    .join("") + '<div class="form-group camera-form-actions"><button type="submit">Änderungen senden</button><button type="button" class="btn-secondary" data-settings-reset>Entwurf verwerfen</button></div>';
 }
 
 function readSettingsFromForm(camera) {
@@ -810,10 +862,13 @@ function renderActiveCamera(options = {}) {
 }
 
 async function loadOverview() {
-  if (overviewRefreshInFlight) return;
+  if (overviewRefreshInFlight || cameraOperationInFlight) return;
   overviewRefreshInFlight = true;
+  overviewRefreshEl.disabled = true;
   try {
-    setOverviewState(await fetchCameraOverview());
+    const overview = await fetchCameraOverview();
+    if (cameraOperationInFlight) return;
+    setOverviewState(overview);
     if (!activeCameraId) {
       activeCameraId = overviewState.primaryCameraId;
     }
@@ -821,8 +876,13 @@ async function loadOverview() {
       activeCameraId = overviewState.primaryCameraId;
     }
     renderActiveCamera();
+    setStatusLine(overviewStatusEl, `Zuletzt aktualisiert: ${new Date().toLocaleTimeString()}`);
+  } catch (error) {
+    setStatusLine(overviewStatusEl, `Kameradaten nicht aktualisiert: ${error.message}. Vorhandene Werte bleiben stehen.`, true);
+    throw error;
   } finally {
     overviewRefreshInFlight = false;
+    overviewRefreshEl.disabled = cameraOperationInFlight;
   }
 }
 
@@ -833,11 +893,12 @@ async function sendCommand(cameraId, action, body = {}) {
 }
 
 async function loadTimelapse(cameraId, offset = null) {
+  const version = ++archiveRequestVersion;
   const currentOffset = timelapseState?.cameraId === cameraId ? timelapseState.pagination?.offset || 0 : 0;
   let data = await fetchTimelapse(cameraId, offset ?? currentOffset);
   // Deleting the last file on a page should take the user back to the archive start.
   if (!data.files?.length && data.pagination?.offset > 0) data = await fetchTimelapse(cameraId, 0);
-  if (cameraId === activeCameraId) timelapseState = data;
+  if (cameraId === activeCameraId && version === archiveRequestVersion) timelapseState = data;
   return data;
 }
 
@@ -850,7 +911,7 @@ async function postTimelapseDelete(payload) {
 }
 
 document.querySelectorAll("[data-camera-action]").forEach((button) => {
-  button.addEventListener("click", async () => {
+  bindCameraAction(button, "click", async () => {
     const activeCamera = getActiveCamera();
     if (!activeCamera) return;
 
@@ -866,7 +927,7 @@ document.querySelectorAll("[data-camera-action]").forEach((button) => {
   });
 });
 
-settingsForm?.addEventListener("submit", async (event) => {
+bindCameraAction(settingsForm, "submit", async (event) => {
   event.preventDefault();
 
   const activeCamera = getActiveCamera();
@@ -888,7 +949,7 @@ settingsForm?.addEventListener("submit", async (event) => {
     renderActiveCamera({ forceSettings: true });
   } catch (error) {
     pendingCameraSettings.delete(activeCamera.cameraId);
-    setSettingsFeedback(activeCamera.cameraId, "", false, 0);
+    setSettingsFeedback(activeCamera.cameraId, `Parameter konnten nicht gesetzt werden: ${error.message}`, true, 0);
     setStatusLine(settingsStatusEl, `Parameter konnten nicht gesetzt werden: ${error.message}`, true);
   }
 });
@@ -901,11 +962,19 @@ settingsForm?.addEventListener("change", (event) => {
   captureSettingsDraft(event.target);
 });
 
+settingsForm?.addEventListener('click', (event) => {
+  if (!event.target.closest('[data-settings-reset]') || cameraOperationInFlight) return;
+  resetSettingsDraft(activeCameraId);
+  setSettingsFeedback(activeCameraId, '');
+  renderActiveCamera({ forceSettings: true });
+});
+overviewRefreshEl?.addEventListener('click', () => loadOverview().catch(() => {}));
+
 loadOverview().catch((error) => {
   setStatusLine(commandStatusEl, `Kamera-Uebersicht konnte nicht geladen werden: ${error.message}`, true);
 });
 
-timelapseToggleEl?.addEventListener("click", async () => {
+bindCameraAction(timelapseToggleEl, "click", async () => {
   const wasCollapsed = timelapseCollapsed;
   setTimelapsePanelCollapsed(!wasCollapsed);
 
@@ -922,7 +991,7 @@ timelapseToggleEl?.addEventListener("click", async () => {
   }
 });
 
-timelapseRefreshEl?.addEventListener("click", async () => {
+bindCameraAction(timelapseRefreshEl, "click", async () => {
   const activeCamera = getActiveCamera();
   if (!activeCamera?.capabilities?.timelapse) return;
 
@@ -936,7 +1005,7 @@ timelapseRefreshEl?.addEventListener("click", async () => {
   }
 });
 
-timelapseBuildEl?.addEventListener("click", async () => {
+bindCameraAction(timelapseBuildEl, "click", async () => {
   const activeCamera = getActiveCamera();
   if (!activeCamera?.capabilities?.timelapse) return;
 
@@ -951,7 +1020,7 @@ timelapseBuildEl?.addEventListener("click", async () => {
   }
 });
 
-timelapseDeleteVideoEl?.addEventListener("click", async () => {
+bindCameraAction(timelapseDeleteVideoEl, "click", async () => {
   const activeCamera = getActiveCamera();
   if (!activeCamera?.capabilities?.timelapse) return;
 
@@ -966,7 +1035,7 @@ timelapseDeleteVideoEl?.addEventListener("click", async () => {
   }
 });
 
-timelapseDeleteImagesEl?.addEventListener("click", async () => {
+bindCameraAction(timelapseDeleteImagesEl, "click", async () => {
   const activeCamera = getActiveCamera();
   if (!activeCamera?.capabilities?.timelapse) return;
 
@@ -982,7 +1051,7 @@ timelapseDeleteImagesEl?.addEventListener("click", async () => {
 });
 
 setInterval(async () => {
-  if (document.hidden) return;
+  if (document.hidden || cameraOperationInFlight) return;
   try {
     await loadOverview();
   } catch (error) {

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydroponik - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
+  <link rel="stylesheet" href="/pages/experience.css">
 </head>
 <body class="theme-operations page-hydro">
   <div id="navbar"></div>
@@ -12,7 +13,7 @@
   <header class="hero">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <h1>Hydroponik Steuerung</h1>
+        <p class="eyebrow">Smart IoT / Hydroponik</p><h1>Hydroponik Steuerung</h1><p class="hero-text">Deine Anlage im Blick. Messwerte analysieren, Geräte steuern und Abläufe verwalten.</p>
       </div>
     </div>
   </header>
@@ -20,16 +21,94 @@
   <main class="container page-shell">
     <div id="broker-summary" class="grid-2 summary-grid"></div>
 
-    <nav class="workflow-links">
-      <a href="#mqtt-section" data-step="1">Senden</a>
-      <a href="#objects-section" data-step="2">Objekte</a>
-      <a href="#mapping-section" data-step="3">Zuordnung</a>
-      <a href="#graph-section" data-step="4">Analyse</a>
-      <a href="#log-section" data-step="5">Log</a>
+    <div class="hydro-context">
+      <div class="hydro-object-picker">
+        <label for="object-select">Aktives Objekt</label>
+        <select id="object-select" aria-describedby="hydro-selection-hint"><option value="">Objekte werden geladen …</option></select>
+      </div>
+      <p id="hydro-selection-hint">Die Auswahl gilt für Messwerte, Befehle und Automatisierungen.</p>
+      <p id="hydro-action-status" role="status"></p>
+      <a class="btn btn-secondary" href="#objects-section">Objekte verwalten</a>
+    </div>
+
+    <nav class="workflow-links" aria-label="Hydroponik-Bereiche">
+      <a href="#graph-section">Messwerte</a>
+      <a href="#mapping-section">Einrichtung &amp; Befehle</a>
+      <a href="#automation-section">Automatisierung</a>
+      <a href="#log-section">Live-Log</a>
+      <a href="#mqtt-section">Manuell senden</a>
     </nav>
 
+    <section id="graph-section" class="panel">
+      <h2>Messwerte &amp; Verlauf</h2>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="key-select">Messwert auswählen</label>
+          <select id="key-select"></select>
+        </div>
+        <div class="inline-actions">
+          <button id="graph-refresh" type="button">Aktualisieren</button>
+          <button id="export-csv" type="button" class="btn btn-secondary">Angezeigte Werte als CSV</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="date-from">Von</label>
+          <input id="date-from" type="datetime-local">
+        </div>
+        <div class="form-group">
+          <label for="date-to">Bis</label>
+          <input id="date-to" type="datetime-local">
+        </div>
+      </div>
+
+      <div class="inline-actions reading-periods" role="group" aria-label="Zeitraum auswählen">
+        <button type="button" class="btn-secondary" data-reading-days="1" aria-pressed="false">24 Stunden</button>
+        <button type="button" class="btn-secondary" data-reading-days="7" aria-pressed="false">7 Tage</button>
+        <button type="button" class="btn-secondary" data-reading-days="30" aria-pressed="false">30 Tage</button>
+        <button type="button" class="btn-secondary" data-reading-days="all" aria-pressed="true">Gesamter Verlauf</button>
+      </div>
+      <p id="graph-range-hint" class="field-hint">Gesamter gespeicherter Verlauf. Alternativ einen eigenen Zeitraum über „Von“ und „Bis“ wählen.</p>
+      <p id="graph-status" class="status-line" role="status"></p>
+      <button id="graph-retry" type="button" class="btn-secondary" hidden>Erneut laden</button>
+      <canvas id="readings-chart" class="readings-chart" width="900" height="300" tabindex="0" aria-label="Messwertverlauf. Mit Pfeiltasten einzelne Messwerte auswählen." aria-describedby="chart-point-detail"></canvas>
+      <p id="chart-point-detail" class="chart-point-detail" aria-live="polite">Tippe auf den Graphen oder nutze die Pfeiltasten, um einen Messwert abzulesen.</p>
+
+      <div class="section-toolbar">
+        <label class="switch-line">
+          <input id="auto-refresh" type="checkbox">
+          <span>Automatisch aktualisieren</span>
+        </label>
+        <label class="switch-line inline-field">
+          <span>Intervall (s)</span>
+          <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
+        </label>
+      </div>
+
+      <div class="grid-2 dashboard-columns">
+        <div class="subpanel">
+          <h3>Alarm Schwellen</h3>
+          <div class="form-group">
+            <label for="threshold-min">Min. Schwelle</label>
+            <input id="threshold-min" type="number" step="any" placeholder="10.0">
+          </div>
+          <div class="form-group">
+            <label for="threshold-max">Max. Schwelle</label>
+            <input id="threshold-max" type="number" step="any" placeholder="25.0">
+          </div>
+          <button id="threshold-save" type="button">Schwellen speichern</button>
+        </div>
+        <div class="subpanel">
+          <h3>Alarmstatus</h3>
+          <div id="threshold-status" class="threshold-box">Noch keine Grenzwerte gesetzt.</div>
+        </div>
+      </div>
+    </section>
+
     <div class="grid-2 dashboard-columns">
-      <section id="mqtt-section" class="panel">
+      <section id="mqtt-section" class="panel" data-collapsed="true">
         <h2>MQTT Befehl senden</h2>
         <form id="mqtt-form">
           <div class="form-group">
@@ -45,7 +124,7 @@
         <p id="mqtt-status" class="status-line"></p>
       </section>
 
-      <section id="objects-section" class="panel">
+      <section id="objects-section" class="panel" data-collapsed="true">
         <h2>Objekte verwalten</h2>
         <form id="object-form">
           <div class="form-group">
@@ -69,16 +148,11 @@
     <section id="mapping-section" class="panel">
       <h2>Objekt Zuordnung und Befehle</h2>
 
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="object-select">Gewaehltes Objekt</label>
-          <select id="object-select"></select>
-        </div>
-      </div>
-
       <div class="grid-2 dashboard-columns">
         <div class="subpanel">
           <h3>Messwert Keys</h3>
+          <details class="hydro-editor" id="key-editor">
+            <summary>Messwert hinzufügen oder bearbeiten</summary>
           <form id="key-form">
             <input id="key-id" type="hidden">
             <div class="form-group">
@@ -108,11 +182,15 @@
               <button id="key-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
             </div>
           </form>
+          </details>
+          <p id="key-config-status" class="status-line" role="status"></p>
           <ul id="key-list" class="key-list"></ul>
         </div>
 
         <div class="subpanel">
           <h3>Schnellbefehle</h3>
+          <details class="hydro-editor" id="command-editor">
+            <summary>Befehl hinzufügen oder bearbeiten</summary>
           <form id="command-form">
             <div class="form-group">
               <label for="command-label">Button Name</label>
@@ -131,69 +209,13 @@
               <button id="command-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
             </div>
           </form>
+          </details>
           <ul id="command-list" class="command-list"></ul>
           <p id="object-config-status" class="status-line"></p>
         </div>
       </div>
     </section>
 
-    <section id="graph-section" class="panel">
-      <h2>Messwert Verlauf und Graph</h2>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="key-select">Daten Key</label>
-          <select id="key-select"></select>
-        </div>
-        <div class="inline-actions">
-          <button id="graph-refresh" type="button">Aktualisieren</button>
-          <button id="export-csv" type="button" class="btn btn-secondary">CSV Export</button>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="date-from">Von</label>
-          <input id="date-from" type="datetime-local">
-        </div>
-        <div class="form-group">
-          <label for="date-to">Bis</label>
-          <input id="date-to" type="datetime-local">
-        </div>
-      </div>
-
-      <canvas id="readings-chart" class="readings-chart" width="900" height="300"></canvas>
-
-      <div class="section-toolbar">
-        <label class="switch-line">
-          <input id="auto-refresh" type="checkbox">
-          <span>Auto Refresh aktivieren</span>
-        </label>
-        <label class="switch-line inline-field">
-          <span>Intervall (s)</span>
-          <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
-        </label>
-      </div>
-
-      <div class="grid-2 dashboard-columns">
-        <div class="subpanel">
-          <h3>Alarm Schwellen</h3>
-          <div class="form-group">
-            <label for="threshold-min">Min. Schwelle</label>
-            <input id="threshold-min" type="number" step="any" placeholder="10.0">
-          </div>
-          <div class="form-group">
-            <label for="threshold-max">Max. Schwelle</label>
-            <input id="threshold-max" type="number" step="any" placeholder="25.0">
-          </div>
-          <button id="threshold-save" type="button">Schwellen speichern</button>
-        </div>
-        <div class="subpanel">
-          <h3>Alarmstatus</h3>
-          <div id="threshold-status" class="threshold-box">Noch keine Grenzwerte gesetzt.</div>
-        </div>
-      </div>
-    </section>
 
     <section id="automation-section" class="panel">
       <h2>Automatisierung</h2>
@@ -351,6 +373,8 @@
   </main>
 
   <script src="/pages/main.js"></script>
+  <script src="/pages/hydroponic/chart-response.js"></script>
+  <script src="/pages/hydroponic/action-state.js"></script>
   <script src="/pages/hydroponic/hydroponic.js"></script>
   <script src="/pages/hydroponic/hydroponic-management.js"></script>
 </body>

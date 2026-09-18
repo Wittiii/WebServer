@@ -235,6 +235,10 @@ function setAutomationFormMode(rule = null) {
 }
 
 function setCommandFormMode(editing, command = null) {
+  if (editing) {
+    document.getElementById('command-editor').open = true;
+    requestAnimationFrame(() => commandLabel?.focus());
+  }
   if (!commandAdd) return;
   if (editing && command) {
     if (commandLabel) commandLabel.value = command.label || '';
@@ -254,6 +258,15 @@ function setCommandFormMode(editing, command = null) {
 
 function renderSelectedObject() {
   const obj = getSelectedObject();
+  document.getElementById('hydro-selection-hint').textContent = obj
+    ? `${obj.name}: Messwerte, Befehle und Automatisierungen beziehen sich auf dieses Objekt.`
+    : 'Noch kein Objekt vorhanden. Über „Objekte verwalten“ kannst du eines anlegen.';
+  currentCommands = [];
+  renderCommands([]);
+  automationRulesCache = [];
+  renderAutomationRules([]);
+  resetAutomationForm();
+  setCommandFormMode(false);
   if (!obj) {
     currentCommands = [];
     renderCommands([]);
@@ -274,7 +287,7 @@ async function loadObjects(preserveSelection = true) {
     renderObjectList(list);
 
     const fallbackId = list[0]?.id ?? null;
-    const nextId = selectedId || fallbackId;
+    const nextId = list.some((object) => Number(object.id) === selectedId) ? selectedId : fallbackId;
     renderObjectSelect(list, nextId);
 
     if (nextId && objectSelect) {
@@ -449,12 +462,14 @@ async function loadAutomations() {
 
   try {
     const list = await fetchAutomationRules(obj.id);
+    if (getSelectedObject()?.id !== obj.id) return;
     automationRulesCache = list;
     renderAutomationRules(list);
     renderAutomationKeyOptions('');
     renderAutomationCommandOptions();
     syncAutomationFieldVisibility();
   } catch (err) {
+    if (getSelectedObject()?.id !== obj.id) return;
     automationRulesCache = [];
     if (automationList) automationList.innerHTML = `<li>Fehler: ${escapeHtml(err.message || err)}</li>`;
   }
@@ -466,10 +481,12 @@ async function loadTopicCommands() {
 
   try {
     const data = await fetchTopicCommands(obj.id);
+    if (getSelectedObject()?.id !== obj.id) return;
     currentCommands = Array.isArray(data.commands) ? data.commands : [];
     renderCommands(currentCommands);
     renderAutomationCommandOptions();
   } catch (err) {
+    if (getSelectedObject()?.id !== obj.id) return;
     currentCommands = [];
     renderCommands([]);
     renderAutomationCommandOptions();
@@ -483,7 +500,7 @@ async function deleteObject(id) {
   return data;
 }
 
-objectForm?.addEventListener('submit', async (e) => {
+HydroActions.bind(objectForm, 'submit', async (e) => {
   e.preventDefault();
   const name = (objectName?.value || '').trim();
   if (!name) {
@@ -510,7 +527,7 @@ objectRefresh?.addEventListener('click', () => {
   loadObjects();
 });
 
-objectList?.addEventListener('click', async (e) => {
+HydroActions.bind(objectList, 'click', async (e) => {
   const btn = e.target?.closest('.obj-delete');
   if (!btn) return;
 
@@ -535,6 +552,7 @@ objectList?.addEventListener('click', async (e) => {
 // Objekt-Auswahl
 objectSelect?.addEventListener('change', () => {
   setConfigStatus('');
+  setKeyStatus('');
   setAutomationStatus('');
   renderSelectedObject();
   loadKeys(false);
@@ -546,12 +564,8 @@ objectSelect?.addEventListener('change', () => {
 
 readingsLogToggle?.addEventListener('click', async () => {
   if (!readingsLogSection) return;
-  const opening = readingsLogSection.classList.contains('collapsed');
-  readingsLogSection.classList.toggle('collapsed', !opening);
-  readingsLogToggle.textContent = opening ? 'Ausblenden' : 'Einblenden';
-  readingsLogToggle.setAttribute('aria-expanded', String(opening));
-
-  if (opening) {
+  // The shared section toggle updates visibility before this listener runs.
+  if (isReadingsLogOpen()) {
     await Promise.all([
       loadRealtimeReadings(),
       loadDatabaseStorageStatus()
@@ -569,7 +583,7 @@ graphRefresh?.addEventListener('click', () => {
   loadReadings();
 });
 
-deleteReadingsBtn?.addEventListener('click', async () => {
+HydroActions.bind(deleteReadingsBtn, 'click', async () => {
   const obj = getSelectedObject();
   if (!obj) return;
 
@@ -592,7 +606,7 @@ deleteReadingsBtn?.addEventListener('click', async () => {
   }
 });
 
-optimizeDatabaseBtn?.addEventListener('click', async () => {
+HydroActions.bind(optimizeDatabaseBtn, 'click', async () => {
   const confirmed = window.confirm(
     'Die gesamte SQLite-Datenbank jetzt verkleinern? Je nach Datenbankgroesse reagiert der Server laengere Zeit nicht; auch die Messwerterfassung pausiert. Nur in einer Wartungszeit ausfuehren.'
   );
@@ -618,24 +632,15 @@ optimizeDatabaseBtn?.addEventListener('click', async () => {
   }
 });
 
-chartCanvas?.addEventListener('mousemove', (e) => {
+function selectChartPoint(index, pointer = null) {
   if (!chartMeta) return;
-  const rect = chartCanvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const t = (x - chartMeta.pad) / (chartMeta.w - chartMeta.pad * 2);
-  if (t < 0 || t > 1) {
-    hideChartTooltip();
-    return;
-  }
-  const idx = Math.round(t * (chartMeta.readings.length - 1));
-  const nearest = findNearestIndex(idx, chartMeta.valuesByIndex);
+  const nearest = findNearestIndex(index, chartMeta.valuesByIndex);
   if (nearest < 0) {
     hideChartTooltip();
     return;
   }
 
   const value = chartMeta.valuesByIndex[nearest];
-  const y = chartMeta.h - chartMeta.pad - ((value - chartMeta.min) / chartMeta.span) * (chartMeta.h - chartMeta.pad * 2);
   const time = chartMeta.readings[nearest]?.created_at
     ? new Date(chartMeta.readings[nearest].created_at).toLocaleString()
     : '';
@@ -646,18 +651,46 @@ chartCanvas?.addEventListener('mousemove', (e) => {
 
   const tooltip = getChartTooltip();
   tooltip.textContent = `${time} | ${prefix}${value.toFixed(2)}${unit}`;
-  tooltip.style.left = `${e.clientX + 12}px`;
-  tooltip.style.top = `${e.clientY + 12}px`;
-  tooltip.style.display = 'block';
+  if (pointer?.pointerType === 'mouse') {
+    tooltip.style.display = 'block';
+    tooltip.style.left = `${Math.max(8, Math.min(pointer.clientX + 12, window.innerWidth - tooltip.offsetWidth - 8))}px`;
+    tooltip.style.top = `${Math.max(8, Math.min(pointer.clientY + 12, window.innerHeight - tooltip.offsetHeight - 8))}px`;
+  } else {
+    hideChartTooltip();
+  }
+  document.getElementById('chart-point-detail').textContent = tooltip.textContent;
 
   chartHoverIndex = nearest;
   if (chartDataCache.length) drawChart(chartDataCache);
-});
+}
 
-chartCanvas?.addEventListener('mouseleave', () => {
+function selectChartPointer(event) {
+  if (!chartMeta) return;
+  const rect = chartCanvas.getBoundingClientRect();
+  const fraction = ((event.clientX - rect.left) - chartMeta.pad) / (chartMeta.w - chartMeta.pad * 2);
+  if (fraction < 0 || fraction > 1) return;
+  selectChartPoint(Math.round(fraction * (chartMeta.readings.length - 1)), event);
+}
+chartCanvas?.addEventListener('pointerdown', selectChartPointer);
+chartCanvas?.addEventListener('pointermove', (event) => {
+  if (event.pointerType === 'mouse') selectChartPointer(event);
+});
+chartCanvas?.addEventListener('pointerleave', () => {
   hideChartTooltip();
-  chartHoverIndex = null;
-  if (chartDataCache.length) drawChart(chartDataCache);
+});
+chartCanvas?.addEventListener('keydown', (event) => {
+  if (!chartMeta || !['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
+  event.preventDefault();
+  if (event.key === 'Escape') {
+    hideChartTooltip(); chartHoverIndex = null; drawChart(chartDataCache); return;
+  }
+  const last = chartMeta.readings.length - 1;
+  let index = chartHoverIndex ?? (event.key === 'ArrowLeft' ? last + 1 : -1);
+  index = event.key === 'Home' ? 0 : event.key === 'End' ? last : index + (event.key === 'ArrowLeft' ? -1 : 1);
+  index = Math.max(0, Math.min(last, index));
+  const direction = ['ArrowLeft', 'End'].includes(event.key) ? -1 : 1;
+  while (index >= 0 && index <= last && !Number.isFinite(chartMeta.valuesByIndex[index])) index += direction;
+  if (index >= 0 && index <= last) selectChartPoint(index);
 });
 
 keySelect?.addEventListener('change', () => {
@@ -678,12 +711,40 @@ exportCsvBtn?.addEventListener('click', () => {
 });
 
 dateFrom?.addEventListener('change', () => {
+  setReadingPeriod(null);
   loadReadings();
 });
 
+document.querySelectorAll('[data-reading-days]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const days = button.dataset.readingDays;
+    setReadingPeriod(days);
+    const localInput = (date) => {
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    };
+    dateTo.value = '';
+    dateFrom.value = days === 'all' ? '' : localInput(new Date(Date.now() - Number(days) * 86400000));
+    loadReadings();
+  });
+});
+
 dateTo?.addEventListener('change', () => {
+  setReadingPeriod(null);
   loadReadings();
 });
+
+function setReadingPeriod(days) {
+  document.querySelectorAll('[data-reading-days]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.readingDays === days));
+  });
+  document.getElementById('graph-range-hint').textContent = days === 'all'
+    ? 'Gesamter gespeicherter Verlauf.'
+    : days ? `Zeitraum: letzte ${days === '1' ? '24 Stunden' : `${days} Tage`}. „Bis“ bleibt offen für neue Messwerte.`
+    : 'Eigener Zeitraum. Leere Datumsfelder bedeuten: keine Begrenzung.';
+}
+
+document.getElementById('graph-retry').addEventListener('click', () => loadKeys());
 
 autoRefreshToggle?.addEventListener('change', () => {
   setupAutoRefresh();
@@ -697,7 +758,7 @@ autoRefreshSec?.addEventListener('change', () => {
   setupAutoRefresh();
 });
 
-keyForm?.addEventListener('submit', async (e) => {
+HydroActions.bind(keyForm, 'submit', async (e) => {
   e.preventDefault();
   const obj = getSelectedObject();
   if (!obj) return;
@@ -709,26 +770,26 @@ keyForm?.addEventListener('submit', async (e) => {
   const keyId = Number(keyIdInput?.value);
   const isEdit = Number.isFinite(keyId) && keyId > 0;
   if (!valueKey) {
-    setConfigStatus('Key fehlt.', true);
+    setKeyStatus('Key fehlt.', true);
     return;
   }
 
   if (keySave) keySave.disabled = true;
-  setConfigStatus(isEdit ? 'Key speichern ...' : 'Key hinzufügen ...');
+  setKeyStatus(isEdit ? 'Key speichern ...' : 'Key hinzufügen ...');
 
   try {
     if (isEdit) {
       await updateValueKeyForObject(obj.id, keyId, valueKey, topic, label, unit);
-      setConfigStatus('Key gespeichert.');
+      setKeyStatus('Key gespeichert.');
     } else {
       await createValueKeyForObject(obj.id, valueKey, topic, label, unit);
-      setConfigStatus('Key hinzugefügt.');
+      setKeyStatus('Key hinzugefügt.');
     }
     setKeyFormMode(false);
     await loadKeys(false);
     await loadAutomations();
   } catch (err) {
-    setConfigStatus(`Fehler: ${err.message || err}`, true);
+    setKeyStatus(`Fehler: ${err.message || err}`, true);
   } finally {
     if (keySave) keySave.disabled = false;
   }
@@ -787,7 +848,7 @@ automationCancel?.addEventListener('click', () => {
   setAutomationStatus('');
 });
 
-automationForm?.addEventListener('submit', async (e) => {
+HydroActions.bind(automationForm, 'submit', async (e) => {
   e.preventDefault();
   const obj = getSelectedObject();
   if (!obj) return;
@@ -842,7 +903,7 @@ automationForm?.addEventListener('submit', async (e) => {
   }
 });
 
-automationList?.addEventListener('click', async (e) => {
+HydroActions.bind(automationList, 'click', async (e) => {
   const button = e.target?.closest('button[data-action]');
   if (!button) return;
 
@@ -914,7 +975,7 @@ automationActionList?.addEventListener('click', (e) => {
   renderAutomationDraftActions();
 });
 
-keyList?.addEventListener('click', async (e) => {
+HydroActions.bind(keyList, 'click', async (e) => {
   const editBtn = e.target?.closest('.key-edit');
   const delBtn = e.target?.closest('.key-delete');
   if (!editBtn && !delBtn) return;
@@ -934,15 +995,15 @@ keyList?.addEventListener('click', async (e) => {
 
   if (delBtn) {
     delBtn.disabled = true;
-    setConfigStatus('Key löschen ...');
+    setKeyStatus('Key löschen ...');
 
     try {
       await deleteValueKeyForObject(obj.id, keyId);
-      setConfigStatus('Key gelöscht.');
+      setKeyStatus('Key gelöscht.');
       await loadKeys();
       await loadAutomations();
     } catch (err) {
-      setConfigStatus(`Fehler: ${err.message || err}`, true);
+      setKeyStatus(`Fehler: ${err.message || err}`, true);
     } finally {
       delBtn.disabled = false;
     }
@@ -950,7 +1011,7 @@ keyList?.addEventListener('click', async (e) => {
 });
 
 // Command hinzufügen / speichern
-commandForm?.addEventListener('submit', async (e) => {
+HydroActions.bind(commandForm, 'submit', async (e) => {
   e.preventDefault();
   const obj = getSelectedObject();
   if (!obj) return;
@@ -996,7 +1057,7 @@ commandForm?.addEventListener('submit', async (e) => {
 });
 
 // Command senden / bearbeiten / löschen
-commandList?.addEventListener('click', async (e) => {
+HydroActions.bind(commandList, 'click', async (e) => {
   const obj = getSelectedObject();
   if (!obj) return;
 

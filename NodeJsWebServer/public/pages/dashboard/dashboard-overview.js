@@ -1,11 +1,11 @@
 import { escapeHtml, formatBytes } from "./dashboard-utils.js";
+import { createTopicTree, filterClients, filterTopics, fetchDashboardJson } from "./dashboard-data.mjs";
 
 const elements = {
   clients: document.getElementById("client-list"),
   topics: document.getElementById("topic-list"),
   clientsCount: document.getElementById("stats-clients-count"),
   topicsCount: document.getElementById("stats-topics-count"),
-  trend: document.getElementById("dashboard-trend-chart"),
   cpuUsage: document.getElementById("server-cpu-usage"),
   cpuMeta: document.getElementById("server-cpu-meta"),
   ramUsage: document.getElementById("server-ram-usage"),
@@ -16,12 +16,20 @@ const elements = {
   dbMeta: document.getElementById("server-db-meta"),
 };
 
-const history = [];
-const MAX_TREND_POINTS = 20;
 let topicTreeInitialized = false;
 let openTopicPaths = new Set();
 let refreshInFlight = false;
-let resizeFrame = null;
+let clientsCache = [];
+let topicsCache = [];
+let lastCompleteRefresh = null;
+let topicExpansion = null;
+let filterWasActive = false;
+const clientSearch = document.getElementById("client-search");
+const clientStatus = document.getElementById("client-status-filter");
+const topicSearch = document.getElementById("topic-search");
+const refreshButton = document.getElementById("dashboard-refresh");
+const refreshStatus = document.getElementById("dashboard-refresh-status");
+const connection = document.getElementById("dashboard-connection");
 
 function percent(value) {
   const numeric = Number(value || 0);
@@ -41,29 +49,17 @@ function applyHealth(element, level) {
   card.classList.toggle("health-critical", level === "critical");
 }
 
-function createTopicTree(topics) {
-  const root = { children: new Map(), topic: null };
-  for (const topic of topics) {
-    let node = root;
-    for (const segment of String(topic.topic || "").split("/").filter(Boolean)) {
-      if (!node.children.has(segment)) node.children.set(segment, { children: new Map(), topic: null });
-      node = node.children.get(segment);
-    }
-    node.topic = topic;
-  }
-  return root;
-}
-
 function countLeaves(node) {
   return (node.topic ? 1 : 0) + [...node.children.values()].reduce((sum, child) => sum + countLeaves(child), 0);
 }
 
-function renderTopicNodes(node, depth = 0, parentPath = "") {
+function renderTopicNodes(node, depth = 0, parentSegments = []) {
   return [...node.children.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([segment, child]) => {
-      const topicPath = parentPath ? `${parentPath}/${segment}` : segment;
-      const children = renderTopicNodes(child, depth + 1, topicPath);
+      const segments = [...parentSegments, segment];
+      const topicPath = JSON.stringify(segments);
+      const children = renderTopicNodes(child, depth + 1, segments);
       const leaf = child.topic
         ? `<div class="mqtt-tree-value" title="${escapeHtml(child.topic.topic)}">
              <span>${escapeHtml(child.topic.lastMessage)}</span>
@@ -71,12 +67,12 @@ function renderTopicNodes(node, depth = 0, parentPath = "") {
            </div>`
         : "";
       if (!children) {
-        return `<li class="mqtt-tree-leaf"><code>${escapeHtml(segment)}</code>${leaf}</li>`;
+        return `<li class="mqtt-tree-leaf"><code>${escapeHtml(segment || "(leere Ebene)")}</code>${leaf}</li>`;
       }
-      const isOpen = topicTreeInitialized ? openTopicPaths.has(topicPath) : depth === 0;
+      const isOpen = topicExpansion ?? (topicSearch.value.trim() ? true : topicTreeInitialized ? openTopicPaths.has(topicPath) : depth === 0);
       return `<li class="mqtt-tree-branch">
         <details data-topic-path="${escapeHtml(topicPath)}" ${isOpen ? "open" : ""}>
-          <summary><code>${escapeHtml(segment)}</code><span>${countLeaves(child)} Topics</span></summary>
+          <summary><code>${escapeHtml(segment || "(leere Ebene)")}</code><span>${countLeaves(child)} Topics</span></summary>
           ${leaf}<ul>${children}</ul>
         </details>
       </li>`;
@@ -85,10 +81,17 @@ function renderTopicNodes(node, depth = 0, parentPath = "") {
 }
 
 async function loadClients() {
-  const list = await fetch("/api/mqtt/clients").then((response) => response.json());
+  const list = await fetchDashboardJson("/api/mqtt/clients");
   if (!Array.isArray(list)) throw new Error("ungueltiges Client-Format");
   const online = list.filter((client) => client.connected).length;
   elements.clientsCount.textContent = String(online);
+  clientsCache = list;
+  renderClients();
+}
+
+function renderClients() {
+  const list = filterClients(clientsCache, clientSearch.value, clientStatus.value);
+  document.getElementById("client-result-count").textContent = `${list.length} von ${clientsCache.length} Clients`;
   elements.clients.innerHTML = list.length
     ? list.map((client) => `<li>
         <strong class="obj-name">${escapeHtml(client.id)}</strong>
@@ -96,29 +99,36 @@ async function loadClients() {
         <span class="obj-topic">${escapeHtml(client.lastTopic || "Keine Aktivitaet")}</span>
         <span class="status-badge ${client.connected ? "status-online" : "status-offline"}">${client.connected ? "Online" : "Offline"}</span>
       </li>`).join("")
-    : "<li>Keine Clients registriert</li>";
+    : clientsCache.length ? "<li>Keine passenden Clients. Suche oder Filter anpassen.</li>" : "<li>Keine Clients registriert</li>";
 }
 
 async function loadTopics() {
-  const list = await fetch("/api/mqtt/topics").then((response) => response.json());
+  const list = await fetchDashboardJson("/api/mqtt/topics");
   if (!Array.isArray(list)) throw new Error("ungueltiges Topic-Format");
-  if (topicTreeInitialized) {
+  topicsCache = list;
+  elements.topicsCount.textContent = String(list.length);
+  renderTopics();
+}
+
+function renderTopics() {
+  const filtering = Boolean(topicSearch.value.trim());
+  if (topicTreeInitialized && !filterWasActive && topicExpansion === null) {
     openTopicPaths = new Set(
       [...elements.topics.querySelectorAll("details[open][data-topic-path]")]
         .map((details) => details.dataset.topicPath),
     );
   }
-  elements.topicsCount.textContent = String(list.length);
+  const list = filterTopics(topicsCache, topicSearch.value);
+  document.getElementById("topic-result-count").textContent = `${list.length} von ${topicsCache.length} Topics`;
   elements.topics.innerHTML = list.length
     ? renderTopicNodes(createTopicTree(list))
-    : "<li>Keine Topics registriert</li>";
+    : topicsCache.length ? "<li>Keine passenden Topics. Suche anpassen.</li>" : "<li>Keine Topics registriert</li>";
   topicTreeInitialized = true;
+  filterWasActive = filtering;
 }
 
 async function loadSystem() {
-  const response = await fetch("/dashboard/system");
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
+  const data = await fetchDashboardJson("/dashboard/system");
   const cpu = Number(data?.cpu?.usagePercent || 0);
   applyHealth(elements.cpuUsage, severity(cpu, 65, 85));
   elements.cpuUsage.textContent = percent(cpu);
@@ -145,65 +155,48 @@ async function loadSystem() {
   elements.dbMeta.textContent = `${formatBytes(storageFree)} frei auf dem Server`;
 }
 
-function drawTrend() {
-  const canvas = elements.trend;
-  if (!canvas || !history.length) return;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const ratio = window.devicePixelRatio || 1;
-  const context = canvas.getContext("2d");
-  canvas.width = width * ratio;
-  canvas.height = height * ratio;
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  const padding = 42;
-  const max = Math.max(1, ...history.flatMap((entry) => [entry.clients, entry.topics]));
-  const step = (width - padding * 2) / Math.max(1, history.length - 1);
-  const draw = (key, color) => {
-    context.beginPath();
-    context.strokeStyle = color;
-    context.lineWidth = 3;
-    history.forEach((entry, index) => {
-      const x = padding + step * index;
-      const y = height - padding - (entry[key] / max) * (height - padding * 2);
-      if (index) context.lineTo(x, y); else context.moveTo(x, y);
-    });
-    context.stroke();
-  };
-  draw("clients", "#63c8ff");
-  draw("topics", "#ffd166");
-}
-
 async function refresh() {
   if (document.hidden || refreshInFlight) return;
   refreshInFlight = true;
+  refreshButton.disabled = true;
+  refreshButton.textContent = "Wird aktualisiert …";
   try {
     const results = await Promise.allSettled([loadClients(), loadTopics(), loadSystem()]);
-    results.forEach((result) => {
-      if (result.status === "rejected") console.error("Dashboard refresh:", result.reason);
+    const names = ["Clients", "Topics", "Serverstatus"];
+    const failed = results.flatMap((result, index) => result.status === "rejected" ? [names[index]] : []);
+    const failure = results.find((result) => result.status === "rejected");
+    connection.textContent = failed.length ? (failed.length === results.length ? "FEHLER" : "TEILWEISE") : "AKTUELL";
+    applyHealth(connection, failed.length ? "warn" : "normal");
+    if (!failed.length) lastCompleteRefresh = new Date();
+    const last = lastCompleteRefresh ? `Letzter vollständiger Abruf: ${lastCompleteRefresh.toLocaleTimeString()}.` : "Noch kein vollständiger Abruf.";
+    refreshStatus.textContent = failed.length
+      ? `${failed.join(", ")} nicht aktualisiert. ${failure.reason?.message || "Verbindung prüfen."} Vorhandene Werte bleiben stehen. ${last}`
+      : `${last} Automatisch alle 10 Sekunden.`;
+    refreshStatus.classList.toggle("refresh-error", Boolean(failed.length));
+    [elements.clients, elements.topics, document.getElementById("dashboard-server-health")].forEach((element, index) => {
+      element.classList.toggle("data-stale", results[index].status === "rejected");
     });
-    history.push({
-      clients: Number(elements.clientsCount?.textContent || 0),
-      topics: Number(elements.topicsCount?.textContent || 0),
-    });
-    if (history.length > MAX_TREND_POINTS) history.shift();
-    drawTrend();
   } finally {
     refreshInFlight = false;
+    refreshButton.disabled = false;
+    refreshButton.textContent = "Jetzt aktualisieren";
   }
 }
 
 export function initDashboardOverview() {
+  clientSearch.addEventListener("input", renderClients);
+  clientStatus.addEventListener("change", renderClients);
+  topicSearch.addEventListener("input", () => { topicExpansion = null; renderTopics(); });
+  document.getElementById("topics-expand").addEventListener("click", () => { topicExpansion = true; renderTopics(); });
+  document.getElementById("topics-collapse").addEventListener("click", () => { topicExpansion = false; renderTopics(); });
+  elements.topics.addEventListener("click", (event) => {
+    if (event.target.closest("summary")) topicExpansion = null;
+  });
+  refreshButton.addEventListener("click", refresh);
+  window.addEventListener("online", refresh);
   refresh();
   setInterval(refresh, 10000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh();
-  });
-  window.addEventListener("resize", () => {
-    if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => {
-      resizeFrame = null;
-      drawTrend();
-    });
   });
 }

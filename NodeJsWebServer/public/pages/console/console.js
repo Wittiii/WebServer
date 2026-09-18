@@ -18,6 +18,12 @@ let visibleCount = 0;
 let lastEventId = 0;
 let paused = false;
 let stream = null;
+let pausedEntries = [];
+let pendingCount = 0;
+let initialLoading = false;
+const retryButton = document.getElementById("console-retry");
+const exportButton = document.getElementById("console-export");
+const displayEntries = () => paused ? pausedEntries : entries;
 
 function formatTimestamp(timestamp) {
   return new Date(timestamp).toLocaleTimeString("de-DE", {
@@ -62,15 +68,18 @@ function scrollToBottom() {
 }
 
 function updateCounters() {
-  elements.entryCount.textContent = `${visibleCount} von ${entries.length} Zeilen`;
+  elements.entryCount.textContent = `${visibleCount} von ${displayEntries().length} Zeilen`;
   elements.empty.hidden = visibleCount > 0;
+  elements.empty.textContent = displayEntries().length ? "Keine passenden Zeilen. Filter anpassen." : "Noch keine Zeilen in dieser Ansicht.";
+  exportButton.disabled = visibleCount === 0;
+  if (paused) elements.bufferStatus.textContent = `Anzeige pausiert. ${pendingCount} neue Zeilen empfangen. Fortsetzen zeigt die neuesten ${MAX_BROWSER_ENTRIES} verfügbaren Zeilen.`;
 }
 
 function renderAll() {
   elements.output.querySelectorAll(".console-line").forEach((node) => node.remove());
   const fragment = document.createDocumentFragment();
   visibleCount = 0;
-  for (const entry of entries) {
+  for (const entry of displayEntries()) {
     if (!matchesFilters(entry)) continue;
     fragment.append(createLogLine(entry));
     visibleCount += 1;
@@ -84,9 +93,10 @@ function appendEntry(entry) {
   if (!entry || !Number.isFinite(Number(entry.id)) || Number(entry.id) <= lastEventId) return;
   lastEventId = Number(entry.id);
   entries.push(entry);
+  if (paused) pendingCount += 1;
   if (entries.length > MAX_BROWSER_ENTRIES) {
     const removed = entries.splice(0, entries.length - MAX_BROWSER_ENTRIES);
-    for (const oldEntry of removed) {
+    for (const oldEntry of paused ? [] : removed) {
       const node = elements.output.querySelector(`[data-entry-id="${oldEntry.id}"]`);
       if (node) {
         node.remove();
@@ -123,9 +133,16 @@ function connectStream() {
 }
 
 async function loadInitialLogs() {
+  if (initialLoading) return;
+  initialLoading = true;
+  retryButton.disabled = true;
+  retryButton.hidden = true;
+  setConnection("warning", "Verbinde …");
+  try {
   const response = await fetch("/console/logs?limit=1500", {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
+    signal: AbortSignal.timeout(12000),
   });
   if (response.redirected) {
     window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
@@ -138,6 +155,14 @@ async function loadInitialLogs() {
   elements.bufferStatus.textContent = `Die letzten ${entries.length} Serverzeilen sind im Browser verfuegbar.`;
   renderAll();
   connectStream();
+  } catch (error) {
+    setConnection("offline", "Nicht verbunden");
+    elements.bufferStatus.textContent = `Konsole konnte nicht geladen werden: ${error.message}`;
+    retryButton.hidden = false;
+  } finally {
+    initialLoading = false;
+    retryButton.disabled = false;
+  }
 }
 
 elements.search.addEventListener("input", renderAll);
@@ -145,13 +170,19 @@ elements.level.addEventListener("change", renderAll);
 
 elements.pause.addEventListener("click", () => {
   paused = !paused;
+  pausedEntries = paused ? entries.slice() : [];
+  pendingCount = 0;
   elements.pause.textContent = paused ? "Fortsetzen" : "Pausieren";
   elements.pause.classList.toggle("is-paused", paused);
-  if (!paused) renderAll();
+  elements.pause.setAttribute("aria-pressed", String(paused));
+  if (!paused) elements.bufferStatus.textContent = `Live-Ansicht. Bis zu ${MAX_BROWSER_ENTRIES} Zeilen bleiben im Browser.`;
+  renderAll();
 });
 
 elements.clear.addEventListener("click", () => {
   entries = [];
+  pausedEntries = [];
+  pendingCount = 0;
   visibleCount = 0;
   elements.output.querySelectorAll(".console-line").forEach((node) => node.remove());
   elements.bufferStatus.textContent = "Lokale Ansicht geleert. Neue Meldungen werden weiter empfangen.";
@@ -166,7 +197,16 @@ elements.output.addEventListener("scroll", () => {
 
 window.addEventListener("beforeunload", () => stream?.close());
 
-loadInitialLogs().catch((error) => {
-  setConnection("offline", "Nicht verbunden");
-  elements.bufferStatus.textContent = `Konsole konnte nicht geladen werden: ${error.message}`;
+retryButton.addEventListener("click", loadInitialLogs);
+exportButton.addEventListener("click", () => {
+  const lines = displayEntries().filter(matchesFilters).map((entry) =>
+    `${new Date(entry.timestamp).toISOString()} [${entry.level.toUpperCase()}] ${entry.message}`);
+  if (!lines.length) return;
+  const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `serverlog-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`;
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
+loadInitialLogs();

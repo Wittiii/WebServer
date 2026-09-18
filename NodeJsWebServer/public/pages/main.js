@@ -1,5 +1,3 @@
-const btn = document.getElementById("hello-btn");
-const messages = document.getElementById("messages");
 const clockEl = document.getElementById("clock");
 
 function escapeHtml(value) {
@@ -11,19 +9,6 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function getSectionContentHost(section) {
-  return section?.querySelector(":scope > .section-body") || section;
-}
-
-btn?.addEventListener("click", () => {
-  const target = getSectionContentHost(messages);
-  if (!target) return;
-
-  const item = document.createElement("p");
-  item.textContent = `Systemgruss um ${new Date().toLocaleTimeString()}: Bedienung bestaetigt.`;
-  target.appendChild(item);
-});
-
 function updateClock() {
   if (!clockEl) return;
   const now = new Date();
@@ -32,24 +17,24 @@ function updateClock() {
 }
 
 updateClock();
-setInterval(updateClock, 1000);
+if (clockEl) setInterval(updateClock, 1000);
 
 function buildNavItems(loggedIn) {
   if (loggedIn) {
     return [
-      '<li><a href="/">Home</a></li>',
+      '<li><a href="/">Übersicht</a></li>',
       '<li><a href="/dashboard">Dashboard</a></li>',
       '<li><a href="/camera">Kamera</a></li>',
       '<li><a href="/console">Konsole</a></li>',
       '<li><a href="/energy">Strom</a></li>',
       '<li><a href="/hydroponic">Hydroponik</a></li>',
-      '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Logout</button></form></li>',
+      '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Abmelden</button></form></li>',
     ].join("");
   }
 
   return [
-    '<li><a href="/">Home</a></li>',
-    '<li><a href="/login">Login</a></li>',
+    '<li><a href="/">Übersicht</a></li>',
+    '<li><a href="/login">Anmelden</a></li>',
   ].join("");
 }
 
@@ -87,29 +72,46 @@ function markActiveNav(navLinks) {
     if (!navbar || !navLinks) return;
 
     navLinks.innerHTML = buildNavItems(loggedIn);
+    navLinks.id = "primary-navigation";
     markActiveNav(navLinks);
 
     const toggle = document.createElement("button");
     toggle.className = "navbar-toggle";
     toggle.type = "button";
-    toggle.innerHTML = '<span class="nav-toggle-icon"></span>';
-    navbar.appendChild(toggle);
+    toggle.innerHTML = '<span class="nav-toggle-icon" aria-hidden="true"></span><span>Menü</span>';
+    toggle.setAttribute("aria-controls", navLinks.id);
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Navigation öffnen");
+    navbar.insertBefore(toggle, navLinks);
+
+    const setMenuOpen = (open) => {
+      navLinks.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-label", open ? "Navigation schließen" : "Navigation öffnen");
+    };
 
     toggle.addEventListener("click", () => {
-      navLinks.classList.toggle("open");
+      setMenuOpen(!navLinks.classList.contains("open"));
     });
 
     navLinks.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => navLinks.classList.remove("open"));
+      link.addEventListener("click", () => setMenuOpen(false));
     });
 
     window.addEventListener("click", (event) => {
       if (!navbar.contains(event.target)) {
-        navLinks.classList.remove("open");
+        setMenuOpen(false);
       }
     });
+    navbar.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && navLinks.classList.contains("open")) {
+        setMenuOpen(false);
+        toggle.focus();
+      }
+    });
+    window.matchMedia("(max-width: 960px)").addEventListener("change", () => setMenuOpen(false));
   } catch {
-    host.innerHTML = "";
+    host.innerHTML = '<nav class="navbar" aria-label="Hauptnavigation"><a class="nav-brand" href="/">Smart IoT Ops</a><a href="/login">Anmelden</a></nav>';
   }
 
   await initBrokerOverview();
@@ -120,9 +122,17 @@ async function initBrokerOverview() {
   if (!summaryEl) return;
 
   try {
+    const readList = async (url) => {
+      const response = await fetch(url);
+      if (response.status === 401 || response.status === 403) throw new Error("auth");
+      if (!response.ok) throw new Error("request");
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error("format");
+      return data;
+    };
     const [clients, topics] = await Promise.all([
-      fetch("/api/mqtt/clients").then((r) => r.json()),
-      fetch("/api/mqtt/topics").then((r) => r.json()),
+      readList("/api/mqtt/clients"),
+      readList("/api/mqtt/topics"),
     ]);
 
     const onlineCount = Array.isArray(clients) ? clients.filter((c) => c.connected).length : 0;
@@ -133,8 +143,11 @@ async function initBrokerOverview() {
       `<div class="stats-card"><h3>Broker</h3><div class="stats-val">${onlineCount > 0 ? "ONLINE" : "WARTET"}</div><p>${onlineCount} aktive Clients</p></div>`,
       `<div class="stats-card"><h3>Topics</h3><div class="stats-val">${topicCount}</div><p>${escapeHtml(lastTopic)}</p></div>`,
     ].join("");
-  } catch {
-    summaryEl.innerHTML = '<div class="error-msg">MQTT Status konnte nicht geladen werden.</div>';
+  } catch (error) {
+    summaryEl.innerHTML = error.message === "auth"
+      ? '<div class="helper-box">Deine Live-Messwerte warten auf dich. <a class="summary-login" href="/login">Jetzt anmelden →</a></div>'
+      : '<div class="error-msg" role="status">Der Verbindungsstatus ist gerade nicht verfügbar. <button class="btn-secondary" type="button" id="broker-retry">Erneut laden</button></div>';
+    document.getElementById("broker-retry")?.addEventListener("click", initBrokerOverview);
   }
 }
 
@@ -171,9 +184,13 @@ async function initBrokerOverview() {
       });
     }
 
-    const toggle = document.createElement("button");
+    body.id ||= `section-content-${index}`;
+    const toggle = [...header.querySelectorAll("button[aria-controls]")].find(
+      (button) => button.getAttribute("aria-controls") === body.id
+    ) || document.createElement("button");
     toggle.type = "button";
-    toggle.className = "section-toggle";
+    toggle.classList.add("section-toggle");
+    toggle.setAttribute("aria-controls", body.id);
 
     header.appendChild(toggle);
     if (!existingHeader) section.prepend(header);
@@ -185,16 +202,41 @@ async function initBrokerOverview() {
       body.hidden = collapsed;
       toggle.textContent = collapsed ? "Einblenden" : "Ausblenden";
       toggle.setAttribute("aria-expanded", String(!collapsed));
-      localStorage.setItem(storageKey, String(collapsed));
+      toggle.setAttribute("aria-label", `${heading.textContent.trim()}: ${collapsed ? "einblenden" : "ausblenden"}`);
+      try { localStorage.setItem(storageKey, String(collapsed)); } catch {}
     };
 
-    const stored = localStorage.getItem(storageKey);
-    const prefersOpenByDefault = section.id === "dashboard-quick-board";
-    const initialCollapsed = stored === null ? !prefersOpenByDefault : stored === "true";
+    let stored = null;
+    try { stored = localStorage.getItem(storageKey); } catch {}
+    const initialCollapsed = stored === null
+      ? section.classList.contains("collapsed") || section.dataset.collapsed === "true"
+      : stored === "true";
     applyState(initialCollapsed);
 
     toggle.addEventListener("click", () => {
       applyState(!section.classList.contains("collapsed"));
     });
+    const revealHashTarget = () => {
+      if (window.location.hash.slice(1) === section.id && section.id) applyState(false);
+    };
+    window.addEventListener("hashchange", revealHashTarget);
+    document.querySelectorAll('a[href^="#"]').forEach((link) => {
+      if (link.getAttribute("href").slice(1) === section.id && section.id) {
+        link.addEventListener("click", () => applyState(false));
+      }
+    });
+    revealHashTarget();
   });
+})();
+
+(function setupSkipLink() {
+  const main = document.querySelector("main");
+  if (!main) return;
+  main.id ||= "main-content";
+  main.tabIndex = -1;
+  const link = document.createElement("a");
+  link.className = "skip-link";
+  link.href = `#${main.id}`;
+  link.textContent = "Zum Inhalt springen";
+  document.body.prepend(link);
 })();

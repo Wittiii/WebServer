@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Serverkonsole - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
+  <link rel="stylesheet" href="/pages/experience.css">
 </head>
 <body class="theme-operations page-console">
   <div id="navbar"></div>
@@ -44,7 +45,8 @@
           </select>
         </div>
         <div class="console-toolbar-actions">
-          <button id="console-pause" type="button" class="btn btn-secondary">Pausieren</button>
+          <button id="console-pause" type="button" class="btn btn-secondary" aria-pressed="false">Pausieren</button>
+          <button id="console-export" type="button" class="btn btn-secondary">Gefilterte Zeilen speichern</button>
           <button id="console-clear" type="button" class="btn btn-secondary">Ansicht leeren</button>
         </div>
       </div>
@@ -65,7 +67,8 @@
           <input id="console-auto-scroll" type="checkbox" checked>
           Automatisch nach unten scrollen
         </label>
-        <span id="console-buffer-status">Logpuffer wird geladen...</span>
+        <span id="console-buffer-status" role="status">Logpuffer wird geladen...</span>
+        <button id="console-retry" type="button" class="btn-secondary" hidden>Erneut verbinden</button>
       </div>
     </section>
   </main>

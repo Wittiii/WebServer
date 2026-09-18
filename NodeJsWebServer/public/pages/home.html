@@ -3,66 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Operations Deck - Smart IoT</title>
+  <title>Übersicht – Smart IoT</title>
   <link rel="stylesheet" href="/pages/style.css">
+  <link rel="stylesheet" href="/pages/experience.css">
 </head>
 <body class="theme-operations page-home">
   <div id="navbar"></div>
-
-  <header class="hero">
+  <header class="hero home-hero">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <h1>Operations Deck</h1>
+        <p class="eyebrow">Dein Smart IoT Arbeitsplatz</p>
+        <h1>Alles im Blick.<br><span>Alles an einem Ort.</span></h1>
+        <p class="hero-text">Von der ersten Messung bis zum Livestream: Hier laufen deine Geräte und Anlagen zusammen.</p>
         <div class="hero-actions">
-          <a class="btn" href="/dashboard">Dashboard oeffnen</a>
-          <a class="btn btn-secondary" href="/hydroponic">Hydroponik</a>
-          <div class="clock-pill">Systemzeit <span id="clock"></span></div>
+          <a class="btn" href="/dashboard">Dashboard öffnen <span aria-hidden="true">→</span></a>
+          <a class="btn btn-secondary" href="/hydroponic">Zur Hydroponik</a>
         </div>
       </div>
-    </div>
-    <div class="container badge-strip">
-      <span class="status-badge status-online"><span class="pulse-online"></span>MQTT Broker</span>
-      <span class="status-badge status-online"><span class="pulse-online"></span>SQLite Logging</span>
-      <span class="status-badge status-online"><span class="pulse-online"></span>Geschuetzter Zugriff</span>
+      <div class="home-context">
+        <span class="eyebrow">Operations Deck</span>
+        <div class="home-orbit" aria-hidden="true"><span>IoT</span></div>
+        <div class="home-clock"><span>Lokale Uhrzeit</span><strong id="clock">--:--:--</strong></div>
+      </div>
     </div>
   </header>
-
   <main class="container page-shell">
-    <div id="broker-summary" class="grid-2 summary-grid"></div>
-
-    <div class="grid-2 feature-grid">
-      <section class="panel">
-        <h2>Schnellzugriff</h2>
-        <div class="action-card-grid">
-          <a class="action-card" href="/dashboard">
-            <strong>Broker Monitor</strong>
-          </a>
-          <a class="action-card" href="/camera">
-            <strong>Kamera Leitstand</strong>
-          </a>
-          <a class="action-card" href="/energy">
-            <strong>Stromverbrauch</strong>
-          </a>
-          <a class="action-card" href="/hydroponic">
-            <strong>Hydroponik Hub</strong>
-          </a>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Interaktion</h2>
-        <div class="hero-actions compact-actions">
-          <button id="hello-btn" type="button">Systemgruss anzeigen</button>
-          <a class="btn btn-secondary" href="/login">Zum Login</a>
-        </div>
-      </section>
+    <div id="broker-summary" class="grid-2 summary-grid" aria-live="polite">
+      <p class="helper-box">Verbindungsstatus wird geladen …</p>
     </div>
-
-    <section id="messages" class="panel">
-      <h2>System-Nachrichten</h2>
+    <section class="home-workspaces" data-collapsible="false" aria-labelledby="workspace-title">
+      <div class="workspace-heading"><div><p class="eyebrow">Direkt zum Wesentlichen</p><h2 id="workspace-title">Deine Bereiche</h2></div><span>Ein Klick. Direkt drin.</span></div>
+      <div class="workspace-grid">
+        <a class="workspace-card" href="/dashboard">
+          <span class="workspace-icon" aria-hidden="true">▦</span><span class="workspace-arrow" aria-hidden="true">↗</span>
+          <h3>Dashboard</h3><p>Verbindungen, Topics und Serverstatus im Überblick.</p><span class="workspace-link">Übersicht öffnen <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="workspace-card workspace-camera" href="/camera">
+          <span class="workspace-icon" aria-hidden="true">◉</span><span class="workspace-arrow" aria-hidden="true">↗</span>
+          <h3>Kameras</h3><p>Live dabei sein. Kameras steuern und Aufnahmen ansehen.</p><span class="workspace-link">Zum Livestream <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="workspace-card workspace-energy" href="/energy">
+          <span class="workspace-icon" aria-hidden="true">ϟ</span><span class="workspace-arrow" aria-hidden="true">↗</span>
+          <h3>Energie</h3><p>Verbrauch, Solarerzeugung und Batterie im Blick behalten.</p><span class="workspace-link">Messwerte ansehen <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="workspace-card workspace-hydro" href="/hydroponic">
+          <span class="workspace-icon" aria-hidden="true">♧</span><span class="workspace-arrow" aria-hidden="true">↗</span>
+          <h3>Hydroponik</h3><p>Deine Anlage steuern und automatische Abläufe einrichten.</p><span class="workspace-link">Zur Steuerung <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
     </section>
+    <a class="home-console-link" href="/console"><span><strong>Ein genauerer Blick?</strong> Die Konsole zeigt dir die Systemereignisse.</span><span>Konsole öffnen <span aria-hidden="true">→</span></span></a>
+    <footer class="page-footer"><span>Smart IoT Ops</span><span>Dein System. Dein Überblick.</span></footer>
   </main>
-
   <script src="/pages/main.js"></script>
 </body>
 </html>

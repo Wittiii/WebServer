@@ -10,7 +10,7 @@ async function readJson(response) {
 }
 
 export async function fetchCameraOverview() {
-  return readJson(await fetch("/api/camera/overview", { credentials: "same-origin" }));
+  return readJson(await fetch("/api/camera/overview", { credentials: "same-origin", signal: AbortSignal.timeout(12000) }));
 }
 
 export async function postCameraCommand(cameraId, action, body = {}) {
@@ -26,6 +26,7 @@ export async function fetchTimelapse(cameraId, offset = 0) {
   const query = new URLSearchParams({ cameraId, offset, limit: 200 });
   return readJson(await fetch(`/api/camera/timelapse?${query}`, {
     credentials: "same-origin",
+    signal: AbortSignal.timeout(12000),
   }));
 }
 

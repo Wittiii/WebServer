@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kamera - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
+  <link rel="stylesheet" href="/pages/experience.css">
 </head>
 <body class="theme-operations page-camera">
   <div id="navbar"></div>
@@ -12,10 +13,9 @@
   <header class="hero">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <h1>Kamera Leitstand</h1>
+        <h1>Kamera-Leitstand</h1>
         <p class="hero-text">
-          Getrennter Bereich fuer Raspberry Pi Kamera und ESP32-CAM. Beide Quellen laufen ueber MediaMTX,
-          werden per MQTT gesteuert und koennen hier separat beobachtet und bedient werden.
+          Wähle deine Kamera, öffne den Livestream und passe die Aufnahme an.
         </p>
       </div>
       <div class="hero-side">
@@ -36,9 +36,13 @@
   </header>
 
   <main class="container page-shell">
+    <div class="dashboard-refresh-bar">
+      <p id="camera-overview-status" role="status">Kameradaten werden geladen …</p>
+      <button id="camera-overview-refresh" type="button" class="btn-secondary">Jetzt aktualisieren</button>
+    </div>
     <section class="panel">
       <div class="section-header">
-        <h2>Kamera Auswahl</h2>
+        <h2>Kamera auswählen</h2>
       </div>
       <div id="camera-summary" class="grid-2 camera-summary-grid"></div>
       <div id="camera-picker" class="camera-picker"></div>

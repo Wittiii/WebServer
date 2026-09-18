@@ -1,6 +1,7 @@
 ﻿const db = require('../database/db');
 
 const { publishAutomationActions } = require('../services/automationService');
+const { readChart } = require('../services/readingChartService');
 const {
   getDatabaseStats,
   optimizeDatabase
@@ -297,6 +298,24 @@ const listReadings = (req, res) => {
     : limitParam && Number.isFinite(limitRaw)
       ? Math.min(Math.max(Math.trunc(limitRaw), 1), MAX_READINGS_PER_REQUEST)
       : 100;
+
+  if (req.query?.view === 'chart') {
+    const parseDate = (value) => value ? new Date(value).toISOString() : '';
+    let chartFrom, chartTo;
+    try {
+      chartFrom = parseDate(from);
+      chartTo = parseDate(to);
+      if (chartFrom && chartTo && chartFrom > chartTo) throw new Error('range');
+    } catch {
+      return res.status(400).json({ error: 'Ungueltiger Zeitraum: Von muss vor Bis liegen.' });
+    }
+    try {
+      return res.json(readChart(db, { objectId: id, key, topic, from: chartFrom, to: chartTo,
+        limit: limitParam ? limit : 2000 }));
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
 
   try {
     const params = [id];
