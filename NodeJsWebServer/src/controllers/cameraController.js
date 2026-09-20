@@ -54,8 +54,17 @@ function normalizeCommandSettings(config, settings) {
     }
 
     if (field.type === "number" || field.type === "select") {
+      if (config.kind === "pi" &&
+          !((typeof rawValue === "number") || (typeof rawValue === "string" && rawValue.trim()))) {
+        throw new Error(`invalid_number:${key}`);
+      }
       const numberValue = Number(rawValue);
       if (!Number.isFinite(numberValue)) throw new Error(`invalid_number:${key}`);
+      if (field.integer && !Number.isInteger(numberValue)) throw new Error(`invalid_number:${key}`);
+      if (field.multipleOf && numberValue % field.multipleOf !== 0) throw new Error(`invalid_number:${key}`);
+      if (config.kind === "pi" && key === "server_capture_interval_seconds" && !Number.isInteger(numberValue)) {
+        throw new Error(`invalid_number:${key}`);
+      }
       if (field.min != null && numberValue < field.min) throw new Error(`value_below_minimum:${key}`);
       if (field.max != null && numberValue > field.max) throw new Error(`value_above_maximum:${key}`);
       if (field.type === "select" && !field.options?.some((option) => Number(option.value) === numberValue)) {

@@ -145,6 +145,14 @@ Der Webserver sendet Kameraeinstellungen mit QoS 1 an `camera/<id>/cmd/set`. Jed
 eine Request-ID. ESP32-CAM und DFR1154 melden das Ergebnis unter
 `camera/<id>/status/command/*` zurueck und speichern erfolgreiche Einstellungen in NVS.
 
+Der Pi-Controller akzeptiert `_request_id` als Metadatum und bestaetigt die
+uebernommenen Einstellungen weiterhin ueber `status/config`. Befehle werden
+ohne Retain gesendet. Fuer den Pi sind ausschliesslich die Kamera- und
+Serveraufnahmefelder des Formulars freigegeben; Programmpfade und Streamziele
+bleiben lokale Konfiguration. Die API prueft auch die Pi-Wertebereiche sowie
+gerade Bildabmessungen und ganzzahlige FPS/Bitraten/Intervalle vor dem Senden.
+Das Serveraufnahmeintervall bleibt im Webserver auf mindestens 10 Sekunden begrenzt.
+
 Beide ESP-Firmwares behandeln WLAN-, MQTT-, RTSP- und OTA-Ausfaelle unabhaengig voneinander:
 
 - WLAN und MQTT werden dauerhaft neu verbunden.

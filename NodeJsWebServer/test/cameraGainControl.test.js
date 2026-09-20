@@ -47,6 +47,56 @@ function dfrCamera() {
   return cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "dfr1154");
 }
 
+test("Pi settings publish only camera fields and request metadata without retain", async () => {
+  const { controller, published } = controllerWithBroker();
+  const camera = cameraConfig.getCameraConfigs("localhost").find((item) => item.kind === "pi");
+  const settings = { width: 1280, height: 720, framerate: 15, bitrate: 2500000,
+    sharpness: 1, brightness: 0, contrast: 1, saturation: 1,
+    server_capture_enabled: true, server_capture_interval_seconds: 60 };
+  const res = response();
+  await controller.sendCommand({ hostname: "localhost", body: {
+    cameraId: camera.cameraId, action: "set", settings,
+  } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].topic, `${camera.mqttTopicBase}/cmd/set`);
+  assert.deepEqual(published[0].payload, { ...settings, _request_id: res.body.requestId });
+  assert.equal(published[0].options.qos, 1);
+  assert.equal(Boolean(published[0].options.retain), false);
+});
+
+test("invalid or forbidden Pi settings are rejected before any MQTT publish", async () => {
+  const { controller, published } = controllerWithBroker();
+  const camera = cameraConfig.getCameraConfigs("localhost").find((item) => item.kind === "pi");
+  for (const settings of [
+    { width: 1279 }, { height: 5000 }, { framerate: 2.5 }, { framerate: 61 },
+    { bitrate: 50000001 }, { bitrate: 12345.5 }, { brightness: 2 }, { contrast: -1 },
+    { saturation: 33 }, { sharpness: 17 }, { brightness: null }, { contrast: true },
+    { contrast: [] }, { brightness: "" }, { server_capture_interval_seconds: 10.5 },
+    { ffmpeg_path: "/tmp/program", framerate: 10 }, { host: "other-host" },
+  ]) {
+    const res = response();
+    await controller.sendCommand({ hostname: "localhost", body: {
+      cameraId: camera.cameraId, action: "set", settings,
+    } }, res);
+    assert.equal(res.statusCode, 400, JSON.stringify(settings));
+  }
+  assert.equal(published.length, 0);
+});
+
+test("Pi stream commands keep their existing topic and non-retained delivery", async () => {
+  const { controller, published } = controllerWithBroker();
+  const camera = cameraConfig.getCameraConfigs("localhost").find((item) => item.kind === "pi");
+  for (const action of ["start", "stop", "restart", "ping"]) {
+    const res = response();
+    await controller.sendCommand({ hostname: "localhost", body: { cameraId: camera.cameraId, action } }, res);
+    assert.equal(res.statusCode, 200);
+    const message = published.at(-1);
+    assert.equal(message.topic, `${camera.mqttTopicBase}/cmd/${action}`);
+    assert.equal(Boolean(message.options.retain), false);
+  }
+});
+
 test("DFR gain options preserve MQTT indices with a sensor-specific default and no unsupported 128x option", () => {
   const camera = dfrCamera();
   const gain = camera.controls.fields.find((field) => field.key === "gainceiling");
