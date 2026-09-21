@@ -44,6 +44,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_object_readings_topic ON object_readings(topic);
   CREATE INDEX IF NOT EXISTS idx_object_readings_object_key_id
     ON object_readings(object_id, value_key, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_object_readings_object_key_time
+    ON object_readings(object_id, value_key, created_at, id);
+  CREATE INDEX IF NOT EXISTS idx_object_readings_object_time
+    ON object_readings(object_id, created_at, id);
 `)
 
 const haveValueKeys = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='object_value_keys'").get();

@@ -66,6 +66,13 @@ verwerfen. Besonders der erste Pull kann wegen bisher verfolgter, auf dem Pi
 veränderter `node_modules` blockieren. Erst danach den Server wieder starten.
 Kein zweites `npm start` neben einem bereits laufenden systemd-/PM2-Dienst starten.
 
+## Performance auf dem Pi
+
+Messungen, behobene Engpässe und verbleibende Grenzen stehen in der
+[Performance-Prüfung für den Raspberry Pi 4 B](docs/performance-rpi4.md).
+`npm run perf:check -- 250000` prüft Graph-Abfragen mit synthetischen Daten,
+ohne die produktive Datenbank zu öffnen.
+
 ## Aufbau und Erweiterungen
 
 | Bereich | Aufgabe |

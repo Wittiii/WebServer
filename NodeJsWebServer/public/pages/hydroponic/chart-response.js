@@ -13,6 +13,7 @@
       possiblyTruncated: legacy && readings.length >= limit,
       total: legacy ? null : payload.total,
       sampled: !legacy && payload.sampled === true,
+      omittedTextValues: Number(payload?.omittedTextValues || 0),
       from: legacy ? readings.at(-1)?.created_at : payload.from,
       to: legacy ? readings[0]?.created_at : payload.to,
     };

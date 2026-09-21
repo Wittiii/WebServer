@@ -13,6 +13,7 @@
     "start": "node src/app.js",
     "dev": "node --watch src/app.js",
     "test": "node --test",
+    "perf:check": "node scripts/check-performance.js",
     "backup": "node scripts/backup-database.js"
   },
   "keywords": [],

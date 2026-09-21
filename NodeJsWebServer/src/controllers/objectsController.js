@@ -282,7 +282,7 @@ const updateObject = (req, res) => {
   }
 };
 
-const listReadings = (req, res) => {
+const listReadings = async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Ungueltige ID' });
 
@@ -309,11 +309,22 @@ const listReadings = (req, res) => {
     } catch {
       return res.status(400).json({ error: 'Ungueltiger Zeitraum: Von muss vor Bis liegen.' });
     }
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    res.once?.('close', abort);
     try {
-      return res.json(readChart(db, { objectId: id, key, topic, from: chartFrom, to: chartTo,
-        limit: limitParam ? limit : 2000 }));
+      const result = await readChart(db, { objectId: id, key, topic, from: chartFrom, to: chartTo,
+        limit: limitParam ? limit : 2000 }, { signal: controller.signal });
+      if (!controller.signal.aborted) return res.json(result);
     } catch (err) {
+      if (controller.signal.aborted) return;
+      if (err.code === 'CHART_BUSY') {
+        res.set?.('Retry-After', '3');
+        return res.status(503).json({ error: err.message });
+      }
       return res.status(500).json({ error: err.message });
+    } finally {
+      res.removeListener?.('close', abort);
     }
   }
 

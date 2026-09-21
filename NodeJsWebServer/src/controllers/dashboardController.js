@@ -6,7 +6,7 @@ const { promisify } = require('util');
 const db = require('../database/db');
 
 const execFileAsync = promisify(execFile);
-const DB_FILE_PATH = path.join(__dirname, '..', 'database', 'app.db');
+const DB_FILE_PATH = db.name;
 
 function readCpuSnapshot() {
   return os.cpus().map((cpu) => {
@@ -170,8 +170,9 @@ const saveDashboardWidgets = (req, res) => {
 
 const getDashboardSystem = async (req, res) => {
   try {
-    const [dbFile, storage] = await Promise.all([
+    const [dbFile, walFile, storage] = await Promise.all([
       fs.promises.stat(DB_FILE_PATH).catch(() => null),
+      fs.promises.stat(`${DB_FILE_PATH}-wal`).catch(() => null),
       getStorageStats(DB_FILE_PATH).catch(() => null),
     ]);
 
@@ -196,7 +197,9 @@ const getDashboardSystem = async (req, res) => {
         usedBytes: 0,
       },
       database: {
-        sizeBytes: Number(dbFile?.size || 0),
+        sizeBytes: Number(dbFile?.size || 0) + Number(walFile?.size || 0),
+        mainBytes: Number(dbFile?.size || 0),
+        walBytes: Number(walFile?.size || 0),
         path: DB_FILE_PATH,
       },
       system: {

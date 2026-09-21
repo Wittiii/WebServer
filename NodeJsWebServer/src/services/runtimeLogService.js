@@ -1,10 +1,16 @@
 const util = require("util");
+const { BoundedMap } = require('./boundedMap');
 
 const DEFAULT_MAX_ENTRIES = 2000;
 const MAX_MESSAGE_LENGTH = 16000;
 const ANSI_PATTERN = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 
-const entries = [];
+const entries = new BoundedMap({
+  maxEntries: DEFAULT_MAX_ENTRIES,
+  maxWeight: 8 * 1024 * 1024,
+  // Count up to two bytes per JS string character plus entry metadata.
+  weigh: (entry) => entry.message.length * 2 + 160,
+});
 const listeners = new Set();
 const originalConsoleMethods = new Map();
 let nextId = 1;
@@ -29,10 +35,8 @@ function append(level, args) {
     message: normalizeMessage(args),
   };
   nextId += 1;
-  entries.push(entry);
-
-  const overflow = entries.length - configuredMaxEntries();
-  if (overflow > 0) entries.splice(0, overflow);
+  entries.maxEntries = configuredMaxEntries();
+  entries.set(entry.id, entry);
 
   for (const listener of listeners) {
     try {
@@ -60,12 +64,12 @@ function installConsoleCapture() {
 function listEntries({ after = 0, limit = 1000 } = {}) {
   const afterId = Math.max(0, Number(after) || 0);
   const safeLimit = Math.min(5000, Math.max(1, Number(limit) || 1000));
-  const filtered = entries.filter((entry) => entry.id > afterId);
+  const filtered = [...entries.values()].filter((entry) => entry.id > afterId);
   return filtered.slice(-safeLimit);
 }
 
 function getLastId() {
-  return entries.at(-1)?.id || 0;
+  return entries.size ? nextId - 1 : 0;
 }
 
 function subscribe(listener) {

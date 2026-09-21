@@ -84,6 +84,9 @@ async function loadReadings() {
       : result.sampled
       ? `${list.length} von ${result.total} Messwerten als Stichprobe über den gesamten Zeitraum (${coverage}). Kurze Spitzen können fehlen; für Details Zeitraum eingrenzen. CSV enthält die angezeigte Stichprobe.`
       : list.length ? `${list.length} Messwerte · ${coverage}` : 'Keine Messwerte im gewählten Zeitraum.';
+    if (result.omittedTextValues) {
+      graphStatus.textContent += ` ${result.omittedTextValues} überlange Textwerte sind im Graphen und CSV ausgelassen (Spalte text_omitted).`;
+    }
 
     if (list.length === 0) {
       drawChart([]);
@@ -453,16 +456,12 @@ function getDateRange() {
 }
 
 function buildCsv(readings) {
-  const header = ['created_at', 'topic', 'value_key', 'value_text', 'raw_payload'];
+  const header = ['created_at', 'topic', 'value_key', 'value_text'];
+  if (readings.some((row) => Object.hasOwn(row, 'raw_payload'))) header.push('raw_payload');
+  if (readings.some((row) => row.text_omitted)) header.push('text_omitted');
   const lines = [header.join(',')];
   for (const r of readings) {
-    const row = [
-      r.created_at,
-      r.topic,
-      r.value_key,
-      r.value_text,
-      r.raw_payload
-    ].map((v) => {
+    const row = header.map((column) => r[column]).map((v) => {
       const s = String(v ?? '');
       if (s.includes('"') || s.includes(',') || s.includes('\n')) {
         return `"${s.replace(/"/g, '""')}"`;

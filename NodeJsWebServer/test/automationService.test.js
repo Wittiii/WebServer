@@ -179,10 +179,10 @@ test('reading limits default to 100 and remain bounded for fractional or all req
   }
 });
 
-test('chart reading requests validate ranges and leave the raw readings API unchanged', () => {
+test('chart reading requests validate ranges and leave the raw readings API unchanged', async () => {
   reading('20');
   const res = response();
-  controller.listReadings({ params: { id: 1 }, query: { view: 'chart', key: 'temperature' } }, res);
+  await controller.listReadings({ params: { id: 1 }, query: { view: 'chart', key: 'temperature' } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.total, 1);
   assert.equal(res.body.readings[0].value_text, '20');
