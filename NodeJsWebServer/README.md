@@ -8,8 +8,11 @@ Raspberry Pi 4; der HTTP-Startbefehl bleibt `node src/app.js` bzw. `npm start`.
 
 Im Verzeichnis dieser `package.json` arbeiten. Node.js muss zu `engines` in
 `package.json` und zum nativen Paket `better-sqlite3` passen. Die Tests wurden
-lokal mit Node.js 24.11.1 unter Windows ausgeführt. FFmpeg und MediaMTX werden
+lokal mit Node.js 20.20.2 und 24.11.1 unter Windows ausgeführt. FFmpeg und MediaMTX werden
 für die Kamerafunktionen separat benötigt; siehe [Kamera-Dokumentation](docs/camera-streaming.md).
+Für einen geplanten Laufzeitwechsel wird Node.js 24 LTS empfohlen. Node.js 20
+wird inzwischen nicht mehr regulär unterstützt. Ergebnisse der erneuten
+Code- und Versionsprüfung stehen im [Pi-Prüfbericht vom 05.10.2026](docs/runtime-review-2026-10-05.md).
 
 ```bash
 npm ci --omit=dev

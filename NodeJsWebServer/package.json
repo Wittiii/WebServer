@@ -25,9 +25,9 @@
     "aedes": "^0.51.3",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^16.6.1",
-    "express": "^5.1.0",
-    "express-session": "^1.18.2",
-    "ws": "^8.21.0"
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "ws": "^8.22.0"
   },
   "overrides": {
     "uuid": "^11.1.1"

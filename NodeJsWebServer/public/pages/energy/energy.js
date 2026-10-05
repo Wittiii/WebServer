@@ -867,6 +867,7 @@ async function refresh(force = false) {
     const response = await fetch(`/energy/overview?${query}`, {
       headers: { Accept: "application/json" },
       credentials: "same-origin",
+      signal: AbortSignal.timeout(12000),
     });
     if (response.status === 401 || response.redirected) {
       window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);

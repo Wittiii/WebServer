@@ -1,4 +1,5 @@
 const { Transform, Duplex } = require('node:stream');
+const DEFAULT_WRITE_TIMEOUT_MS = 60000;
 
 // Check MQTT's Remaining Length before the broker buffers the packet body.
 // State survives TCP/WS chunk boundaries; payload bytes are never re-parsed.
@@ -40,13 +41,41 @@ class MqttPacketLimit extends Transform {
   }
 }
 
-function limitMqttConnection(connection, maxBytes) {
+function limitMqttConnection(connection, maxBytes, { writeTimeoutMs = DEFAULT_WRITE_TIMEOUT_MS } = {}) {
   const limiter = new MqttPacketLimit(maxBytes);
   connection.pipe(limiter);
   const transport = Duplex.from({ readable: limiter, writable: connection });
+  const timeoutMs = Number.isFinite(writeTimeoutMs) && writeTimeoutMs > 0
+    ? Math.min(300000, Math.max(1, Math.trunc(writeTimeoutMs))) : DEFAULT_WRITE_TIMEOUT_MS;
+  let writeTimer = null;
+  const clearWriteTimer = () => {
+    if (writeTimer) clearTimeout(writeTimer);
+    writeTimer = null;
+  };
+  const write = transport.write;
+  transport.write = function (...args) {
+    const accepted = write.apply(this, args);
+    // Aedes 0.x waits indefinitely for drain after backpressure. Disconnect
+    // just this stalled client; Aedes.close() releases its pending drain jobs.
+    if (!accepted && !this.destroyed && !writeTimer) {
+      writeTimer = setTimeout(() => {
+        writeTimer = null;
+        const error = new Error('MQTT outbound write did not drain before timeout');
+        error.code = 'MQTT_WRITE_TIMEOUT';
+        transport.destroy(error);
+      }, timeoutMs);
+      writeTimer.unref();
+    }
+    return accepted;
+  };
   transport.remoteAddress = connection.remoteAddress;
-  transport.on('error', () => connection.destroy());
+  transport.on('drain', clearWriteTimer);
+  transport.on('error', () => {
+    clearWriteTimer();
+    connection.destroy();
+  });
   transport.once('close', () => {
+    clearWriteTimer();
     connection.destroy();
     limiter.destroy();
   });
@@ -54,4 +83,4 @@ function limitMqttConnection(connection, maxBytes) {
   return transport;
 }
 
-module.exports = { MqttPacketLimit, limitMqttConnection };
+module.exports = { MqttPacketLimit, limitMqttConnection, DEFAULT_WRITE_TIMEOUT_MS };

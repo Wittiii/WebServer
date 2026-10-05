@@ -39,10 +39,17 @@ async function fetchReadings(limit, includeFilters = true, chart = false, signal
     if (range.to) params.set('to', range.to);
   }
 
-  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`, { signal });
+  // Bound the complete response, including JSON reads. Keep selection changes
+  // able to cancel the request without leaving automatic refresh waiting.
+  const timeout = AbortSignal.timeout(12000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`, { signal: requestSignal });
   if (res.status === 401 || res.status === 403) throw new Error('Bitte erneut anmelden. Deine Sitzung ist abgelaufen.');
   if (!res.ok) throw new Error(`Messwerte konnten nicht geladen werden (HTTP ${res.status}). Bitte erneut versuchen.`);
-  const list = await res.json().catch(() => { throw new Error('Der Server hat keine lesbaren Messwerte geliefert. Bitte erneut versuchen.'); });
+  const list = await res.json().catch((error) => {
+    if (requestSignal.aborted) throw requestSignal.reason;
+    throw new Error('Der Server hat keine lesbaren Messwerte geliefert. Bitte erneut versuchen.');
+  });
   if (chart) {
     return HydroChart.normalizeChartResponse(list, limit);
   }

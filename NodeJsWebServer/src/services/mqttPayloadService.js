@@ -56,6 +56,11 @@ function createValueExtractor(payload) {
   const text = String(payload ?? "").trim();
   let parsed;
   let isJson = false;
+  // Several objects can map the same key in one message. Reuse its extraction
+  // and serialization without retaining the payload after ingestion finishes.
+  const values = new Map();
+  let cachedBytes = 0;
+  const maxCachedBytes = 256 * 1024;
 
   try {
     parsed = JSON.parse(text);
@@ -64,10 +69,7 @@ function createValueExtractor(payload) {
     // Keep legacy scalar and key=value payload handling below.
   }
 
-  return (key) => {
-    const normalizedKey = String(key ?? "").trim();
-    if (!normalizedKey || normalizedKey === "$value") return text;
-
+  const extract = (normalizedKey) => {
     if (isJson) {
       if (parsed === null || typeof parsed !== "object") {
         return typeof parsed === "string" ? serializeValue(parsed) : text;
@@ -82,6 +84,18 @@ function createValueExtractor(payload) {
     while ((match = expression.exec(text)) !== null) lastValue = match[1].trim();
     if (lastValue) return lastValue;
     return text.includes("=") ? "" : text;
+  };
+  return (key) => {
+    const normalizedKey = String(key ?? "").trim();
+    if (!normalizedKey || normalizedKey === "$value") return text;
+    if (values.has(normalizedKey)) return values.get(normalizedKey);
+    const value = extract(normalizedKey);
+    const estimatedBytes = (normalizedKey.length + value.length) * 2 + 64;
+    if (values.size < 128 && cachedBytes + estimatedBytes <= maxCachedBytes) {
+      values.set(normalizedKey, value);
+      cachedBytes += estimatedBytes;
+    }
+    return value;
   };
 }
 

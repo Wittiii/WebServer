@@ -27,3 +27,19 @@ test("optimized extractor preserves scalar and legacy key=value behavior", () =>
     }
   }
 });
+
+test('one MQTT message reuses an object value shared by many mapped objects', (t) => {
+  const payload = JSON.stringify({ sensor: { values: new Array(2000).fill(23.5) } });
+  const stringify = JSON.stringify;
+  let serializations = 0;
+  t.mock.method(JSON, 'stringify', (value) => {
+    serializations += 1;
+    return stringify(value);
+  });
+  const extract = createValueExtractor(payload);
+  const expected = stringify({ values: new Array(2000).fill(23.5) });
+  for (let index = 0; index < 100; index++) assert.equal(extract(' sensor '), expected);
+  assert.equal(serializations, 1, 'a repeated mapped key needs only one value serialization');
+  assert.equal(extract('missing'), '');
+  assert.equal(extract('sensor.values.0'), '23.5');
+});

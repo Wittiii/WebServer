@@ -195,3 +195,22 @@ test('chart reading requests validate ranges and leave the raw readings API unch
   controller.listReadings({ params: { id: 1 }, query: {} }, raw);
   assert.ok(Array.isArray(raw.body));
 });
+
+test('large automation polls yield between rule pages without locks and defer rules created mid-poll', async () => {
+  db.transaction(() => { for (let index = 0; index < 96; index++) createRule(); })();
+  reading(20);
+  let eventLoopTurnRan = false;
+  const turn = new Promise((resolve) => setImmediate(() => {
+    eventLoopTurnRan = true;
+    assert.equal(db.inTransaction, false, 'a yielded poll must not hold a SQLite transaction');
+    createRule({ name: 'Created during poll' });
+    resolve();
+  }));
+  await processRules(now);
+  const yieldedBeforeCompletion = eventLoopTurnRan;
+  await turn;
+  assert.equal(yieldedBeforeCompletion, true, 'HTTP and timers need a turn before all rules finish');
+  assert.equal(published.length, 96, 'new rules are processed by the next poll');
+  await processRules(now);
+  assert.equal(published.length, 97);
+});

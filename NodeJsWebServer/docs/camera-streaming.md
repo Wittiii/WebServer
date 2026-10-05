@@ -77,7 +77,21 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 
 ## Beispiel MediaMTX
 
-Siehe [mediamtx.camera.example.yml](C:/Users/paulw/OneDrive/Desktop/NodejsWebServer/NodeJsWebServer/docs/mediamtx.camera.example.yml).
+Siehe [mediamtx.camera.example.yml](mediamtx.camera.example.yml).
+
+Das Beispiel erzeugt HLS mit `hlsAlwaysRemux: false` erst bei Abruf. So entfällt
+die fortlaufende HLS-Aufbereitung für Streams ohne HLS-Zuschauer; die erste
+HLS-Wiedergabe kann entsprechend länger starten. Dieses Verhalten beschreibt
+die [offizielle MediaMTX-Konfigurationsreferenz](https://mediamtx.org/docs/references/configuration-file).
+Die tatsächlich installierte MediaMTX-Konfiguration muss auf dem Server getrennt
+geprüft werden; ein Update des Node-Projekts ändert sie nicht automatisch.
+
+FFmpeg-Bridge-Meldungen werden auf 1.024 Zeichen begrenzt und während einer
+Fehlerflut höchstens alle fünf Sekunden ausgegeben. Der letzte Status wird
+weiter aktualisiert; beim Prozessende folgt gegebenenfalls die letzte
+unterdrückte Meldung mit ihrer Anzahl. Ungültige RTSP-Steuerzeichen und
+synchrone Prozessstartfehler werden als Kamerafehler behandelt, damit eine
+einzelne Bridge den Webserver nicht beendet.
 
 ## ESP32 Auto-Bridge
 

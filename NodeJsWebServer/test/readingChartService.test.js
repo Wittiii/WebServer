@@ -96,3 +96,26 @@ test('chart orders by measurement time even when insertion order differs', async
       (3,1,'t','k','30','{}','2026-09-02T00:00:00.000Z');`);
   assert.deepEqual((await readChart(db, { objectId: 1, limit: 2 })).readings.map((r) => r.id), [1, 2]);
 });
+
+test('aborting a queued chart immediately releases its slot before the running chart finishes', async (t) => {
+  const db = new Database(':memory:');
+  t.after(() => db.close());
+  db.exec(`CREATE TABLE object_readings(id INTEGER PRIMARY KEY,object_id INTEGER,topic TEXT,value_key TEXT,value_text TEXT,raw_payload TEXT,created_at TEXT);
+    CREATE INDEX chart_queue_time ON object_readings(object_id,value_key,created_at,id);
+    WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<10000)
+    INSERT INTO object_readings SELECT i,1,'t','k','20','{}',strftime('%Y-%m-%dT%H:%M:%fZ','2026-01-01','+'||i||' seconds') FROM n;`);
+  const query = { objectId: 1, key: 'k', limit: 1000 };
+  let activeFinished = false;
+  const active = readChart(db, query).then((result) => { activeFinished = true; return result; });
+  const controller = new AbortController();
+  const queued = readChart(db, query, { signal: controller.signal });
+  const other = readChart(db, query);
+  const cancellation = assert.rejects(queued, { name: 'AbortError' });
+  controller.abort();
+  await cancellation;
+  const cancelledBeforeCompletion = !activeFinished;
+  const replacement = readChart(db, query);
+  const results = await Promise.allSettled([active, other, replacement]);
+  assert.equal(cancelledBeforeCompletion, true, 'a cancelled waiter must not wait for the active query');
+  assert.ok(results.every((result) => result.status === 'fulfilled'), 'the freed waiting slot accepts a replacement');
+});

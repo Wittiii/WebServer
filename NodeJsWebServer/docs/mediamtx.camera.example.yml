@@ -3,7 +3,8 @@ rtspAddress: :8554
 
 hls: true
 hlsAddress: :8888
-hlsAlwaysRemux: true
+# HLS erst bei Abruf erzeugen; die erste Wiedergabe kann dadurch länger dauern.
+hlsAlwaysRemux: false
 
 webrtc: true
 webrtcAddress: :8889

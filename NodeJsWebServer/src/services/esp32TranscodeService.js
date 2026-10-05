@@ -8,6 +8,8 @@ const bridges = new Map();
 
 let supervisorTimer = null;
 let stopping = false;
+const MAX_BRIDGE_MESSAGE_LENGTH = 1024;
+const STDERR_LOG_INTERVAL_MS = 5000;
 
 function parseBoolean(value) {
   if (typeof value === "boolean") return value;
@@ -100,6 +102,9 @@ function getBridgeDestinationUrl(camera) {
 }
 
 function isRtspSource(value) {
+  // URL parsing normalizes some control characters, while spawn receives the
+  // original argument and rejects NUL synchronously.
+  if (typeof value !== "string" || /[\u0000-\u001f\u007f]/.test(value)) return false;
   try {
     const url = new URL(value);
     return (url.protocol === "rtsp:" || url.protocol === "rtsps:") && Boolean(url.hostname);
@@ -215,6 +220,8 @@ function ensureBridge(cameraId) {
     progressAdvanced: false,
     lastPublishedSignature: "",
     lastPublishedAt: 0,
+    lastStderrLogAt: null,
+    suppressedStderrMessages: 0,
   };
   bridges.set(cameraId, created);
   return created;
@@ -328,20 +335,42 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
     `[ESP32-Bridge:${camera.cameraId}] starting ffmpeg: ${sourceRtspUrl} -> ${destinationRtspUrl}`
   );
 
-  const child = spawn(ffmpegPath, args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-
-  bridge.process = child;
-  bridge.pid = child.pid || null;
   bridge.lastStartAt = Date.now();
   bridge.lastProgressAt = null;
   bridge.lastFrame = 0;
   bridge.lastOutputTimeUs = 0;
   bridge.progressBuffer = "";
   bridge.progressAdvanced = false;
+  bridge.lastStderrLogAt = null;
+  bridge.suppressedStderrMessages = 0;
   bridge.restartCount += 1;
+
+  const handleSpawnError = (error) => {
+    clearStopTimer(bridge);
+    bridge.lastError = String(error?.message || error).slice(-MAX_BRIDGE_MESSAGE_LENGTH);
+    bridge.lastMessage = `spawn failed: ${bridge.lastError}`;
+    bridge.state = "error";
+    bridge.process = null;
+    bridge.pid = null;
+    bridge.lastExitCode = null;
+    bridge.lastExitSignal = null;
+    bridge.restartAfter = Date.now() + getRestartDelayMs();
+    console.error(`[ESP32-Bridge:${camera.cameraId}] spawn failed: ${bridge.lastError}`);
+  };
+  let child;
+  try {
+    child = spawn(ffmpegPath, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  } catch (error) {
+    // A malformed executable/argument must not escape a supervisor timer and
+    // terminate HTTP and MQTT along with this camera.
+    handleSpawnError(error);
+    return;
+  }
+  bridge.process = child;
+  bridge.pid = child.pid || null;
 
   child.stdout.on("data", (chunk) => {
     if (bridge.process !== child) return;
@@ -377,32 +406,39 @@ function startBridgeProcess(bridge, camera, sourceRtspUrl, destinationRtspUrl) {
   });
 
   child.stderr.on("data", (chunk) => {
+    if (bridge.process !== child) return;
     const text = String(chunk).trim();
     if (text) {
-      bridge.lastMessage = text.split(/\r?\n/).pop();
+      const preview = text.slice(-MAX_BRIDGE_MESSAGE_LENGTH);
+      bridge.lastMessage = preview.split(/\r?\n/).pop();
       if (/error|failed|unable|invalid|no route/i.test(text)) {
-        bridge.lastError = text.split(/\r?\n/).pop();
+        bridge.lastError = bridge.lastMessage;
       }
-      console.log(`[ESP32-Bridge:${camera.cameraId}] ${text}`);
+      const now = Date.now();
+      if (bridge.lastStderrLogAt == null || now - bridge.lastStderrLogAt >= STDERR_LOG_INTERVAL_MS) {
+        const summary = bridge.suppressedStderrMessages
+          ? ` [${bridge.suppressedStderrMessages} weitere FFmpeg-Meldungen seit letzter Ausgabe]` : "";
+        console.log(`[ESP32-Bridge:${camera.cameraId}] ${preview}${summary}`);
+        bridge.lastStderrLogAt = now;
+        bridge.suppressedStderrMessages = 0;
+      } else {
+        bridge.suppressedStderrMessages += 1;
+      }
     }
   });
 
   child.on("error", (error) => {
     if (bridge.process !== child) return;
-    clearStopTimer(bridge);
-    bridge.lastError = String(error?.message || error);
-    bridge.lastMessage = `spawn failed: ${bridge.lastError}`;
-    bridge.state = "error";
-    bridge.process = null;
-    bridge.pid = null;
-    bridge.lastExitCode = null;
-    bridge.lastExitSignal = null;
-    bridge.restartAfter = Date.now() + getRestartDelayMs();
-    console.error(`[ESP32-Bridge:${camera.cameraId}] spawn failed: ${bridge.lastError}`);
+    handleSpawnError(error);
   });
 
-  child.on("exit", (code, signal) => {
+  // Keep the process associated with its bridge until stderr is drained.
+  child.on("close", (code, signal) => {
     if (bridge.process !== child) return;
+    if (bridge.suppressedStderrMessages) {
+      console.log(`[ESP32-Bridge:${camera.cameraId}] ${bridge.lastMessage} [${bridge.suppressedStderrMessages} weitere FFmpeg-Meldungen seit letzter Ausgabe]`);
+      bridge.suppressedStderrMessages = 0;
+    }
     clearStopTimer(bridge);
     bridge.process = null;
     bridge.pid = null;

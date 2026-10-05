@@ -71,8 +71,12 @@ function readChart(db, query, options = {}) {
     return Promise.reject(Object.assign(new Error('Graph ausgelastet. Bitte in wenigen Sekunden erneut laden.'), { code: 'CHART_BUSY' }));
   }
   return new Promise((resolve, reject) => {
-    const task = { query, options, resolve, reject };
+    const task = { query, options, resolve, reject, abortWaiting: null };
     const run = async (current) => {
+      if (current.abortWaiting) {
+        current.options.signal.removeEventListener('abort', current.abortWaiting);
+        current.abortWaiting = null;
+      }
       gate.active = true;
       try { current.resolve(await queryChart(db, current.query, current.options)); }
       catch (error) { current.reject(error); }
@@ -81,7 +85,21 @@ function readChart(db, query, options = {}) {
         if (next) void run(next); else gate.active = false;
       }
     };
-    if (gate.active) gate.waiting.push(task); else void run(task);
+    if (gate.active) {
+      gate.waiting.push(task);
+      if (options.signal) {
+        task.abortWaiting = () => {
+          const index = gate.waiting.indexOf(task);
+          if (index < 0) return;
+          gate.waiting.splice(index, 1);
+          options.signal.removeEventListener('abort', task.abortWaiting);
+          task.abortWaiting = null;
+          reject(options.signal.reason);
+        };
+        options.signal.addEventListener('abort', task.abortWaiting, { once: true });
+        if (options.signal.aborted) task.abortWaiting();
+      }
+    } else void run(task);
   });
 }
 

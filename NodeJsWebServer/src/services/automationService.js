@@ -1,6 +1,10 @@
 const db = require("../database/db");
+const { setImmediate: yieldToServer } = require("node:timers/promises");
+const { performance } = require("node:perf_hooks");
 
 const POLL_MS = 15000;
+const RULE_BATCH_SIZE = 32;
+const WORK_SLICE_MS = 10;
 let timer = null;
 let runningTask = null;
 
@@ -34,8 +38,14 @@ const activeRulesWithActions = db.prepare(`
          a.position, a.action_type, a.action_label, a.action_topic, a.action_payload
   FROM object_automation_rules r
   LEFT JOIN object_automation_rule_actions a ON a.rule_id = r.id
-  WHERE r.enabled = 1
+  WHERE r.enabled = 1 AND r.id > ? AND r.id <= ?
   ORDER BY r.id ASC, a.position ASC, a.id ASC
+`);
+const maximumRuleId = db.prepare('SELECT MAX(id) AS id FROM object_automation_rules');
+const activeRuleIds = db.prepare(`
+  SELECT id FROM object_automation_rules
+  WHERE enabled = 1 AND id > ? AND id <= ?
+  ORDER BY id LIMIT ?
 `);
 
 function parseNumber(value) {
@@ -206,7 +216,12 @@ async function publishAutomationActions(actions) {
   let failedCount = 0;
   // Loading the controller must not start MQTT listeners as a side effect.
   const { publish } = require("../mqttBroker");
+  let nextYieldAt = performance.now() + WORK_SLICE_MS;
   for (const action of actions) {
+    if (performance.now() >= nextYieldAt) {
+      await yieldToServer();
+      nextYieldAt = performance.now() + WORK_SLICE_MS;
+    }
     const topic = String(action.action_topic ?? action.actionTopic ?? "").trim();
     if (!topic) continue;
     try {
@@ -273,9 +288,9 @@ async function evaluateTimeRule(rule, now) {
   updateRuleFiredAt.run(nowIso, nowIso, rule.id);
 }
 
-function loadActiveRules() {
+function loadActiveRules(afterId, throughId) {
   const rulesById = new Map();
-  for (const row of activeRulesWithActions.all()) {
+  for (const row of activeRulesWithActions.all(afterId, throughId)) {
     let rule = rulesById.get(row.id);
     if (!rule) {
       rule = { ...row, actions: [] };
@@ -302,18 +317,36 @@ function loadActiveRules() {
 function processRules(now = new Date()) {
   if (runningTask) return runningTask;
   runningTask = (async () => {
-    const rules = loadActiveRules();
-
-    for (const rule of rules) {
-      try {
-        if (!rule.actions.length) continue;
-        if (rule.trigger_type === "value") {
-          await evaluateValueRule(rule, now);
-        } else if (rule.trigger_type === "time") {
-          await evaluateTimeRule(rule, now);
+    // Keep only a page of rules/actions in memory, and release SQLite statements
+    // before yielding. New rules are picked up by the next poll.
+    const throughId = maximumRuleId.get().id || 0;
+    let afterId = 0;
+    let nextYieldAt = performance.now() + WORK_SLICE_MS;
+    while (afterId < throughId) {
+      const ids = activeRuleIds.all(afterId, throughId, RULE_BATCH_SIZE);
+      if (!ids.length) break;
+      const pageLastId = ids.at(-1).id;
+      const rules = loadActiveRules(afterId, pageLastId);
+      afterId = pageLastId;
+      for (const rule of rules) {
+        if (performance.now() >= nextYieldAt) {
+          await yieldToServer();
+          nextYieldAt = performance.now() + WORK_SLICE_MS;
         }
-      } catch (error) {
-        console.error("[automation] rule failed", rule.id, error);
+        try {
+          if (!rule.actions.length) continue;
+          if (rule.trigger_type === "value") {
+            await evaluateValueRule(rule, now);
+          } else if (rule.trigger_type === "time") {
+            await evaluateTimeRule(rule, now);
+          }
+        } catch (error) {
+          console.error("[automation] rule failed", rule.id, error);
+        }
+      }
+      if (afterId < throughId) {
+        await yieldToServer();
+        nextYieldAt = performance.now() + WORK_SLICE_MS;
       }
     }
   })().finally(() => {
