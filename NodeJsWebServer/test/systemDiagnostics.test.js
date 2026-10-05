@@ -57,7 +57,7 @@ test('process parsing handles spaces and closing parentheses without reading arg
   assert.equal(parseProcess('node', '', 'invalid', 42), null);
 });
 
-function linuxFixture({ processCount = 2 } = {}) {
+function linuxFixture({ processCount = 2, briefLinkDrop = false, speedUnavailable = false } = {}) {
   let phase = 0;
   let activeReads = 0;
   let peakReads = 0;
@@ -78,8 +78,14 @@ function linuxFixture({ processCount = 2 } = {}) {
       if (filename.endsWith('/thermal_zone0/temp')) return '62000\n';
       if (filename.endsWith('/thermal_zone0/type')) return 'cpu-thermal\n';
       if (filename.startsWith('/sys/class/net/')) {
-        if (filename.endsWith('/operstate')) return filename.includes('/wlan0/') ? 'down\n' : phase ? 'down\n' : 'up\n';
-        if (filename.endsWith('/carrier')) return filename.includes('/wlan0/') || phase ? '0\n' : '1\n';
+        const wired = !filename.includes('/wlan0/');
+        if (filename.endsWith('/operstate')) return !wired || (phase && !briefLinkDrop) ? 'down\n' : 'up\n';
+        if (filename.endsWith('/carrier')) return !wired || (phase && !briefLinkDrop) ? '0\n' : '1\n';
+        if (filename.endsWith('/speed')) return !wired || speedUnavailable ? '-1\n' : phase ? '100\n' : '1000\n';
+        if (filename.endsWith('/duplex')) return 'full\n';
+        if (filename.endsWith('/carrier_changes')) return !wired ? '0\n' : phase ? '4\n' : '2\n';
+        if (filename.endsWith('/rx_crc_errors')) return !wired ? '0\n' : phase ? '3\n' : '1\n';
+        if (filename.endsWith('/tx_carrier_errors')) return wired && phase ? '1\n' : '0\n';
         if (filename.endsWith('/rx_errors')) return phase ? '3\n' : '1\n';
         return '0\n';
       }
@@ -161,6 +167,46 @@ test('large process lists are bounded and explicitly marked as truncated', async
   assert.equal(sample.processes.relevantTruncated, true);
   assert.ok(fixture.peakReads() <= 8);
   assert.ok(fixture.reads.filter((filename) => /^\/proc\/\d+\//.test(filename)).length <= 512 * 3);
+});
+
+test('network counters capture a brief link drop between polls and negotiated speed changes', async () => {
+  const fixture = linuxFixture({ briefLinkDrop: true });
+  const first = await fixture.sampler.sample();
+  const initialLink = first.network.find((entry) => entry.name === 'eth0');
+  assert.equal(initialLink.carrier, 1);
+  assert.equal(initialLink.speedMbps, 1000);
+  assert.equal(initialLink.duplex, 'full');
+  assert.equal(initialLink.carrierChanges, 2);
+  assert.equal(initialLink.delta.carrierChanges, null);
+  assert.equal(first.issues.some((issue) => issue.code === 'network_carrier_changes' || issue.code === 'network_speed_changed'), false,
+    'initial accumulated counters do not imply a new event');
+  fixture.setPhase(1);
+  const second = await fixture.sampler.sample();
+  const link = second.network.find((entry) => entry.name === 'eth0');
+  assert.equal(link.carrier, 1, 'the link has returned by the next poll');
+  assert.equal(link.state, 'up');
+  assert.equal(link.delta.carrierChanges, 2);
+  assert.equal(link.delta.rxCrcErrors, 2);
+  assert.equal(link.delta.txCarrierErrors, 1);
+  assert.equal(second.issues.some((issue) => issue.code === 'network_carrier_lost'), false);
+  assert.deepEqual(second.issues.find((issue) => issue.code === 'network_carrier_changes'), {
+    code: 'network_carrier_changes', interface: 'eth0', delta: 2,
+  });
+  assert.deepEqual(second.issues.find((issue) => issue.code === 'network_speed_changed'), {
+    code: 'network_speed_changed', interface: 'eth0', previousMbps: 1000, currentMbps: 100,
+  });
+  assert.ok(second.issues.some((issue) => issue.code === 'network_counter_increased' && issue.counter === 'rxCrcErrors' && issue.delta === 2));
+  assert.ok(fixture.peakReads() <= 8);
+});
+
+test('unsupported negotiated speed is unknown and does not produce a speed-change event', async () => {
+  const fixture = linuxFixture({ speedUnavailable: true });
+  const first = await fixture.sampler.sample();
+  assert.equal(first.network.find((entry) => entry.name === 'eth0').speedMbps, null);
+  fixture.setPhase(1);
+  const second = await fixture.sampler.sample();
+  assert.equal(second.network.find((entry) => entry.name === 'eth0').speedMbps, null);
+  assert.equal(second.issues.some((issue) => issue.code === 'network_speed_changed'), false);
 });
 
 test('Linux optional data failures are explicit and never expose command stderr', async () => {

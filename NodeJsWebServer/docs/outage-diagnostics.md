@@ -49,7 +49,7 @@ Anwendung innerhalb eines Boots mehrfach neu startet.
 | `memory`, `disk` | Verfügbarer RAM, Swap, freier Speicherplatz und Inodes |
 | `thermal`, `throttling` | Temperaturzonen und Raspberry-Pi-Firmwareflags, sofern verfügbar |
 | `pressure` | Linux-Wartezeiten für CPU, RAM und I/O, sofern unterstützt |
-| `network` | Linkzustand und Änderungen von Fehler-/Verwerfungszählern der Schnittstellen |
+| `network` | Linkzustand, Geschwindigkeit/Duplex sowie Änderungen von Link-, CRC-, Carrierfehler- und Verwerfungszählern |
 | `processes` | Begrenzte Prozessübersicht mit Name, PID, RAM und CPU; keine Kommandozeilen |
 | `kernel` | Begrenzte relevante Kernelmeldungen; beim ersten Sample zusätzlich vorheriger Boot, soweit lesbar |
 | `issues`, `unavailable` | Beobachtungen und Messquellen, die fehlen oder nicht zugänglich sind |
@@ -132,6 +132,13 @@ Zusammenstellung aus der gesamten vorhandenen Historie.
   dokumentiert [Raspberry Pi unter `get_throttled`](https://www.raspberrypi.com/documentation/computers/os.html#get_throttled).
 - Erhöhte Netzfehlerzähler oder fehlendes Linksignal sind konkrete Beobachtungen;
   sie identifizieren allein noch kein bestimmtes defektes Kabel oder Gerät.
+  Der Vergleich des Linkwechselzählers kann auch einen kurzen Abbruch zwischen
+  den standardmäßig 30 Sekunden auseinanderliegenden Messungen erfassen, obwohl
+  das Linksignal bei beiden Messungen wieder vorhanden ist. Änderungen der
+  ausgehandelten Geschwindigkeit werden ebenfalls markiert. CRC- und
+  Carrierfehlerzähler helfen bei der Prüfung des Ethernetpfads; erst ihre Änderung
+  gegenüber der vorherigen Messung wird als neues Ereignis behandelt. Der erste
+  bereits vorhandene Zählerstand datiert keine Störung.
 - `parent_disconnect` bedeutet, dass die IPC-Verbindung beendet wurde. Es belegt
   keinen Absturzgrund. Der Diagnoseprozess protokolliert diesen Zustand nach
   Möglichkeit und beendet sich ebenfalls; er ist kein separat laufender Dienst.

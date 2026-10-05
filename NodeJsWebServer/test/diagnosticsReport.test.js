@@ -186,3 +186,36 @@ test('notable records are chronological even if record clocks changed and histor
   const result = await readRecentRecords(directory);
   assert.deepEqual(result.notableRecords, [earlierTimestamp, laterTimestamp]);
 });
+
+test('brief carrier and speed changes remain notable when the next samples have a stable link', async (t) => {
+  const directory = await temporaryDirectory(t);
+  const changed = record(1, 'sample', { http: { ok: true, statusCode: 200 }, system: {
+    network: [{ name: 'eth0', carrier: 1, state: 'up', speedMbps: 100, duplex: 'full', carrierChanges: 12,
+      rxCrcErrors: 3, txCarrierErrors: 0, delta: { carrierChanges: 2, rxCrcErrors: 1 } }],
+    issues: [{ code: 'network_carrier_changes', interface: 'eth0', delta: 2 },
+      { code: 'network_speed_changed', interface: 'eth0', previousMbps: 1000, currentMbps: 100 },
+      { code: 'network_counter_increased', interface: 'eth0', counter: 'rxCrcErrors', delta: 1 }],
+  } });
+  const stable = Array.from({ length: 30 }, (_, index) => record(index + 2, 'sample', { http: { ok: true }, system: {
+    network: [{ name: 'eth0', carrier: 1, speedMbps: 100, duplex: 'full', carrierChanges: 12, rxCrcErrors: 3,
+      delta: { carrierChanges: 0, rxCrcErrors: 0, txCarrierErrors: 0 } }], issues: [],
+  } }));
+  await fs.writeFile(path.join(directory, 'diagnostics.jsonl'), [changed, ...stable].map((entry) => JSON.stringify(entry)).join('\n'));
+  const result = await readRecentRecords(directory, { tail: 1 });
+  assert.deepEqual(result.notableRecords, [changed]);
+  assert.equal(MAX_NOTABLE_RECORDS, 12);
+  const output = formatReport(result);
+  assert.match(output, /LAN-Signalwechsel: eth0, \+2 seit letzter Messung/);
+  assert.match(output, /LAN-Geschwindigkeit geändert: eth0, 1000 → 100 Mbit\/s/);
+  assert.match(output, /counter=rxCrcErrors, delta=1/);
+  assert.match(output, /eth0=Signal \(100 Mbit\/s, Vollduplex\)/);
+});
+
+test('new carrier and speed observations share the existing carrier category', async (t) => {
+  const directory = await temporaryDirectory(t);
+  const carrier = record(1, 'sample', { system: { issues: [{ code: 'network_carrier_changes', interface: 'eth0', delta: 2 }] } });
+  const speed = record(2, 'sample', { system: { issues: [{ code: 'network_speed_changed', interface: 'eth0', previousMbps: 100, currentMbps: 1000 }] } });
+  await fs.writeFile(path.join(directory, 'diagnostics.jsonl'), [carrier, speed].map((entry) => JSON.stringify(entry)).join('\n'));
+  const result = await readRecentRecords(directory);
+  assert.deepEqual(result.notableRecords, [speed]);
+});

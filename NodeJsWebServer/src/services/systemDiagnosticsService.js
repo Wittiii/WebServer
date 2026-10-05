@@ -269,20 +269,30 @@ function createSystemDiagnosticsSampler({
         optional('network', async () => {
           const names = (await readdir('/sys/class/net')).filter((name) => name !== 'lo' && /^[\w.:-]+$/.test(name)).sort().slice(0, NETWORK_LIMIT);
           return mapLimited(names, async (name) => {
-            const keys = ['operstate', 'carrier', 'statistics/rx_errors', 'statistics/tx_errors', 'statistics/rx_dropped', 'statistics/tx_dropped'];
+            const keys = [
+              'operstate', 'carrier', 'statistics/rx_errors', 'statistics/tx_errors', 'statistics/rx_dropped', 'statistics/tx_dropped',
+              'speed', 'duplex', 'carrier_changes', 'statistics/rx_crc_errors', 'statistics/tx_carrier_errors',
+            ];
             const values = await Promise.all(keys.map((key) => read(`/sys/class/net/${name}/${key}`).catch(() => null)));
             const current = {
               name, state: values[0] === null ? null : cleanText(values[0], 16), carrier: number(values[1]),
               rxErrors: number(values[2]), txErrors: number(values[3]), rxDropped: number(values[4]), txDropped: number(values[5]),
+              speedMbps: number(values[6]), duplex: values[7] === null ? null : cleanText(values[7], 16),
+              carrierChanges: number(values[8]), rxCrcErrors: number(values[9]), txCarrierErrors: number(values[10]),
             };
             const previous = previousNetwork.get(name);
             const delta = {};
-            for (const key of ['rxErrors', 'txErrors', 'rxDropped', 'txDropped']) {
+            for (const key of ['rxErrors', 'txErrors', 'rxDropped', 'txDropped', 'carrierChanges', 'rxCrcErrors', 'txCarrierErrors']) {
               delta[key] = previous?.[key] != null && current[key] != null && current[key] >= previous[key]
                 ? current[key] - previous[key] : null;
-              if (delta[key] > 0) issues.push({ code: 'network_counter_increased', interface: name, counter: key, delta: delta[key] });
+              if (delta[key] > 0) issues.push(key === 'carrierChanges'
+                ? { code: 'network_carrier_changes', interface: name, delta: delta[key] }
+                : { code: 'network_counter_increased', interface: name, counter: key, delta: delta[key] });
             }
             if (previous?.carrier === 1 && current.carrier === 0) issues.push({ code: 'network_carrier_lost', interface: name });
+            if (previous?.speedMbps > 0 && current.speedMbps > 0 && current.speedMbps !== previous.speedMbps) {
+              issues.push({ code: 'network_speed_changed', interface: name, previousMbps: previous.speedMbps, currentMbps: current.speedMbps });
+            }
             return { ...current, delta };
           });
         }),

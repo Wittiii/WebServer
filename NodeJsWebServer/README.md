@@ -141,6 +141,9 @@ Temperatur-/Spannungsflags, Netzwerkzähler und eine lokale HTTP-Prüfung unter
 Node-Ereignisschleife weiterlaufen. Vier rotierende Dateien begrenzen den
 Standardbestand auf ungefähr 20 MiB; vorhandene Messungen bleiben nach einem
 Neustart lesbar. Fehlende Leserechte oder Werkzeuge werden mitprotokolliert.
+Netzwerkdaten enthalten außerdem Linkwechselzähler, Geschwindigkeit sowie
+CRC-/Carrierfehler, soweit der Treiber sie bereitstellt. Linkwechselzähler
+erfassen auch kurze Unterbrechungen zwischen zwei Messungen.
 
 Nach einem Ausfall im Projektverzeichnis auswerten:
 

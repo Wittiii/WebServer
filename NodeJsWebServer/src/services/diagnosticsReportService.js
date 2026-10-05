@@ -9,7 +9,8 @@ const NOTABLE_ISSUE_CATEGORIES = new Map([
   ['parent_heartbeat_missing', 'heartbeat'], ['heartbeat_missing', 'heartbeat'], ['stale_heartbeat', 'heartbeat'],
   ['node_event_loop_delay', 'event_loop'], ['node_eventloop_delay', 'event_loop'],
   ['firmware_flag_current', 'firmware_current'],
-  ['network_carrier_lost', 'network_carrier'], ['network_counter_increased', 'network_counter'],
+  ['network_carrier_lost', 'network_carrier'], ['network_carrier_changes', 'network_carrier'],
+  ['network_speed_changed', 'network_carrier'], ['network_counter_increased', 'network_counter'],
   ['low_memory_available', 'low_memory'],
   ['low_disk_space', 'low_disk'], ['disk_inodes_exhausted', 'low_disk'],
   ['cpu_usage_high', 'high_load'], ['io_wait_high', 'high_load'],
@@ -174,8 +175,14 @@ function systemDescription(system) {
   if (temperatures.length) parts.push(`Temperatur max. ${temperatures.reduce((maximum, value) => Math.max(maximum, value), -Infinity).toFixed(1)} °C`);
   if (system.throttling?.raw) parts.push(`Firmware-Flags ${displayText(system.throttling.raw, 40)}`);
   if (Array.isArray(system.network)) {
-    const links = system.network.slice(0, 6).filter((link) => link && typeof link.name === 'string').map((link) =>
-      `${displayText(link.name, 40)}=${link.carrier === true || link.carrier === 1 ? 'Signal' : link.carrier === false || link.carrier === 0 ? 'kein Signal' : displayText(link.state || 'unbekannt', 30)}`);
+    const links = system.network.slice(0, 6).filter((link) => link && typeof link.name === 'string').map((link) => {
+      const signal = link.carrier === true || link.carrier === 1 ? 'Signal' : link.carrier === false || link.carrier === 0 ? 'kein Signal' : displayText(link.state || 'unbekannt', 30);
+      const details = [];
+      if (finite(link.speedMbps) && link.speedMbps > 0) details.push(`${link.speedMbps} Mbit/s`);
+      if (link.duplex === 'full') details.push('Vollduplex');
+      else if (link.duplex === 'half') details.push('Halbduplex');
+      return `${displayText(link.name, 40)}=${signal}${details.length ? ` (${details.join(', ')})` : ''}`;
+    });
     if (links.length) parts.push(`LAN/Netz ${links.join(', ')}`);
   }
   if (Array.isArray(system.kernel?.recentMessages) && system.kernel.recentMessages.length) {
@@ -188,6 +195,12 @@ function systemDescription(system) {
 function issueDescription(issue) {
   if (typeof issue === 'string') return displayText(issue);
   if (!issue || typeof issue !== 'object' || typeof issue.code !== 'string') return null;
+  if (issue.code === 'network_carrier_changes') {
+    return `LAN-Signalwechsel: ${displayText(issue.interface || '?', 40)}${finite(issue.delta) ? `, ${issue.delta >= 0 ? '+' : ''}${issue.delta} seit letzter Messung` : ''}`;
+  }
+  if (issue.code === 'network_speed_changed') {
+    return `LAN-Geschwindigkeit geändert: ${displayText(issue.interface || '?', 40)}, ${finite(issue.previousMbps) ? issue.previousMbps : '?'} → ${finite(issue.currentMbps) ? issue.currentMbps : '?'} Mbit/s`;
+  }
   const details = ['flag', 'resource', 'scope', 'avg10Percent', 'interface', 'counter', 'delta', 'usagePercent', 'ioWaitPercent']
     .filter((key) => typeof issue[key] === 'string' || finite(issue[key]))
     .map((key) => `${key}=${displayText(issue[key], 60)}`);
