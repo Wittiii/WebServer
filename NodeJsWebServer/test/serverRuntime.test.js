@@ -13,12 +13,16 @@ test('full server startup, protected APIs, login and orderly shutdown use only a
     HTTP_HOST: '127.0.0.1', PORT: '0', MQTT_TCP_PORT: '0', MQTT_WS_PORT: '0',
     MQTT_USER: 'test-user', MQTT_PASS: 'test-password', MQTT_LOG_MESSAGES: 'false',
     ESP32_TRANSCODE_ENABLED: 'false',
+    DIAGNOSTICS_ENABLED: 'false', DIAGNOSTICS_DIR: path.join(directory, 'diagnostics'),
     CAMERA_PI_TIMELAPSE_ENABLED: 'false', CAMERA_ESP32_TIMELAPSE_ENABLED: 'false', CAMERA_DFR1154_TIMELAPSE_ENABLED: 'false',
     CAMERA_PI_TIMELAPSE_DIR: path.join(directory, 'pi'),
     CAMERA_ESP32_TIMELAPSE_DIR: path.join(directory, 'esp'),
     CAMERA_DFR1154_TIMELAPSE_DIR: path.join(directory, 'dfr'),
   });
   delete process.env.TRUST_PROXY;
+  fs.mkdirSync(process.env.DIAGNOSTICS_DIR);
+  const previousDiagnostic = { timestamp: '2026-10-05T12:00:00.000Z', event: 'sample', runId: 'previous-run', http: { ok: false, error: 'timeout' } };
+  fs.writeFileSync(path.join(process.env.DIAGNOSTICS_DIR, 'diagnostics.jsonl'), `${JSON.stringify(previousDiagnostic)}\n`);
   const { startServer } = require('../src/server');
   const runtime = await startServer();
   const origin = `http://127.0.0.1:${runtime.server.address().port}`;
@@ -27,7 +31,7 @@ test('full server startup, protected APIs, login and orderly shutdown use only a
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { ok: true });
     assert.equal(health.headers.get('x-powered-by'), null);
-    for (const route of ['/api/mqtt/topics', '/api/mqtt/clients', '/api/objects', '/api/camera/overview', '/api/system/status']) {
+    for (const route of ['/api/mqtt/topics', '/api/mqtt/clients', '/api/objects', '/api/camera/overview', '/api/system/status', '/api/system/diagnostics']) {
       const response = await fetch(origin + route);
       assert.equal(response.status, 401, route);
       assert.equal(response.headers.get('cache-control'), 'no-store');
@@ -45,6 +49,12 @@ test('full server startup, protected APIs, login and orderly shutdown use only a
     const metrics = await fetch(`${origin}/api/system/status`, { headers });
     assert.equal(metrics.status, 200);
     assert.ok((await metrics.json()).memoryBytes.rss > 0);
+    const diagnostics = await fetch(`${origin}/api/system/diagnostics?limit=1`, { headers });
+    assert.equal(diagnostics.status, 200);
+    assert.deepEqual((await diagnostics.json()).records, [previousDiagnostic]);
+    for (const limit of ['0', '201', '1.5', 'invalid']) {
+      assert.equal((await fetch(`${origin}/api/system/diagnostics?limit=${limit}`, { headers })).status, 400);
+    }
     const topics = await fetch(`${origin}/api/mqtt/topics`, { headers });
     assert.equal(topics.status, 200);
     assert.ok(Array.isArray(await topics.json()));

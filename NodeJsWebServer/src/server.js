@@ -1,7 +1,6 @@
 const path = require('node:path');
 
-async function startServer() {
-  require('dotenv').config({ path: process.env.ENV_FILE || path.join(__dirname, 'config', '.env') });
+async function startServerRuntime(diagnostics) {
   if (!process.env.SESSION_SECRET) throw new Error('SESSION_SECRET must be configured in src/config/.env');
   const { installConsoleCapture } = require('./services/runtimeLogService');
   installConsoleCapture();
@@ -41,7 +40,7 @@ async function startServer() {
   }
 
   try {
-    app = createApp({ health });
+    app = createApp({ health, diagnostics });
     server = await new Promise((resolve, reject) => {
       const listener = app.listen(Number(process.env.PORT || 3000), process.env.HTTP_HOST || '0.0.0.0', () => {
         listener.removeListener('error', reject);
@@ -57,9 +56,36 @@ async function startServer() {
     startEsp32TranscodeSupervisor();
     startCameraTimelapseCaptureSupervisor();
     console.log(`Server laeuft auf Port ${server.address().port}`);
-    return { app, server, stop };
+    return { app, server, stop, health };
   } catch (error) {
     await stop();
+    throw error;
+  }
+}
+
+async function startServer() {
+  require('dotenv').config({ path: process.env.ENV_FILE || path.join(__dirname, 'config', '.env') });
+  const { startDiagnosticsMonitor } = require('./services/diagnosticsMonitorService');
+  let runtime;
+  const diagnostics = startDiagnosticsMonitor({ getSnapshot: () => runtime?.health.snapshot() });
+  diagnostics.event('server_starting', { pid: process.pid });
+  try {
+    runtime = await startServerRuntime(diagnostics);
+    diagnostics.ready(runtime.server.address());
+    let stopping;
+    return {
+      app: runtime.app, server: runtime.server, diagnostics,
+      stop() {
+        if (!stopping) {
+          diagnostics.event('server_stopping');
+          stopping = runtime.stop().finally(() => diagnostics.stop());
+        }
+        return stopping;
+      },
+    };
+  } catch (error) {
+    diagnostics.fatal(error, 'startup');
+    await diagnostics.stop({ reason: 'startup_failed' });
     throw error;
   }
 }

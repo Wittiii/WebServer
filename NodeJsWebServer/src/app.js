@@ -7,7 +7,7 @@ const authGuard = require('./middlewares/authGuard');
 const apiAuth = require('./middlewares/apiAuth');
 
 // HTTP configuration is separate from listeners and background-job lifecycles.
-function createApp({ sessionStore = new BoundedMemorySessionStore(), health } = {}) {
+function createApp({ sessionStore = new BoundedMemorySessionStore(), health, diagnostics } = {}) {
   if (!process.env.SESSION_SECRET) {
     sessionStore.close();
     throw new Error('SESSION_SECRET must be configured');
@@ -46,7 +46,18 @@ function createApp({ sessionStore = new BoundedMemorySessionStore(), health } = 
   app.use('/api/objects', apiAuth, require('./routes/database/database'));
   app.use('/api/mqtt', require('./routes/mqtt/mqtt'));
   app.use('/api/camera', require('./routes/camera/cameraApi'));
-  app.get('/api/system/status', apiAuth, (_req, res) => res.json(health?.snapshot() || { ok: true }));
+  app.get('/api/system/status', apiAuth, (_req, res) => res.json({
+    ...(health?.snapshot() || { ok: true }), diagnostics: diagnostics?.snapshot() || { enabled: false, active: false },
+  }));
+  app.get('/api/system/diagnostics', apiAuth, async (req, res) => {
+    const { readRecentRecords, resolveDiagnosticsDir } = require('./services/diagnosticsReportService');
+    const requested = req.query.limit == null ? 20 : Number(req.query.limit);
+    if (!Number.isInteger(requested) || requested < 1 || requested > 200) {
+      return res.status(400).json({ error: 'limit must be an integer from 1 to 200' });
+    }
+    const directory = diagnostics?.snapshot().logDirectory || resolveDiagnosticsDir();
+    res.json(await readRecentRecords(directory, { tail: requested }));
+  });
   app.use((_req, res) => res.status(404).send('Seite nicht gefunden'));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

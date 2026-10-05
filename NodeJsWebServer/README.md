@@ -134,6 +134,25 @@ kein dauerhaftes MQTT-Nachrichtenarchiv.
 
 ## Diagnose und Grenzen der Prüfung
 
+Auf Linux startet der Server automatisch einen separaten Diagnoseprozess. Er
+speichert alle 30 Sekunden Systemlast, RAM, freien Datenträgerplatz,
+Temperatur-/Spannungsflags, Netzwerkzähler und eine lokale HTTP-Prüfung unter
+`logs/diagnostics/`. Die Aufzeichnung kann auch bei einer blockierten
+Node-Ereignisschleife weiterlaufen. Vier rotierende Dateien begrenzen den
+Standardbestand auf ungefähr 20 MiB; vorhandene Messungen bleiben nach einem
+Neustart lesbar. Fehlende Leserechte oder Werkzeuge werden mitprotokolliert.
+
+Nach einem Ausfall im Projektverzeichnis auswerten:
+
+```bash
+npm run diagnostics:report -- --tail 50
+```
+
+Nach Anmeldung liefert `/api/system/diagnostics?limit=20` dieselbe begrenzte
+Historie als JSON. Konfiguration, Befunde und Grenzen sowie zusätzliche
+Kernelprotokolle stehen in der [Ausfalldiagnose](docs/outage-diagnostics.md).
+Die Diagnose zeichnet auf; sie startet den Pi oder Webserver nicht selbst neu.
+
 ```bash
 curl --fail http://127.0.0.1:5000/healthz
 df -h /
