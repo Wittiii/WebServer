@@ -93,6 +93,16 @@ viele Automationsregeln sowie abgebrochene Graphwarteschlangen. Das abschließen
 `npm audit --omit=dev` meldete null bekannte Sicherheitslücken. Diese Tests liefen
 nicht auf dem Raspberry Pi und ersetzen dessen Last- und Dauerbetriebsprüfung nicht.
 
+Nachtrag zur ersten Ausführung auf dem Pi: Der Browser-Recovery-Test verwendete
+anfangs für alle Antworten ein künstliches Zeitlimit von 200 ms. Das konnte bei
+parallel laufenden Tests auch den gesunden Folgeabruf abbrechen. Eine verzögerte
+gesunde Antwort von 350 ms reproduzierte denselben Fehler. Der Test löst die
+simulierte Deadline nun gezielt aus, sobald der Client den hängenden Antwortbody
+liest; der gesunde Folgeabruf bleibt bewusst verzögert. Die tatsächliche
+Zwölf-Sekunden-Deadline der Anwendung bleibt unverändert. Nach dieser Korrektur
+bestanden beide vollständigen lokalen Testsuiten erneut mit den oben genannten
+Ergebnissen.
+
 Die synthetische Graphprüfung mit 250.000 Messwerten lief unter Windows x64 und
 Node 24.11.1 in 67–87 ms; die längste Timerpause betrug 51–61 ms. Sie verwendet
 ausschließlich eine Datenbank im RAM und erfasst keine SD-Karten- oder Kameralast.

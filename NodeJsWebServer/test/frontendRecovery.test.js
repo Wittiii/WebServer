@@ -3,7 +3,6 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const vm = require('node:vm');
-const { once } = require('node:events');
 const test = require('node:test');
 
 function sourceBetween(relativeFile, start, end) {
@@ -14,40 +13,80 @@ function sourceBetween(relativeFile, start, end) {
   return source.slice(first, last);
 }
 
-async function slowServer(t, { healthyBody = '[]' } = {}) {
+async function slowServer(t, { healthyBody = '[]', healthyDelayMs = 350 } = {}) {
   let requests = 0;
+  const responseTimers = new Set();
   const server = http.createServer((_req, res) => {
     requests += 1;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    if (requests === 2) res.end(healthyBody);
-    else {
+    if (requests === 2) {
+      // A healthy response may take longer than the former 200 ms test limit,
+      // particularly when the complete suite runs concurrently on a Pi.
+      const timer = setTimeout(() => {
+        responseTimers.delete(timer);
+        res.end(healthyBody);
+      }, healthyDelayMs);
+      responseTimers.add(timer);
+    } else {
       // Headers have arrived, but the response body never finishes.
       res.write(healthyBody.slice(0, 1));
-      server.emit('body_pending', requests);
     }
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
+    for (const timer of responseTimers) clearTimeout(timer);
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
   const timeouts = [];
+  const timeoutControllers = [];
+  const bodyReads = [];
+  let fetches = 0;
+  function bodyRead(index) {
+    if (!bodyReads[index]) {
+      let resolve;
+      const promise = new Promise((done) => { resolve = done; });
+      bodyReads[index] = { promise, resolve };
+    }
+    return bodyReads[index];
+  }
   const browser = {
-    fetch: (url, options) => fetch(origin + url, options),
+    async fetch(url, options) {
+      const index = fetches++;
+      const response = await fetch(origin + url, options);
+      const readJson = response.json.bind(response);
+      response.json = (...args) => {
+        const pending = readJson(...args);
+        bodyRead(index).resolve();
+        return pending;
+      };
+      return response;
+    },
     URLSearchParams,
     AbortSignal: {
       timeout(milliseconds) {
         timeouts.push(milliseconds);
-        return AbortSignal.timeout(200);
+        // Advance the deadline explicitly once the client reads the hanging
+        // body, never while an unrelated healthy request waits for CPU time.
+        const controller = new AbortController();
+        timeoutControllers.push(controller);
+        return controller.signal;
       },
       any: (signals) => AbortSignal.any(signals),
     },
   };
-  return { server, browser, timeouts, requests: () => requests };
+  return {
+    browser, timeouts, requests: () => requests,
+    bodyStarted: (index) => bodyRead(index).promise,
+    expireTimeout(index) {
+      assert.ok(timeoutControllers[index], 'the production request must set a deadline');
+      timeoutControllers[index].abort(new DOMException('Response deadline elapsed', 'TimeoutError'));
+    },
+  };
 }
 
-test('energy refresh releases its guard after an unfinished response body and retries successfully', { timeout: 5000 }, async (t) => {
+test('energy refresh releases its guard after an unfinished response body and retries successfully', { timeout: 10000 }, async (t) => {
   const remote = await slowServer(t, { healthyBody: '{"ok":true}' });
   const rendered = [];
   const messages = [];
@@ -62,7 +101,10 @@ test('energy refresh releases its guard after an unfinished response body and re
     const selectedPeriod = 'day', selectedVictronPeriod = 'day';
     ${sourceBetween('public/pages/energy/energy.js', 'async function refresh(force = false)', '\ndocument.querySelectorAll("[data-period]")')}`, context);
 
-  await context.refresh();
+  const stalled = context.refresh();
+  await remote.bodyStarted(0);
+  remote.expireTimeout(0);
+  await stalled;
   assert.equal(vm.runInContext('refreshInFlight', context), false);
   assert.ok(messages.some((message) => message.startsWith('Stromdaten konnten nicht geladen werden:')));
   await context.refresh();
@@ -72,7 +114,7 @@ test('energy refresh releases its guard after an unfinished response body and re
   assert.deepEqual(remote.timeouts, [12000, 12000]);
 });
 
-test('hydroponic polling recovers from an unfinished body and keeps caller cancellation', { timeout: 5000 }, async (t) => {
+test('hydroponic polling recovers from an unfinished body and keeps caller cancellation', { timeout: 10000 }, async (t) => {
   const remote = await slowServer(t);
   let interval;
   const results = [];
@@ -96,17 +138,19 @@ test('hydroponic polling recovers from an unfinished body and keeps caller cance
     ${sourceBetween('public/pages/hydroponic/hydroponic.js', 'function startAutoRefresh()', '\nfunction setupAutoRefresh()')}`, Object.assign(context, { results }));
 
   context.startAutoRefresh();
-  await interval();
+  const stalled = interval();
+  await remote.bodyStarted(0);
+  remote.expireTimeout(0);
+  await stalled;
   assert.equal(results[0], 'TimeoutError');
   await interval();
   assert.equal(results[1].length, 0);
   assert.equal(remote.requests(), 2, 'the refresh guard must admit a retry');
 
   const controller = new AbortController();
-  const pendingBody = once(remote.server, 'body_pending');
   const cancelled = context.fetchReadings(20, true, false, controller.signal);
   const rejection = assert.rejects(cancelled, { name: 'AbortError' });
-  await pendingBody;
+  await remote.bodyStarted(2);
   controller.abort(new DOMException('Selection changed', 'AbortError'));
   await rejection;
   assert.equal(remote.requests(), 3);
