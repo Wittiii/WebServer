@@ -33,6 +33,13 @@ Dateien werden nach jedem Eintrag synchronisiert. Das reduziert das Risiko
 verlorener Daten, garantiert bei Stromausfall, defektem Datenträger oder einem
 Kernel-Hänger aber keine vollständige letzte Messung.
 
+Für eine Beobachtung über zwei Tage kann optional
+`DIAGNOSTICS_MAX_FILE_MB=10` gewählt werden: Die vier Dateien bieten dann
+ungefähr 40 MiB statt 20 MiB. Bei der bislang beobachteten Datengröße schafft das
+mehr Platz für etwa zwei Tage. Eine feste Aufbewahrungsdauer ist damit nicht
+garantiert; sie hängt von Intervall und Größe der Messungen ab. Der Standard
+bleibt bei fünf MiB je Datei. Dieser Hinweis ändert keine Pi-Konfiguration.
+
 Jede JSON-Zeile enthält `timestamp` in UTC, `event` und eine `runId`. Erfasst werden
 Start, Betriebsbereitschaft, geordnetes Stoppen, Diagnosefehler, Signale an den
 Monitor, verworfene übergroße Einträge und der Abbruch der Verbindung zum
@@ -96,6 +103,8 @@ Firmwareflags verdrängen die Ausfallhinweise nicht.
 ```bash
 node scripts/diagnostics-report.js
 node scripts/diagnostics-report.js --tail 50
+node scripts/diagnostics-report.js --tail 50 --details
+node scripts/diagnostics-report.js --since 48h --tail 50 --details
 node scripts/diagnostics-report.js --tail 50 --json
 node scripts/diagnostics-report.js --dir /pfad/zu/diagnostics --tail 50
 ```
@@ -110,6 +119,55 @@ oder abgeschnittene Zeilen sowie Zeilen über 256 KiB werden übersprungen und i
 Textbericht gezählt. Bei unlesbaren Dateien meldet der CLI einen Fehlerstatus.
 Ein Lesen während einer Rotation ist keine atomare Momentaufnahme; bei einem
 Verdacht auf verschobene Dateigrenzen den Bericht erneut abrufen.
+
+Mit `node scripts/diagnostics-report.js --tail 50 --details` sind neben den
+Signalwechseln auch die gespeicherten Kerneltexte und die Namen/Gründe fehlender
+Messquellen lesbar. Die Detailausgabe zeigt höchstens zehn Kernelmeldungen je
+Eintrag und 20 insgesamt mit jeweils maximal 500 Zeichen. Steuerzeichen werden
+bereinigt; aktueller und vorheriger Boot sind gekennzeichnet. Ein Eintrag, der
+sowohl unter Auffälligkeiten als auch im Tail erscheint, wird einmal erweitert.
+Fehlende Quellen stehen dedupliziert am Ende, höchstens 20 mit ihrem jeweils
+zuletzt beobachteten Grund aus den angezeigten Einträgen. `permission_denied`
+bezeichnet fehlende Rechte, `not_available` eine fehlende/unerreichbare Quelle;
+die bloße Anzahl sagt nicht, welche Quelle betroffen ist. Der normale
+Textbericht bleibt kompakt. Bei `--json --details` bleibt die Ausgabe das
+bisherige vollständige JSON-Array ohne zusätzliche Textblöcke. Der Schalter
+zeigt ausschließlich bereits protokollierte Daten und führt keine neue Messung
+auf dem Pi aus. Kerneltexte können Geräte- oder Netzwerkinformationen enthalten.
+
+`--since 48h` (gleichwertig `--since 2d`) wertet alle gültigen Einträge innerhalb
+der letzten 48 Stunden bis zur Uhrzeit des Rechners aus, auf dem der Bericht
+läuft. Positive Angaben mit `h` oder `d` sind bis höchstens 30 Tage erlaubt.
+Die Statistik berücksichtigt das gesamte gelesene Zeitfenster; `--tail` begrenzt
+weiterhin nur die zusätzlich angezeigten jüngsten Einträge auf höchstens 200.
+Der Reader behält höchstens zwölf Auffälligkeitsdatensätze, 200 Tail-Einträge und
+begrenzte Statistiken statt aller Messungen im Speicher. Insgesamt werden
+höchstens 80 MiB aus den vier Dateien gelesen; ein erreichtes Budget wird als
+möglicherweise unvollständige Auswertung ausgewiesen. Die Grenze von 256 KiB je
+Zeile gilt weiterhin. Die API behält ihre bisherige Tail-Grenze.
+Ein erreichtes Lesebudget liefert den CLI-Fehlerstatus 1, auch wenn die
+Dateigrenze zufällig genau mit dem Budget zusammenfällt.
+
+Der Zeitfensterbericht nennt den gewünschten UTC-Beginn und das Ende, den
+ältesten/neuesten tatsächlich gelesenen Eintrag sowie den ersten/letzten Eintrag
+im Zeitfenster. Vier rotierte Dateien können weniger als 48 Stunden enthalten;
+die fehlenden Stunden werden durch `--since` nicht wiederhergestellt. Größere
+Zeitabstände zwischen Messungen sind Beobachtungen und kein Ausfallbeweis.
+Summierte Verwerfungszähler liefern ohne Paketgesamtzahlen keine Verlustquote.
+Für `node`, `nodejs`, `ffmpeg` und `mediamtx` enthält der Bericht zudem eine
+begrenzte D-Prozessübersicht mit PID, Anzahl der Beobachtungen und Zeitfenster.
+Dasselbe PID-Vorkommen in mehreren Prozesslisten wird je Messung einmal gezählt.
+Erste und letzte Beobachtung messen keine durchgehende Wartezeit und belegen
+keinen bestimmten Systemaufruf oder Datenbankfehler. Bei vorhandenen Daten zeigt
+`--details` den bereinigten Wait-Channel mit höchstens 128 Zeichen; ältere
+Protokolle enthalten dieses Feld möglicherweise nicht. Höchstens zehn Prozesse
+werden für die Statistik behalten; bei mehr Prozessen meldet der Bericht die
+möglicherweise unvollständigen Zähler.
+Bei `--since ... --json` wird ein Objekt mit `range`, `summary`, `readBudget`,
+begrenztem `records`-Tail und `notableRecords` ausgegeben. Ohne `--since` bleibt
+`--json` das bisherige Tail-Array. Heruntergeladene Dateien können mit
+`--dir /pfad/zur/lokalen/kopie` offline ausgewertet werden; der CLI ruft den Pi
+nicht selbst ab und verändert dort nichts.
 
 Nach Anmeldung ist dieselbe begrenzte Historie auch über
 `GET /api/system/diagnostics?limit=20` abrufbar. Während der Webserver selbst

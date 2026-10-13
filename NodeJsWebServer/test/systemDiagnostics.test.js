@@ -57,7 +57,10 @@ test('process parsing handles spaces and closing parentheses without reading arg
   assert.equal(parseProcess('node', '', 'invalid', 42), null);
 });
 
-function linuxFixture({ processCount = 2, briefLinkDrop = false, speedUnavailable = false } = {}) {
+function linuxFixture({
+  processCount = 2, briefLinkDrop = false, speedUnavailable = false,
+  mainState = 'S', otherState = 'S', otherName = 'ffmpeg', waitChannel = 'io_schedule', waitChannelError = null,
+} = {}) {
   let phase = 0;
   let activeReads = 0;
   let peakReads = 0;
@@ -89,12 +92,16 @@ function linuxFixture({ processCount = 2, briefLinkDrop = false, speedUnavailabl
         if (filename.endsWith('/rx_errors')) return phase ? '3\n' : '1\n';
         return '0\n';
       }
-      const processMatch = /^\/proc\/(\d+)\/(comm|status|stat)$/.exec(filename);
+      const processMatch = /^\/proc\/(\d+)\/(comm|status|stat|wchan)$/.exec(filename);
       if (processMatch) {
         const pid = Number(processMatch[1]);
-        if (processMatch[2] === 'comm') return pid === process.pid ? 'node\n' : 'ffmpeg\n';
+        if (processMatch[2] === 'comm') return pid === process.pid ? 'node\n' : `${otherName}\n`;
         if (processMatch[2] === 'status') return `VmRSS: ${pid === process.pid ? 3000 : pid} kB\n`;
-        return processStat(pid, { ticks: phase ? 30 : 10 });
+        if (processMatch[2] === 'wchan') {
+          if (waitChannelError) throw Object.assign(new Error('private process error'), { code: waitChannelError });
+          return waitChannel;
+        }
+        return processStat(pid, { ticks: phase ? 30 : 10, state: pid === process.pid ? mainState : otherState });
       }
       throw Object.assign(new Error('missing fixture'), { code: 'ENOENT' });
     } finally { activeReads -= 1; }
@@ -167,6 +174,47 @@ test('large process lists are bounded and explicitly marked as truncated', async
   assert.equal(sample.processes.relevantTruncated, true);
   assert.ok(fixture.peakReads() <= 8);
   assert.ok(fixture.reads.filter((filename) => /^\/proc\/\d+\//.test(filename)).length <= 512 * 3);
+});
+
+test('wait channels are read once for output processes in D and never for a running or sleeping process', async () => {
+  const fixture = linuxFixture({ mainState: 'D', waitChannel: 'jbd2_log_wait_commit\n' });
+  const sample = await fixture.sampler.sample();
+  const node = sample.processes.relevant.find((entry) => entry.pid === process.pid);
+  assert.equal(node.state, 'D');
+  assert.equal(node.waitChannel, 'jbd2_log_wait_commit');
+  assert.equal(sample.processes.topRss.find((entry) => entry.pid === process.pid).waitChannel, 'jbd2_log_wait_commit');
+  assert.deepEqual(fixture.reads.filter((filename) => filename.endsWith('/wchan')), [`/proc/${process.pid}/wchan`]);
+  assert.equal(sample.processes.relevant.find((entry) => entry.name === 'ffmpeg').waitChannel, null);
+  const normal = linuxFixture();
+  await normal.sampler.sample();
+  assert.equal(normal.reads.some((filename) => filename.endsWith('/wchan')), false);
+});
+
+test('zero or inaccessible wait channels are optional and report one bounded availability entry', async () => {
+  for (const options of [{ waitChannel: '0\n', reason: 'not_available' }, { waitChannelError: 'EACCES', reason: 'permission_denied' }]) {
+    const fixture = linuxFixture({ mainState: 'D', otherState: 'D', ...options });
+    const sample = await fixture.sampler.sample();
+    assert.ok(sample.processes.relevant.every((entry) => entry.waitChannel === null));
+    assert.deepEqual(sample.unavailable.filter((entry) => entry.source === 'processes.waitChannels'), [{
+      source: 'processes.waitChannels', reason: options.reason, unavailableCount: 2,
+    }]);
+    assert.equal(JSON.stringify(sample).includes('private process error'), false);
+  }
+});
+
+test('wait-channel collection is limited to the output union and emits only bounded symbol names', async () => {
+  const fixture = linuxFixture({ processCount: 600, mainState: 'D', otherState: 'D', otherName: 'worker', waitChannel: 'x'.repeat(500) });
+  const sample = await fixture.sampler.sample();
+  const selected = [...new Map([...sample.processes.relevant, ...sample.processes.topRss].map((entry) => [entry.pid, entry])).values()];
+  const reads = fixture.reads.filter((filename) => filename.endsWith('/wchan'));
+  assert.equal(sample.processes.scannedCount, 512);
+  assert.equal(reads.length, selected.length);
+  assert.ok(reads.length <= 20);
+  assert.ok(selected.every((entry) => entry.waitChannel.length === 128));
+  assert.ok(fixture.peakReads() <= 8);
+  const invalid = linuxFixture({ mainState: 'D', waitChannel: 'symbol\nprivate details\u0000' });
+  const invalidSample = await invalid.sampler.sample();
+  assert.equal(invalidSample.processes.relevant.find((entry) => entry.pid === process.pid).waitChannel, null);
 });
 
 test('network counters capture a brief link drop between polls and negotiated speed changes', async () => {

@@ -339,8 +339,31 @@ function createSystemDiagnosticsSampler({
       previousProcesses = new Map(processes.entries.map((entry) => [entry.pid, entry]));
       const relevant = processes.entries.filter((entry) => /^(?:node|nodejs|ffmpeg|mediamtx)$/i.test(entry.name));
       const topRss = [...processes.entries].sort((left, right) => right.rssBytes - left.rssBytes).slice(0, RESULT_LIMIT);
+      const relevantOutput = relevant.sort((left, right) => right.rssBytes - left.rssBytes).slice(0, RESULT_LIMIT);
+      // A process snapshot can catch a stalled thread while HTTP is waiting.
+      // Inspect only D-state entries that will appear in the output (at most
+      // twenty distinct PIDs), without reading stacks, arguments or environment.
+      const selected = new Map([...relevantOutput, ...topRss].map((entry) => [entry.pid, entry]));
+      let unavailableChannels = 0;
+      let channelPermissionDenied = false;
+      await mapLimited([...selected.values()], async (entry) => {
+        entry.waitChannel = null;
+        if (entry.state !== 'D') return;
+        try {
+          const symbol = String(await read(`/proc/${entry.pid}/wchan`)).trim();
+          if (/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(symbol)) entry.waitChannel = symbol.slice(0, 128);
+          else unavailableChannels += 1; // 0 can mean hidden symbols or that the wait already ended.
+        } catch (error) {
+          unavailableChannels += 1;
+          channelPermissionDenied ||= error?.code === 'EACCES' || error?.code === 'EPERM';
+        }
+      });
+      if (unavailableChannels) unavailable.push({
+        source: 'processes.waitChannels', reason: channelPermissionDenied ? 'permission_denied' : 'not_available',
+        unavailableCount: unavailableChannels,
+      });
       processes = {
-        relevant: relevant.sort((left, right) => right.rssBytes - left.rssBytes).slice(0, RESULT_LIMIT), topRss,
+        relevant: relevantOutput, topRss,
         scannedCount: processes.scannedCount, discoveredCount: processes.discoveredCount,
         truncated: processes.truncated, relevantTruncated: relevant.length > RESULT_LIMIT,
       };
