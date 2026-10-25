@@ -74,6 +74,18 @@ function normalizeCommandSettings(config, settings) {
       continue;
     }
 
+    if (field.type === "text") {
+      if (typeof rawValue !== "string" || !rawValue.trim() || rawValue.length > (field.maxLength || 1024)) {
+        throw new Error(`invalid_text:${key}`);
+      }
+      // The local RTSP path must remain a path, never a URL or traversal.
+      if (key === "rtsp_path" && (!/^[A-Za-z0-9._/-]+$/.test(rawValue) || rawValue.includes(".."))) {
+        throw new Error(`invalid_text:${key}`);
+      }
+      normalized[key] = rawValue.trim().replace(/^\/+/, "");
+      continue;
+    }
+
     normalized[key] = String(rawValue);
   }
 
@@ -108,6 +120,7 @@ function buildCameraOverview(config) {
   const stateValue = getLatestTopicValue(statusTopics, "state");
   const errorValue = getLatestTopicValue(statusTopics, "error");
   const configValue = getLatestTopicValue(statusTopics, "config");
+  const streamValue = getLatestTopicValue(statusTopics, "stream");
   const pongValue = getLatestTopicValue(statusTopics, "pong");
   const clientsValue = getLatestTopicValue(statusTopics, "clients");
   const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
@@ -150,7 +163,18 @@ function buildCameraOverview(config) {
 
   const mqttClient = getClientSnapshot(config.mqttClientId);
   const reportedOnline = parseBoolean(onlineValue);
-  const streamConfig = parseJson(configValue);
+  const reportedConfig = parseJson(configValue);
+  const streamStatus = parseJson(streamValue);
+  const streamConfig = {
+    ...(streamStatus && typeof streamStatus === "object" ? streamStatus : {}),
+    ...(reportedConfig && typeof reportedConfig === "object" ? reportedConfig : {}),
+  };
+  const commandAcknowledgement = statusTopics
+    .filter((entry) => entry.suffix.startsWith("command/"))
+    .map((entry) => ({ entry, payload: parseJson(entry.value) }))
+    .find(({ entry, payload }) =>
+      entry.suffix.slice("command/".length) && payload && typeof payload === "object"
+    );
   const bridge = config.kind === "esp32" || config.kind === "dfr1154"
     ? getEsp32BridgeSnapshot(config.cameraId)
     : null;
@@ -176,6 +200,7 @@ function buildCameraOverview(config) {
       mediaHost: config.mediaHost,
       urls: config.urls,
       currentConfig: streamConfig,
+      streamStatus: streamStatus && typeof streamStatus === "object" ? streamStatus : null,
       sourceRtspUrl: rtspUrlValue || "",
       archiveUrl: archiveUrlValue || "",
     },
@@ -223,10 +248,12 @@ function buildCameraOverview(config) {
       uptimeSeconds: Number(uptimeValue || 0),
       freeHeapBytes: Number(freeHeapValue || 0),
       lastCommand: {
-        id: commandIdValue || "",
-        name: commandNameValue || "",
-        result: commandResultValue || "",
-        message: commandMessageValue || "",
+        id: commandAcknowledgement?.entry.suffix.slice("command/".length) || commandIdValue || "",
+        name: commandAcknowledgement?.payload.command || commandNameValue || "",
+        result: commandAcknowledgement
+          ? (commandAcknowledgement.payload.ok === true ? "ok" : "error")
+          : commandResultValue || "",
+        message: commandAcknowledgement?.payload.error || commandMessageValue || "",
       },
       streamBytesTotal: Number(streamBytesValue || 0),
       streamUptimeSeconds: Number(streamUptimeValue || 0),
@@ -432,7 +459,7 @@ async function sendCommand(req, res) {
     res.json({ ok: true, requestId, overview: buildOverview(req) });
   } catch (error) {
     const message = String(error?.message || error);
-    const invalidSetting = /^(?:unsupported_setting|invalid_boolean|invalid_number|value_below_minimum|value_above_maximum|invalid_option):/.test(message);
+    const invalidSetting = /^(?:unsupported_setting|invalid_boolean|invalid_number|invalid_text|value_below_minimum|value_above_maximum|invalid_option):/.test(message);
     res.status(invalidSetting ? 400 : 500).json({ ok: false, error: message });
   }
 }

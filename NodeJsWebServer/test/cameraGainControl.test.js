@@ -10,12 +10,13 @@ const cameraConfig = require("../src/config/cameraConfig");
 // application's database, connect to MQTT, or start a camera/transcoder.
 function controllerWithBroker() {
   const published = [];
+  const topics = new Map();
   const file = path.join(__dirname, "../src/controllers/cameraController.js");
   const nativeRequire = createRequire(file);
   const module = { exports: {} };
   const dependencies = {
     "../mqttBroker": {
-      topics: new Map(),
+      topics,
       getClientSnapshot: () => ({ connected: true }),
       publish: async (topic, payload, options) => published.push({ topic, payload: JSON.parse(payload), options }),
     },
@@ -32,7 +33,7 @@ function controllerWithBroker() {
       throw new Error(`Unexpected controller dependency: ${id}`);
     },
   }, { filename: file });
-  return { controller: module.exports, published };
+  return { controller: module.exports, published, topics };
 }
 
 function response() {
@@ -46,6 +47,72 @@ function response() {
 function dfrCamera() {
   return cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "dfr1154");
 }
+
+function p4Camera() {
+  return cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "esp32-p4");
+}
+
+test("ESP32-P4 is a direct H264 MediaMTX camera without an FFmpeg bridge", () => {
+  const camera = p4Camera();
+  assert.ok(camera);
+  assert.equal(camera.cameraId, "esp32-p4-cam-01");
+  assert.equal(camera.mqttTopicBase, "camera/esp32-p4-cam-01");
+  assert.equal(camera.streamPath, "esp32-p4-cam-01");
+  assert.equal(camera.capabilities.h264, true);
+  assert.equal(camera.capabilities.requiresTranscode, false);
+  assert.equal(camera.requiresCommandAck, true);
+  assert.equal(camera.urls.webrtcPage, "http://localhost:8889/esp32-p4-cam-01");
+  assert.equal(camera.urls.rtsp, "rtsp://localhost:8554/esp32-p4-cam-01");
+});
+
+test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () => {
+  const { controller, published } = controllerWithBroker();
+  const camera = p4Camera();
+  const res = response();
+  const settings = { width: 1280, height: 720, fps: 20, bitrate_bps: 2500000, gop: 20, rtsp_path: "live" };
+  await controller.sendCommand({ hostname: "localhost", body: {
+    cameraId: camera.cameraId, action: "set", settings,
+  } }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].topic, "camera/esp32-p4-cam-01/cmd/set");
+  assert.deepEqual(published[0].payload, { ...settings, _request_id: res.body.requestId });
+  assert.equal(published[0].options.qos, 1);
+  assert.equal(Boolean(published[0].options.retain), false);
+
+  for (const invalid of [
+    { width: 1279 }, { height: 1082 }, { fps: 30.5 }, { bitrate_bps: 99999 },
+    { gop: 121 }, { rtsp_path: "../secret" }, { rtsp_path: "rtsp://other-host/live" },
+  ]) {
+    const invalidResponse = response();
+    await controller.sendCommand({ hostname: "localhost", body: {
+      cameraId: camera.cameraId, action: "set", settings: invalid,
+    } }, invalidResponse);
+    assert.equal(invalidResponse.statusCode, 400);
+  }
+  assert.equal(published.length, 1);
+});
+
+test("ESP32-P4 command acknowledgement is read safely from its correlated status topic", () => {
+  const { controller, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  const base = camera.mqttTopicBase;
+  const add = (suffix, value, timestamp) => topics.set(`${base}/status/${suffix}`, { lastMessage: value, timestamp });
+  add("online", "false", 1);
+  add("stream", '{"active":true,"codec":"h264","fps":20}', 2);
+  add("config", "not-json", 3);
+  add("command/request-123", '{"ok":true,"command":"set","applied":{"fps":20}}', 4);
+
+  const res = response();
+  controller.getOverview({ hostname: "localhost" }, res);
+  const overview = res.body.cameras.find((item) => item.cameraId === camera.cameraId);
+  assert.equal(overview.status.online, false);
+  assert.equal(overview.stream.currentConfig.fps, 20);
+  assert.equal(overview.status.lastCommand.id, "request-123");
+  assert.equal(overview.status.lastCommand.name, "set");
+  assert.equal(overview.status.lastCommand.result, "ok");
+});
 
 test("Pi settings publish only camera fields and request metadata without retain", async () => {
   const { controller, published } = controllerWithBroker();

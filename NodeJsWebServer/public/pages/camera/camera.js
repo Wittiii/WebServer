@@ -210,7 +210,10 @@ function applyPendingSettingsToCamera(camera) {
     return camera;
   }
 
-  if (cameraConfigMatchesPending(camera, pendingEntry)) {
+  const commandAccepted = !camera.requiresCommandAck || (
+    pendingEntry.requestId && command?.id === pendingEntry.requestId && command.result === "ok"
+  );
+  if (commandAccepted && cameraConfigMatchesPending(camera, pendingEntry)) {
     pendingCameraSettings.delete(camera.cameraId);
     setSettingsFeedback(camera.cameraId, "Einstellungen uebernommen.", false, 6000);
     return camera;
@@ -536,7 +539,9 @@ function renderStream(camera) {
     streamHintEl.textContent =
       isJpegCamera(camera)
         ? `${camera.label} liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen.`
-        : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
+        : camera.kind === "esp32-p4"
+          ? "ESP32-P4 liefert H264 per lokalem RTSP; MediaMTX liest diese Quelle ohne FFmpeg-Transkodierung und stellt WebRTC bereit."
+          : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
   }
 }
 

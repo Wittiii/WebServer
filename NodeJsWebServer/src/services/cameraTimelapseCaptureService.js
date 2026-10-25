@@ -150,6 +150,10 @@ function sourceIsReady(camera) {
     const publisherConnected = parseBoolean(getTopicValue(camera, "publisher_connected"));
     return publisherConnected === true || state === "streaming" || state === "running";
   }
+  if (camera.kind === "esp32-p4") {
+    const stream = parseJson(getTopicValue(camera, "stream"));
+    return stream?.active === true && String(stream.codec || "").toLowerCase() === "h264";
+  }
   const bridge = getEsp32BridgeSnapshot(camera.cameraId);
   const progressFresh = bridge?.progressAgeSeconds == null || bridge.progressAgeSeconds < 20;
   return Boolean(bridge?.pid) && bridge.state === "running" && progressFresh;

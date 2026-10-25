@@ -276,6 +276,56 @@ function createDfr1154CameraConfig(hostname, mediaConfig) {
   };
 }
 
+function createEsp32P4CameraConfig(hostname, mediaConfig) {
+  const cameraId = process.env.CAMERA_ESP32_P4_ID || "esp32-p4-cam-01";
+  const mqttTopicBase = trimSlashes(
+    process.env.CAMERA_ESP32_P4_TOPIC_BASE || `camera/${cameraId}`,
+    { trailing: true }
+  );
+  const mqttClientId = process.env.CAMERA_ESP32_P4_MQTT_CLIENT_ID || cameraId;
+  const streamPath = trimSlashes(process.env.CAMERA_ESP32_P4_STREAM_PATH || cameraId);
+
+  return {
+    cameraId,
+    label: process.env.CAMERA_ESP32_P4_LABEL || "ESP32-P4 Kamera",
+    kind: "esp32-p4",
+    mqttClientId,
+    mqttTopicBase,
+    streamPath,
+    mediaHost: mediaConfig.mediaHost || hostname,
+    mediaMTX: mediaConfig,
+    urls: buildUrls({ ...mediaConfig, streamPath }),
+    archive: {
+      type: "server_capture",
+      localDir: process.env.CAMERA_ESP32_P4_TIMELAPSE_DIR || "",
+      envPrefix: "CAMERA_ESP32_P4",
+    },
+    capabilities: {
+      h264: true,
+      directRtsp: true,
+      requiresTranscode: false,
+      serverTimelapse: true,
+      timelapse: true,
+      network: "wifi6-via-esp32-c6",
+    },
+    // The P4 acknowledges every command on status/command/<request-id>.
+    requiresCommandAck: true,
+    controls: {
+      profile: "esp32-p4",
+      fields: [
+        { key: "width", label: "Breite", type: "number", min: 80, max: 1920, step: 2, integer: true, multipleOf: 2, placeholder: "1920", section: "Bild und Stream" },
+        { key: "height", label: "Hoehe", type: "number", min: 80, max: 1080, step: 2, integer: true, multipleOf: 2, placeholder: "1080" },
+        { key: "fps", label: "FPS", type: "number", min: 1, max: 30, step: 1, integer: true, placeholder: "20" },
+        { key: "bitrate_bps", label: "Bitrate (bit/s)", type: "number", min: 100000, max: 10000000, step: 1000, integer: true, placeholder: "4000000" },
+        { key: "gop", label: "Keyframe-Intervall (GOP)", type: "number", min: 1, max: 120, step: 1, integer: true, placeholder: "20" },
+        { key: "rtsp_path", label: "Lokaler RTSP-Pfad", type: "text", maxLength: 128, placeholder: "live" },
+        { key: "server_capture_interval_seconds", label: "Serveraufnahme Intervall (s)", type: "number", min: 10, max: 86400, step: 1, integer: true, placeholder: "60", section: "Serveraufnahme" },
+        { key: "server_capture_enabled", label: "Serveraufnahme aktiv", type: "checkbox" },
+      ],
+    },
+  };
+}
+
 function getMediaConfig(hostname = "localhost") {
   const mediaHost = process.env.MEDIA_MTX_PUBLIC_HOST || hostname;
   const webrtcPort = toNumber(process.env.MEDIA_MTX_WEBRTC_PORT, 8889);
@@ -300,6 +350,7 @@ function getCameraConfigs(hostname = "localhost") {
     createPiCameraConfig(hostname, mediaConfig),
     createEsp32CameraConfig(hostname, mediaConfig),
     createDfr1154CameraConfig(hostname, mediaConfig),
+    createEsp32P4CameraConfig(hostname, mediaConfig),
   ];
 }
 

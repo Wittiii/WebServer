@@ -56,6 +56,13 @@ Diese Werte sind optional. Ohne Angabe nutzt die Kamera-Seite Default-Werte fuer
 - `CAMERA_DFR1154_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/dfr1154-cam-01`
 - `CAMERA_DFR1154_TIMELAPSE_ENABLED=true`
 - `CAMERA_DFR1154_TIMELAPSE_INTERVAL_SECONDS=60`
+- `CAMERA_ESP32_P4_ID=esp32-p4-cam-01`
+- `CAMERA_ESP32_P4_TOPIC_BASE=camera/esp32-p4-cam-01`
+- `CAMERA_ESP32_P4_MQTT_CLIENT_ID=esp32-p4-cam-01`
+- `CAMERA_ESP32_P4_STREAM_PATH=esp32-p4-cam-01`
+- `CAMERA_ESP32_P4_TIMELAPSE_DIR=` Serverordner; Standard ist `data/timelapse/esp32-p4-cam-01`
+- `CAMERA_ESP32_P4_TIMELAPSE_ENABLED=true`
+- `CAMERA_ESP32_P4_TIMELAPSE_INTERVAL_SECONDS=60`
 - `ESP32_TRANSCODE_ENABLED=true`
 - `ESP32_TRANSCODE_FFMPEG_PATH=ffmpeg`
 - `ESP32_SOURCE_RTSP_TRANSPORT=tcp`
@@ -109,6 +116,23 @@ ESP32 RTSP (MJPEG) -> FFmpeg -> MediaMTX RTSP (H264)
 ```
 
 Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
+
+## ESP32-P4 H.264-Quelle
+
+Die ESP32-P4-Kamera liefert H.264 direkt und wird **nicht** von der
+ESP32-FFmpeg-Bridge verarbeitet. Im ersten Betriebsmodus betreibt die Firmware
+einen lokalen RTSP-Server unter `rtsp://<kamera-ip>:8554/live`; MediaMTX liest
+diese Quelle als `esp32-p4-cam-01`. Die MediaMTX-Beispielkonfiguration erwartet
+dafuer die Umgebungsvariable `P4_CAMERA_RTSP_URL`, beispielsweise
+`rtsp://<kamera-ip>:8554/live`.
+
+Die Kamera publiziert retained Statuswerte unter
+`camera/esp32-p4-cam-01/status/`, darunter `online`, `ip`, `rtsp_url`,
+`config`, `stream` und `error`. Die Einstellungen `width`, `height`, `fps`,
+`bitrate_bps`, `gop` und `rtsp_path` werden mit QoS 1, ohne Retain an
+`cmd/set` gesendet. Die Firmware bestaetigt jede Anfrage als JSON unter
+`status/command/<request-id>`; die Oberflaeche zeigt eine P4-Einstellung erst
+nach dieser positiven, korrelierten Quittung als uebernommen an.
 
 ## Zeitraffer im Webserver
 
