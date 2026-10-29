@@ -131,15 +131,22 @@ Die Kamera publiziert retained Statuswerte unter
 Streamingzustand aus `status/stream.active` und dem Onlinezustand ab.
 Die Firmware meldet unter `status/config.image_controls` verfuegbare Regler
 mit `min`, `max`, `step` und `value`; unter `image` stehen die aktuellen Werte.
-Nur diese Regler (Helligkeit, Kontrast, Saettigung, hflip/vflip) erscheinen im
+Unter `setting_controls` meldet sie weitere unterstuetzte Stream-/Capture-Regler.
+Nur diese Regler (Helligkeit, Kontrast, Saettigung, hflip/vflip, Farbton,
+Belichtungsziel sowie FPS, Bitrate, GOP, Capture an/aus und Aufnahmeintervall) erscheinen im
 Formular. Die API validiert gegen dieselben Grenzen und sendet mit QoS 1 ohne
 Retain an `cmd/set`. Die Firmware wendet die Werte an und speichert sie in NVS,
 bevor sie eine positive Quittung sendet. Die Firmware bestaetigt jede Anfrage als JSON unter
 `status/command/<request-id>`; die Oberflaeche zeigt eine P4-Einstellung erst
 nach dieser positiven, korrelierten Quittung als uebernommen an.
-Aufloesung/FPS/Bitrate/GOP sind vorerst Firmware-Buildwerte. Serveraufnahme-
-Intervall und Aktivierung werden fuer den P4 ueber die CAMERA_ESP32_P4_TIMELAPSE_*
-Umgebungsvariablen gesetzt. Nach dem Update muessen Firmware hochgeladen und
+Die Aufloesung bleibt vorerst 1920x1080. FPS/Bitrate/GOP koennen mit der
+erweiterten Firmware gesetzt werden; danach verbindet sich der Publisher kurz
+neu. Capture-Intervall und Aktivierung werden als `server_capture_*` in der
+Firmware gespeichert und gemeldet. Der Server verwendet diese gemeldeten Werte
+vor seinen CAMERA_ESP32_P4_TIMELAPSE_*-Umgebungsdefaults. Capture aus stoppt neue
+Serverbilder, ohne den Livestream anzuhalten. Ein bereits gestartetes Bild darf
+fertig werden; eine laufende Archivpruefung startet danach kein neues Bild mehr.
+Nach dem Update muessen Firmware hochgeladen und
 Webserver neu gestartet werden; Regler/Persistenz sind am Board zu pruefen.
 
 ## Zeitraffer im Webserver

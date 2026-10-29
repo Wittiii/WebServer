@@ -75,9 +75,17 @@ test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () =
       contrast: { min: 0, max: 255, step: 1, value: 128 },
       hflip: { min: 0, max: 1, step: 1, value: 0 },
     },
+    setting_controls: {
+      server_capture_enabled: { min: 0, max: 1, step: 1, value: 1 },
+      server_capture_interval_seconds: { min: 10, max: 86400, step: 1, value: 60 },
+      fps: { min: 1, max: 30, step: 1, value: 20 },
+      bitrate_bps: { min: 100000, max: 10000000, step: 1000, value: 4000000 },
+      gop: { min: 1, max: 120, step: 1, value: 20 },
+    },
   }), timestamp: Date.now() });
   const res = response();
-  const settings = { brightness: 10, contrast: 130, hflip: true };
+  const settings = { brightness: 10, contrast: 130, hflip: true,
+    server_capture_enabled: false, server_capture_interval_seconds: 120, fps: 15, bitrate_bps: 2500000, gop: 15 };
   await controller.sendCommand({ hostname: "localhost", body: {
     cameraId: camera.cameraId, action: "set", settings,
   } }, res);
@@ -90,8 +98,9 @@ test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () =
   assert.equal(Boolean(published[0].options.retain), false);
 
   for (const invalid of [
-    { width: 1280 }, { height: 720 }, { fps: 20 }, { bitrate_bps: 2500000 },
-    { gop: 20 }, { rtsp_path: "live" }, { brightness: 128 }, { contrast: -1 },
+    { width: 1280 }, { height: 720 }, { fps: 31 }, { bitrate_bps: 2500500 },
+    { gop: 0 }, { rtsp_path: "live" }, { brightness: 128 }, { contrast: -1 },
+    { server_capture_enabled: 2 }, { server_capture_interval_seconds: 9 }, { server_capture_interval_seconds: 10.5 },
     { saturation: 128 }, { brightness: 0.5 }, { brightness: null }, { contrast: true },
   ]) {
     const invalidResponse = response();

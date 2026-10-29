@@ -118,12 +118,12 @@ function getStateValue(overview) {
 
 function resolveCameraControls(config, reportedConfig) {
   if (config.kind !== "esp32-p4") return config.controls;
-  const reported = reportedConfig?.image_controls;
+  const reported = { ...reportedConfig?.image_controls, ...reportedConfig?.setting_controls };
   const fields = (config.controls.imageFields || []).flatMap((field) => {
     const control = reported?.[field.key];
     if (!control || !Number.isSafeInteger(control.min) || !Number.isSafeInteger(control.max) ||
         !Number.isSafeInteger(control.step) || control.step < 1 || control.min > control.max ||
-        Math.abs(control.min) > 1000000 || Math.abs(control.max) > 1000000) return [];
+        Math.abs(control.min) > 100000000 || Math.abs(control.max) > 100000000) return [];
     if (field.type === "checkbox" && (control.min !== 0 || control.max !== 1 || control.step !== 1)) return [];
     return [{ ...field, min: control.min, max: control.max, step: control.step }];
   });

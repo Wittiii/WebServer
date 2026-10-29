@@ -45,6 +45,55 @@ test("capture interval defaults to 60 seconds, and shutdown prevents a spawn aft
   assert.equal(spawned, 0);
 });
 
+test("P4 capture can pause during storage I/O and resume without stopping the live publisher", async () => {
+  let now = 100000, tick, finishScan, scans = 0, spawned = 0;
+  const camera = { cameraId: "p4", kind: "esp32-p4", mqttTopicBase: "camera/p4", streamPath: "p4", archive: { type: "server_capture" } };
+  const topics = new Map([
+    ["camera/p4/status/online", { lastMessage: "true" }],
+    ["camera/p4/status/stream", { lastMessage: '{"active":true,"codec":"h264"}' }],
+  ]);
+  const setCapture = (enabled) => topics.set("camera/p4/status/config", {
+    lastMessage: JSON.stringify({ server_capture_enabled: enabled, server_capture_interval_seconds: 120 }),
+  });
+  setCapture(true);
+  const scanning = new Promise((resolve) => { finishScan = resolve; });
+  const empty = { totalBytes: 0, latestImage: null };
+  const published = [];
+  const service = await loadService("cameraTimelapseCaptureService.js", {
+    "../config/cameraConfig": { getCameraConfigs: () => [camera] },
+    "../mqttBroker": { topics, publish: async (topic) => published.push(topic) },
+    "./esp32TranscodeService": { getEsp32BridgeSnapshot: () => null },
+    "./timelapseService": {
+      listTimelapseFiles: () => ++scans === 1 ? scanning : Promise.resolve(empty),
+      recordTimelapseFrame: async () => {},
+    },
+    "./mediaProcessService": { getMediaThreads: () => 1, runMediaProcess: async () => { spawned += 1; } },
+    "fs/promises": {
+      statfs: async () => ({ bavail: 10 ** 9, bsize: 4096 }),
+      unlink: async () => {}, rename: async () => {}, stat: async () => ({ isFile: () => true, size: 100 }),
+    },
+  }, {
+    Date: class extends Date { static now() { return now; } },
+    setInterval: (callback) => { tick = callback; return 1; }, clearInterval() {},
+  });
+  const settle = () => new Promise(setImmediate);
+  service.startCameraTimelapseCaptureSupervisor();
+  setCapture(false); finishScan(empty); await settle();
+  assert.equal(spawned, 0);
+  assert.equal(service.getCameraTimelapseCaptureSnapshot("p4").state, "stopped");
+  assert.equal(service.getCameraTimelapseCaptureSnapshot("p4").intervalSeconds, 120);
+  setCapture(true); tick(); await settle();
+  assert.equal(spawned, 1);
+  setCapture(false); now += 200000; tick(); await settle();
+  assert.equal(spawned, 1);
+  assert.equal(service.getCameraTimelapseCaptureSnapshot("p4").enabled, false);
+  setCapture(true); tick(); await settle();
+  assert.equal(spawned, 2);
+  assert.equal(JSON.parse(topics.get("camera/p4/status/stream").lastMessage).active, true);
+  assert.ok(published.every((topic) => !topic.includes("/cmd/")));
+  await service.stopCameraTimelapseCaptureSupervisor();
+});
+
 test("unchanged ffmpeg progress reports do not keep a stalled camera bridge alive", async () => {
   let now = 100000;
   let tick;

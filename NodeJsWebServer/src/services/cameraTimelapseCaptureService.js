@@ -219,6 +219,11 @@ async function captureFrame(camera, job) {
     }
 
     await fs.unlink(temporaryPath).catch(() => {});
+    if (stopping || !getSettings(camera).enabled) {
+      job.enabled = getSettings(camera).enabled;
+      job.state = "stopped";
+      return;
+    }
     const threads = String(getMediaThreads(process.env.TIMELAPSE_FFMPEG_THREADS));
     await runMediaProcess(
         process.env.TIMELAPSE_FFMPEG_PATH || "ffmpeg",
@@ -276,6 +281,9 @@ async function evaluateCamera(camera) {
       await refreshDiskLimits(job);
     }
     if (stopping) return;
+    // Settings may change while an archive scan/disk check is awaiting I/O.
+    // Re-read before deciding to start another capture.
+    Object.assign(job, getSettings(camera));
     if (!job.enabled) {
       job.state = "stopped";
       job.error = "";
