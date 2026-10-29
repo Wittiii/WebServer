@@ -271,10 +271,10 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
     lastMessage: JSON.stringify({
       image: {
         preset: 1,
-        contrast: 136,
-        saturation: 146,
-        gamma: 62,
-        sharpness: 40,
+        contrast: 130,
+        saturation: 132,
+        gamma: 65,
+        sharpness: 36,
         denoise: 4,
         awb: true,
         red_balance: 1000,
@@ -282,10 +282,10 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
       },
       image_controls: {
         preset: { min: 0, max: 4, step: 1, default: 1, value: 1 },
-        contrast: { min: 0, max: 255, step: 1, default: 136, value: 136 },
-        saturation: { min: 0, max: 255, step: 1, default: 146, value: 146 },
-        gamma: { min: 40, max: 100, step: 1, default: 62, value: 62 },
-        sharpness: { min: 0, max: 100, step: 1, default: 40, value: 40 },
+        contrast: { min: 0, max: 255, step: 1, default: 130, value: 130 },
+        saturation: { min: 0, max: 255, step: 1, default: 132, value: 132 },
+        gamma: { min: 40, max: 100, step: 1, default: 65, value: 65 },
+        sharpness: { min: 0, max: 100, step: 1, default: 36, value: 36 },
         denoise: { min: 0, max: 20, step: 1, default: 4, value: 4 },
         awb: { min: 0, max: 1, step: 1, default: 1, value: 1 },
         red_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
@@ -305,11 +305,12 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
 
   assert.equal(fieldsByKey.get("preset").section, "Bild & Farbabstimmung");
   assert.deepEqual(fieldsByKey.get("preset").options.map((option) => option.value), [0, 1, 2, 3, 4]);
+  assert.equal(fieldsByKey.get("preset").options[1].label, "Raspberry Pi (Standard)");
   assert.equal(fieldsByKey.get("contrast").section, undefined);
-  assert.equal(fieldsByKey.get("contrast").default, 136);
-  assert.equal(fieldsByKey.get("saturation").default, 146);
-  assert.equal(fieldsByKey.get("gamma").default, 62);
-  assert.equal(fieldsByKey.get("sharpness").default, 40);
+  assert.equal(fieldsByKey.get("contrast").default, 130);
+  assert.equal(fieldsByKey.get("saturation").default, 132);
+  assert.equal(fieldsByKey.get("gamma").default, 65);
+  assert.equal(fieldsByKey.get("sharpness").default, 36);
   assert.equal(fieldsByKey.get("denoise").default, 4);
   assert.equal(fieldsByKey.get("awb").section, "Weissabgleich & Ausrichtung");
   assert.equal(fieldsByKey.get("red_balance").section, undefined);

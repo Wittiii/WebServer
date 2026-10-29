@@ -321,8 +321,8 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
           group: "Bild & Farbabstimmung",
           options: [
             { value: 0, label: "Benutzerdefiniert" },
-            { value: 1, label: "Farbenfroh (Standard)" },
-            { value: 2, label: "Natuerlich / Neutral" },
+            { value: 1, label: "Raspberry Pi (Standard)" },
+            { value: 2, label: "Natuerlich / Sanft" },
             { value: 3, label: "Kraeftig & Klar (Vivid)" },
             { value: 4, label: "Schwachlicht (Wenig Rauschen)" },
           ],
