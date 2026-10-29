@@ -64,6 +64,32 @@
         <iframe id="camera-stream-frame" class="camera-stream-frame" title="MediaMTX Stream"></iframe>
       </div>
       <p id="camera-stream-hint" class="camera-muted-line"></p>
+
+      <div class="camera-snapshot-toolbar">
+        <div class="camera-link-row">
+          <button id="camera-snapshot-capture" type="button" class="btn-secondary">Schnappschuss aufnehmen</button>
+          <button id="camera-snapshot-pin" type="button" class="btn-secondary" disabled>Als Vorher-Referenz merken</button>
+          <a id="camera-snapshot-download" class="btn btn-secondary camera-link-btn" download hidden>JPEG speichern</a>
+          <button id="camera-snapshot-clear" type="button" class="btn-secondary" hidden>Vergleich schliessen</button>
+        </div>
+        <p id="camera-snapshot-status" class="status-line"></p>
+      </div>
+      <div id="camera-snapshot-compare" class="camera-snapshot-compare" hidden>
+        <figure id="camera-snapshot-before-card" class="camera-snapshot-card" hidden>
+          <figcaption>
+            <strong>Vorher (Referenz)</strong>
+            <span id="camera-snapshot-before-meta">-</span>
+          </figcaption>
+          <img id="camera-snapshot-before-img" alt="Referenz-Schnappschuss zum Farbvergleich">
+        </figure>
+        <figure id="camera-snapshot-current-card" class="camera-snapshot-card">
+          <figcaption>
+            <strong>Aktueller Schnappschuss</strong>
+            <span id="camera-snapshot-current-meta">-</span>
+          </figcaption>
+          <img id="camera-snapshot-current-img" alt="Aktueller Kamera-Schnappschuss">
+        </figure>
+      </div>
     </section>
 
     <div class="grid-2 dashboard-columns">
@@ -85,7 +111,19 @@
     </div>
 
     <section class="panel">
-      <h2>Steuerung</h2>
+      <div class="camera-settings-header">
+        <div>
+          <h2>Steuerung &amp; Bildabstimmung</h2>
+          <p class="camera-muted-line">Regler per Schieberegler oder Zahleneingabe feinjustieren. Ein Klick auf „Std“ setzt den einzelnen Wert auf seinen Standard zurück.</p>
+        </div>
+        <div class="camera-tuning-toolbar">
+          <label class="switch-line camera-live-toggle" for="camera-live-apply">
+            <input id="camera-live-apply" type="checkbox">
+            <span>Live-Übernahme</span>
+          </label>
+          <button id="camera-reset-defaults" type="button" class="btn-secondary" hidden>Bildwerte auf Standard</button>
+        </div>
+      </div>
       <form id="camera-settings-form" class="camera-settings-grid"></form>
       <p id="camera-settings-status" class="status-line"></p>
     </section>

@@ -5,7 +5,10 @@ const { randomUUID } = require("crypto");
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
 const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
 const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
-const { getCameraTimelapseCaptureSnapshot } = require("../services/cameraTimelapseCaptureService");
+const {
+  captureCameraLiveSnapshot,
+  getCameraTimelapseCaptureSnapshot,
+} = require("../services/cameraTimelapseCaptureService");
 const {
   buildTimelapseVideo,
   deleteTimelapseByType,
@@ -119,13 +122,41 @@ function getStateValue(overview) {
 function resolveCameraControls(config, reportedConfig) {
   if (config.kind !== "esp32-p4") return config.controls;
   const reported = { ...reportedConfig?.image_controls, ...reportedConfig?.setting_controls };
+  const emittedGroups = new Set();
   const fields = (config.controls.imageFields || []).flatMap((field) => {
     const control = reported?.[field.key];
     if (!control || !Number.isSafeInteger(control.min) || !Number.isSafeInteger(control.max) ||
         !Number.isSafeInteger(control.step) || control.step < 1 || control.min > control.max ||
         Math.abs(control.min) > 100000000 || Math.abs(control.max) > 100000000) return [];
     if (field.type === "checkbox" && (control.min !== 0 || control.max !== 1 || control.step !== 1)) return [];
-    return [{ ...field, min: control.min, max: control.max, step: control.step }];
+
+    let options = field.options;
+    if (field.type === "select") {
+      options = (field.options || []).filter((option) =>
+        Number.isSafeInteger(option.value) &&
+        option.value >= control.min &&
+        option.value <= control.max &&
+        (option.value - control.min) % control.step === 0
+      );
+      if (!options.length) return [];
+    }
+
+    let section = field.section;
+    if (!section && field.group && !emittedGroups.has(field.group)) {
+      emittedGroups.add(field.group);
+      section = field.group;
+    }
+
+    const resolved = {
+      ...field,
+      min: control.min,
+      max: control.max,
+      step: control.step,
+      ...(options ? { options } : {}),
+      ...(section ? { section } : {}),
+      ...(Number.isSafeInteger(control.default) ? { default: control.default } : {}),
+    };
+    return [resolved];
   });
   return { profile: config.controls.profile, fields: [...fields, ...config.controls.fields] };
 }
@@ -428,6 +459,31 @@ async function getTimelapseFile(req, res) {
   }
 }
 
+async function getSnapshot(req, res) {
+  const cameraId = String(req.query.cameraId || "");
+  const config = getCameraConfigById(cameraId, req.hostname);
+  if (!config) {
+    return res.status(400).json({ ok: false, error: "invalid_camera_id" });
+  }
+  if (typeof captureCameraLiveSnapshot !== "function") {
+    return res.status(503).json({ ok: false, error: "snapshot_unavailable" });
+  }
+
+  try {
+    const buffer = await captureCameraLiveSnapshot(config);
+    res.set({
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "X-Snapshot-Timestamp": new Date().toISOString(),
+    });
+    return res.send(buffer);
+  } catch (error) {
+    const message = String(error?.message || error);
+    const conflict = message === "snapshot_busy" || message === "camera_stream_inactive";
+    return res.status(conflict ? 409 : 502).json({ ok: false, error: message });
+  }
+}
+
 async function sendCommand(req, res) {
   const { cameraId, action, settings, payload } = req.body || {};
   const config = getCameraConfigById(cameraId, req.hostname);
@@ -452,6 +508,19 @@ async function sendCommand(req, res) {
         await publish(
           topicFor(action),
           JSON.stringify({ _request_id: requestId, value: payload ?? 1 }),
+          { qos: 1 }
+        );
+        break;
+      case "reset":
+        if (config.kind !== "esp32-p4") {
+          return res.status(400).json({ ok: false, error: "unsupported_action" });
+        }
+        await publish(
+          topicFor("reset"),
+          JSON.stringify({
+            _request_id: requestId,
+            ...(payload === "all" ? { scope: "all" } : {}),
+          }),
           { qos: 1 }
         );
         break;
@@ -490,6 +559,7 @@ module.exports = {
   deleteTimelapse,
   getCameraPage,
   getOverview,
+  getSnapshot,
   getTimelapse,
   getTimelapseFile,
   sendCommand,

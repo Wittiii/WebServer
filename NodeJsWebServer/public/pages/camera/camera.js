@@ -2,6 +2,7 @@ import {
   buildTimelapse,
   deleteTimelapse,
   fetchCameraOverview,
+  fetchCameraSnapshot,
   fetchTimelapse,
   postCameraCommand,
 } from "./camera-api.js";
@@ -21,6 +22,8 @@ const targetsEl = document.getElementById("camera-targets");
 const commandStatusEl = document.getElementById("camera-command-status");
 const settingsStatusEl = document.getElementById("camera-settings-status");
 const settingsForm = document.getElementById("camera-settings-form");
+const liveApplyCheckboxEl = document.getElementById("camera-live-apply");
+const resetDefaultsBtnEl = document.getElementById("camera-reset-defaults");
 const streamFrame = document.getElementById("camera-stream-frame");
 const streamHintEl = document.getElementById("camera-stream-hint");
 const openWebRtcEl = document.getElementById("camera-open-webrtc");
@@ -31,6 +34,17 @@ const activeSubtitleEl = document.getElementById("camera-active-subtitle");
 const heroCountEl = document.getElementById("camera-hero-count");
 const heroOnlineEl = document.getElementById("camera-hero-online");
 const heroStreamingEl = document.getElementById("camera-hero-streaming");
+const snapshotCaptureEl = document.getElementById("camera-snapshot-capture");
+const snapshotPinEl = document.getElementById("camera-snapshot-pin");
+const snapshotDownloadEl = document.getElementById("camera-snapshot-download");
+const snapshotClearEl = document.getElementById("camera-snapshot-clear");
+const snapshotStatusEl = document.getElementById("camera-snapshot-status");
+const snapshotCompareEl = document.getElementById("camera-snapshot-compare");
+const snapshotBeforeCardEl = document.getElementById("camera-snapshot-before-card");
+const snapshotBeforeImgEl = document.getElementById("camera-snapshot-before-img");
+const snapshotBeforeMetaEl = document.getElementById("camera-snapshot-before-meta");
+const snapshotCurrentImgEl = document.getElementById("camera-snapshot-current-img");
+const snapshotCurrentMetaEl = document.getElementById("camera-snapshot-current-meta");
 const timelapsePanelEl = document.getElementById("timelapse-panel");
 const timelapseToggleEl = document.getElementById("timelapse-toggle");
 const timelapseRefreshEl = document.getElementById("timelapse-refresh");
@@ -38,7 +52,7 @@ const timelapseBuildEl = document.getElementById("timelapse-build");
 const timelapseDeleteVideoEl = document.getElementById("timelapse-delete-video");
 const timelapseDeleteImagesEl = document.getElementById("timelapse-delete-images");
 const timelapseSummaryEl = document.getElementById("timelapse-summary");
-const timelapseStatusEl = document.getElementById("timelapse-status");
+const timelapseStatusEl = document.getElementById("camera-timelapse-status") || document.getElementById("timelapse-status");
 const timelapseFileListEl = document.getElementById("timelapse-file-list");
 const timelapseVideoEl = document.getElementById("timelapse-video");
 const timelapseVideoHintEl = document.getElementById("timelapse-video-hint");
@@ -49,8 +63,8 @@ let settingsDraftState = { cameraId: null, dirty: false, values: {}, touched: ne
 const settingsDrafts = new Map();
 let cameraOperationInFlight = false;
 let archiveRequestVersion = 0;
-const overviewStatusEl = document.getElementById('camera-overview-status');
-const overviewRefreshEl = document.getElementById('camera-overview-refresh');
+const overviewStatusEl = document.getElementById("camera-overview-status");
+const overviewRefreshEl = document.getElementById("camera-overview-refresh");
 const pendingCameraSettings = new Map();
 const CAMERA_CONFIG_PENDING_MS = 30000;
 let settingsFeedbackState = { cameraId: null, text: "", isError: false, expiresAt: 0 };
@@ -58,26 +72,43 @@ let timelapseState = null;
 let timelapseRefreshInFlight = false;
 let overviewRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
+const LIVE_APPLY_STORAGE_KEY = "camera-live-apply";
+const STREAM_RECONNECT_KEYS = new Set(["fps", "bitrate_bps", "gop", "width", "height", "framerate", "bitrate", "framesize"]);
+
 let timelapseCollapsed = true;
 try { timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false"; } catch {}
 
+let liveApplyEnabled = true;
+try {
+  const savedLive = localStorage.getItem(LIVE_APPLY_STORAGE_KEY);
+  if (savedLive !== null) liveApplyEnabled = savedLive === "true";
+} catch {}
+if (liveApplyCheckboxEl) liveApplyCheckboxEl.checked = liveApplyEnabled;
+
+let liveApplyTimer = null;
+let liveApplyInFlight = false;
+let liveApplyQueued = false;
+let snapshotInFlight = false;
+const cameraSnapshots = new Map(); // cameraId -> { current: { url, meta, filename } | null, before: { url, meta } | null }
+
 function bindCameraAction(element, eventName, handler) {
   element?.addEventListener(eventName, async (event) => {
-    if (eventName === 'submit') event.preventDefault();
+    if (eventName === "submit") event.preventDefault();
     if (cameraOperationInFlight) return;
     cameraOperationInFlight = true;
-    const controls = [...document.querySelectorAll('.camera-picker button, [data-camera-action], #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh')];
+    const controls = [...document.querySelectorAll(".camera-picker button, [data-camera-action], #camera-reset-defaults, #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh")];
     const previous = controls.map((control) => [control, control.disabled]);
     controls.forEach((control) => { control.disabled = true; });
-    element.setAttribute('aria-busy', 'true');
+    element.setAttribute("aria-busy", "true");
     try {
       await handler(event);
     } finally {
       previous.forEach(([control, disabled]) => { if (control.isConnected) control.disabled = disabled; });
-      element.setAttribute('aria-busy', 'false');
+      element.setAttribute("aria-busy", "false");
       cameraOperationInFlight = false;
-      overviewRefreshEl.disabled = overviewRefreshInFlight;
+      if (overviewRefreshEl) overviewRefreshEl.disabled = overviewRefreshInFlight;
       renderPicker();
+      syncActionButtons(getActiveCamera());
     }
   });
 }
@@ -138,28 +169,35 @@ function captureSettingsDraft(target = null) {
 
   settingsDraftState = {
     cameraId: camera.cameraId,
-    dirty: true,
+    dirty: touched.size > 0,
     values,
     touched,
   };
-  settingsDrafts.set(camera.cameraId, settingsDraftState);
+  if (touched.size > 0) {
+    settingsDrafts.set(camera.cameraId, settingsDraftState);
+  } else {
+    settingsDrafts.delete(camera.cameraId);
+  }
   if (settingsFeedbackState.cameraId === camera.cameraId && settingsFeedbackState.isError) {
-    setSettingsFeedback(camera.cameraId, '');
+    setSettingsFeedback(camera.cameraId, "");
   }
   syncSettingsStatus(camera);
-  const pickerButton = [...pickerEl.querySelectorAll('[data-camera-id]')].find((button) => button.dataset.cameraId === camera.cameraId);
-  if (pickerButton && !pickerButton.querySelector('small')) {
-    const badge = document.createElement('small');
-    badge.textContent = 'Entwurf';
+  const pickerButton = [...(pickerEl?.querySelectorAll("[data-camera-id]") || [])].find(
+    (button) => button.dataset.cameraId === camera.cameraId
+  );
+  if (pickerButton && touched.size > 0 && !pickerButton.querySelector("small")) {
+    const badge = document.createElement("small");
+    badge.textContent = "Entwurf";
     pickerButton.append(badge);
   }
 }
 
-function setPendingCameraSettings(cameraId, settings, requestId = null) {
+function setPendingCameraSettings(cameraId, settings, requestId = null, expandsRelated = false) {
   if (!cameraId || !settings || typeof settings !== "object") return;
   pendingCameraSettings.set(cameraId, {
     settings: { ...settings },
     requestId,
+    expandsRelated,
     requestedAt: Date.now(),
   });
 }
@@ -214,8 +252,12 @@ function applyPendingSettingsToCamera(camera) {
     pendingEntry.requestId && command?.id === pendingEntry.requestId && command.result === "ok"
   );
   if (commandAccepted && cameraConfigMatchesPending(camera, pendingEntry)) {
+    const shouldRefreshSliders = Boolean(pendingEntry.expandsRelated);
     pendingCameraSettings.delete(camera.cameraId);
     setSettingsFeedback(camera.cameraId, "Einstellungen uebernommen.", false, 6000);
+    if (shouldRefreshSliders && camera.cameraId === activeCameraId && !settingsDraftState.dirty) {
+      queueMicrotask(() => renderSettingsForm(getActiveCamera(), { force: true }));
+    }
     return camera;
   }
 
@@ -283,7 +325,12 @@ function syncSettingsStatus(camera) {
   }
 
   if (settingsDraftState.cameraId === camera.cameraId && settingsDraftState.dirty) {
-    setStatusLine(settingsStatusEl, 'Ungesendete Änderungen. Der Entwurf bleibt beim Kamerawechsel erhalten, bis du diese Seite verlässt.');
+    setStatusLine(
+      settingsStatusEl,
+      liveApplyEnabled
+        ? "Live-Änderung vorgemerkt …"
+        : "Ungesendete Änderungen. Der Entwurf bleibt beim Kamerawechsel erhalten, bis du diese Seite verlässt."
+    );
     return;
   }
 
@@ -307,12 +354,25 @@ function isJpegCamera(camera) {
 
 function getCapabilityBadges(camera) {
   const badges = [];
+  if (camera.capabilities.h264) badges.push("H.264");
   if (camera.capabilities.liveLed) badges.push("LED");
   if (camera.capabilities.infrared) badges.push("IR Auto");
   if (camera.capabilities.sdCard) badges.push("SD");
   if (camera.capabilities.timelapse) badges.push("Zeitraffer");
   if (camera.capabilities.directRtsp) badges.push("Direkt RTSP");
   return badges;
+}
+
+function syncActionButtons(camera) {
+  const isP4 = camera?.kind === "esp32-p4";
+  if (resetDefaultsBtnEl) {
+    resetDefaultsBtnEl.hidden = !isP4;
+    resetDefaultsBtnEl.disabled = cameraOperationInFlight || !camera?.mqtt?.connected;
+  }
+  const pingBtn = document.querySelector('[data-camera-action="ping"]');
+  if (pingBtn) {
+    pingBtn.hidden = isP4;
+  }
 }
 
 function renderHeroSummary() {
@@ -363,10 +423,10 @@ function renderPicker() {
           class="btn btn-secondary camera-picker-btn ${camera.cameraId === getActiveCamera()?.cameraId ? "camera-picker-active" : ""}"
           data-camera-id="${escapeHtml(camera.cameraId)}"
           aria-pressed="${camera.cameraId === getActiveCamera()?.cameraId}"
-          ${cameraOperationInFlight ? 'disabled' : ''}
+          ${cameraOperationInFlight ? "disabled" : ""}
         >
           ${escapeHtml(camera.label)}
-          ${settingsDrafts.has(camera.cameraId) ? '<small>Entwurf</small>' : ''}
+          ${settingsDrafts.has(camera.cameraId) ? "<small>Entwurf</small>" : ""}
         </button>
       `
     )
@@ -379,6 +439,7 @@ function renderPicker() {
       activeCameraId = button.dataset.cameraId;
       settingsDraftState = settingsDrafts.get(activeCameraId) || { cameraId: activeCameraId, dirty: false, values: {}, touched: new Set() };
       if (timelapseState?.cameraId !== activeCameraId) timelapseState = null;
+      setStatusLine(snapshotStatusEl, "");
       renderActiveCamera({ forceSettings: true });
 
       const selectedCamera = getActiveCamera();
@@ -408,6 +469,10 @@ function renderState(camera) {
       ? "status-online"
       : "status-offline";
 
+  const codecMode = config.mode || (config.codec
+    ? `${String(config.codec).toUpperCase()}${config.profile ? ` (${config.profile})` : ""}`
+    : "-");
+
   const primaryConfigRows =
     camera.kind === "dfr1154"
       ? `
@@ -428,9 +493,9 @@ function renderState(camera) {
       `
       : `
         <div><strong>Aufloesung</strong><span>${escapeHtml(config.width || "-")} x ${escapeHtml(config.height || "-")}</span></div>
-        <div><strong>FPS</strong><span>${escapeHtml(config.framerate || "-")}</span></div>
-        <div><strong>Bitrate</strong><span>${escapeHtml(config.bitrate || "-")}</span></div>
-        <div><strong>Modus</strong><span>${escapeHtml(config.mode || "-")}</span></div>
+        <div><strong>FPS</strong><span>${escapeHtml(config.framerate ?? config.fps ?? "-")}</span></div>
+        <div><strong>Bitrate</strong><span>${escapeHtml(config.bitrate ?? config.bitrate_bps ?? "-")}</span></div>
+        <div><strong>Modus</strong><span>${escapeHtml(codecMode)}</span></div>
       `;
 
   stateCardEl.innerHTML = `
@@ -517,6 +582,43 @@ function renderTargets(camera) {
     .join("");
 }
 
+function renderSnapshotCompare(camera) {
+  if (!snapshotCompareEl || !camera) return;
+  const entry = cameraSnapshots.get(camera.cameraId) || { current: null, before: null };
+
+  if (!entry.current) {
+    snapshotCompareEl.hidden = true;
+    if (snapshotPinEl) snapshotPinEl.disabled = true;
+    if (snapshotDownloadEl) snapshotDownloadEl.hidden = true;
+    if (snapshotClearEl) snapshotClearEl.hidden = true;
+    return;
+  }
+
+  snapshotCompareEl.hidden = false;
+  if (snapshotCurrentImgEl && snapshotCurrentImgEl.src !== entry.current.url) {
+    snapshotCurrentImgEl.src = entry.current.url;
+  }
+  if (snapshotCurrentMetaEl) snapshotCurrentMetaEl.textContent = entry.current.meta;
+
+  if (snapshotPinEl) snapshotPinEl.disabled = snapshotInFlight;
+  if (snapshotDownloadEl) {
+    snapshotDownloadEl.hidden = false;
+    snapshotDownloadEl.href = entry.current.url;
+    snapshotDownloadEl.download = entry.current.filename;
+  }
+  if (snapshotClearEl) snapshotClearEl.hidden = false;
+
+  if (entry.before && snapshotBeforeCardEl) {
+    snapshotBeforeCardEl.hidden = false;
+    if (snapshotBeforeImgEl && snapshotBeforeImgEl.src !== entry.before.url) {
+      snapshotBeforeImgEl.src = entry.before.url;
+    }
+    if (snapshotBeforeMetaEl) snapshotBeforeMetaEl.textContent = entry.before.meta;
+  } else if (snapshotBeforeCardEl) {
+    snapshotBeforeCardEl.hidden = true;
+  }
+}
+
 function renderStream(camera) {
   if (!camera) return;
   const { urls } = camera.stream;
@@ -540,9 +642,11 @@ function renderStream(camera) {
       isJpegCamera(camera)
         ? `${camera.label} liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen.`
         : camera.kind === "esp32-p4"
-          ? "ESP32-P4 publiziert H264 direkt an MediaMTX. Bildregler werden angezeigt, sobald die Kamera ihre unterstuetzten Einstellungen meldet."
+          ? "ESP32-P4 publiziert Hardware-H264 mit OV5647-ISP-Farbabstimmung direkt an MediaMTX. Nutze Schnappschuss & Referenzbild fuer den direkten Vorher/Nachher-Farbvergleich."
           : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
   }
+
+  renderSnapshotCompare(camera);
 }
 
 function setTimelapsePanelCollapsed(isCollapsed, { persist = true } = {}) {
@@ -753,12 +857,21 @@ function renderSettingsForm(camera, { force = false } = {}) {
   const fields = camera.controls?.fields || [];
   settingsForm.dataset.cameraId = camera.cameraId;
 
+  if (!fields.length) {
+    settingsForm.innerHTML = '<p class="camera-muted-line" style="grid-column: 1 / -1;">Noch keine Kamera-Regler gemeldet. Sobald die Kamera online ist und ihre unterstuetzten Einstellungen publiziert, erscheinen sie hier automatisch.</p>';
+    return;
+  }
+
   settingsForm.innerHTML = fields
     .map((field) => {
       const fieldId = `camera-field-${field.key}`;
       const value = fieldCurrentValue(camera, field);
       const section = field.section
         ? `<h3 class="camera-settings-section">${escapeHtml(field.section)}</h3>`
+        : "";
+      const hasDefault = field.default != null && field.type !== "checkbox" && field.type !== "select";
+      const defaultPill = hasDefault
+        ? `<button type="button" class="camera-default-pill" data-field-default="${escapeHtml(field.key)}" data-default-value="${escapeHtml(field.default)}" title="Auf Standardwert (${escapeHtml(field.default)}) setzen">Std: ${escapeHtml(field.default)}</button>`
         : "";
 
       if (field.type === "checkbox") {
@@ -794,10 +907,53 @@ function renderSettingsForm(camera, { force = false } = {}) {
         `;
       }
 
+      if (field.slider && field.min != null && field.max != null) {
+        const numericValue = value !== "" && Number.isFinite(Number(value))
+          ? Number(value)
+          : field.default != null
+            ? Number(field.default)
+            : Math.round((Number(field.min) + Number(field.max)) / 2);
+        return `
+          ${section}
+          <div class="form-group camera-slider-group">
+            <div class="camera-field-label-row">
+              <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}</label>
+              ${defaultPill}
+            </div>
+            <div class="camera-slider-row">
+              <input
+                type="range"
+                class="camera-range-input"
+                data-range-for="${escapeHtml(field.key)}"
+                min="${escapeHtml(field.min)}"
+                max="${escapeHtml(field.max)}"
+                step="${escapeHtml(field.step ?? 1)}"
+                value="${escapeHtml(numericValue)}"
+                aria-label="${escapeHtml(field.label)} Schieberegler"
+              >
+              <input
+                id="${escapeHtml(fieldId)}"
+                name="${escapeHtml(field.key)}"
+                class="camera-number-input"
+                type="${escapeHtml(field.type || "number")}"
+                min="${escapeHtml(field.min)}"
+                max="${escapeHtml(field.max)}"
+                step="${escapeHtml(field.step ?? 1)}"
+                placeholder="${escapeHtml(field.placeholder || "")}"
+                value="${value !== "" ? escapeHtml(value) : ""}"
+              >
+            </div>
+          </div>
+        `;
+      }
+
       return `
         ${section}
         <div class="form-group">
-          <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}</label>
+          <div class="camera-field-label-row">
+            <label for="${escapeHtml(fieldId)}">${escapeHtml(field.label)}</label>
+            ${defaultPill}
+          </div>
           <input
             id="${escapeHtml(fieldId)}"
             name="${escapeHtml(field.key)}"
@@ -848,6 +1004,79 @@ function readSettingsFromForm(camera) {
   return settings;
 }
 
+function settingsExpandRelatedControls(settings) {
+  return (
+    (Object.prototype.hasOwnProperty.call(settings, "preset") && Number(settings.preset) >= 1) ||
+    Object.prototype.hasOwnProperty.call(settings, "red_balance") ||
+    Object.prototype.hasOwnProperty.call(settings, "blue_balance")
+  );
+}
+
+async function flushLiveApply() {
+  if (!liveApplyEnabled || cameraOperationInFlight) return;
+  if (liveApplyInFlight) {
+    liveApplyQueued = true;
+    return;
+  }
+  const activeCamera = getActiveCamera();
+  if (!activeCamera || !activeCamera.mqtt?.connected) return;
+  if (settingsDraftState.cameraId !== activeCamera.cameraId || !settingsDraftState.dirty) return;
+
+  const settings = readSettingsFromForm(activeCamera);
+  const keys = Object.keys(settings);
+  if (!keys.length) return;
+
+  liveApplyInFlight = true;
+  const sentTouched = new Set(keys);
+  try {
+    setSettingsFeedback(activeCamera.cameraId, "", false, 0);
+    const expandsRelated = settingsExpandRelatedControls(settings);
+    const result = await sendCommand(activeCamera.cameraId, "set", { settings });
+    setPendingCameraSettings(activeCamera.cameraId, settings, result.requestId, expandsRelated);
+    setOverviewState(result.overview);
+
+    // Clear only the touched keys that were not modified again while the request was in flight.
+    if (settingsDraftState.cameraId === activeCamera.cameraId) {
+      for (const key of sentTouched) {
+        const currentInput = settingsForm?.elements?.namedItem(key);
+        const currentVal = currentInput
+          ? (currentInput.type === "checkbox" ? Boolean(currentInput.checked) : Number(currentInput.value))
+          : undefined;
+        if (currentVal === settings[key]) {
+          settingsDraftState.touched.delete(key);
+        }
+      }
+      if (settingsDraftState.touched.size === 0) {
+        resetSettingsDraft(activeCamera.cameraId);
+      }
+    }
+    syncSettingsStatus(getActiveCamera());
+    renderPicker();
+    if (expandsRelated) {
+      setTimeout(() => { loadOverview().catch(() => {}); }, 450);
+    }
+  } catch (error) {
+    pendingCameraSettings.delete(activeCamera.cameraId);
+    setSettingsFeedback(activeCamera.cameraId, `Live-Übernahme fehlgeschlagen: ${error.message}`, true, 8000);
+    syncSettingsStatus(getActiveCamera());
+  } finally {
+    liveApplyInFlight = false;
+    if (liveApplyQueued) {
+      liveApplyQueued = false;
+      scheduleLiveApply(180);
+    }
+  }
+}
+
+function scheduleLiveApply(delayMs = 280) {
+  if (!liveApplyEnabled) return;
+  clearTimeout(liveApplyTimer);
+  liveApplyTimer = setTimeout(() => {
+    liveApplyTimer = null;
+    flushLiveApply().catch(() => {});
+  }, delayMs);
+}
+
 function renderActiveCamera(options = {}) {
   renderHeroSummary();
   renderSummaryCards();
@@ -857,6 +1086,7 @@ function renderActiveCamera(options = {}) {
   if (!activeCamera) return;
 
   activeCameraId = activeCamera.cameraId;
+  syncActionButtons(activeCamera);
   renderState(activeCamera);
   renderTopics(activeCamera);
   renderTargets(activeCamera);
@@ -869,7 +1099,7 @@ function renderActiveCamera(options = {}) {
 async function loadOverview() {
   if (overviewRefreshInFlight || cameraOperationInFlight) return;
   overviewRefreshInFlight = true;
-  overviewRefreshEl.disabled = true;
+  if (overviewRefreshEl) overviewRefreshEl.disabled = true;
   try {
     const overview = await fetchCameraOverview();
     if (cameraOperationInFlight) return;
@@ -887,7 +1117,7 @@ async function loadOverview() {
     throw error;
   } finally {
     overviewRefreshInFlight = false;
-    overviewRefreshEl.disabled = cameraOperationInFlight;
+    if (overviewRefreshEl) overviewRefreshEl.disabled = cameraOperationInFlight;
   }
 }
 
@@ -932,8 +1162,41 @@ document.querySelectorAll("[data-camera-action]").forEach((button) => {
   });
 });
 
+bindCameraAction(resetDefaultsBtnEl, "click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera || activeCamera.kind !== "esp32-p4") return;
+  clearTimeout(liveApplyTimer);
+  try {
+    setStatusLine(settingsStatusEl, `Setze Bildwerte von ${activeCamera.label} auf Standard zurück...`);
+    await sendCommand(activeCamera.cameraId, "reset");
+    pendingCameraSettings.delete(activeCamera.cameraId);
+    resetSettingsDraft(activeCamera.cameraId);
+    setSettingsFeedback(activeCamera.cameraId, "Standard-Bildwerte angefordert …", false, 8000);
+    renderActiveCamera({ forceSettings: true });
+    setTimeout(async () => {
+      try {
+        await loadOverview();
+        renderSettingsForm(getActiveCamera(), { force: true });
+      } catch {}
+    }, 600);
+  } catch (error) {
+    setSettingsFeedback(activeCamera.cameraId, `Zurücksetzen fehlgeschlagen: ${error.message}`, true, 10000);
+    setStatusLine(settingsStatusEl, `Zurücksetzen fehlgeschlagen: ${error.message}`, true);
+  }
+});
+
+liveApplyCheckboxEl?.addEventListener("change", () => {
+  liveApplyEnabled = Boolean(liveApplyCheckboxEl.checked);
+  try { localStorage.setItem(LIVE_APPLY_STORAGE_KEY, String(liveApplyEnabled)); } catch {}
+  syncSettingsStatus(getActiveCamera());
+  if (liveApplyEnabled && settingsDraftState.dirty) {
+    scheduleLiveApply(80);
+  }
+});
+
 bindCameraAction(settingsForm, "submit", async (event) => {
   event.preventDefault();
+  clearTimeout(liveApplyTimer);
 
   const activeCamera = getActiveCamera();
   if (!activeCamera) return;
@@ -947,11 +1210,15 @@ bindCameraAction(settingsForm, "submit", async (event) => {
   try {
     setStatusLine(settingsStatusEl, `Sende Einstellungen an ${activeCamera.label}...`);
     setSettingsFeedback(activeCamera.cameraId, "", false, 0);
+    const expandsRelated = settingsExpandRelatedControls(settings);
     const result = await sendCommand(activeCamera.cameraId, "set", { settings });
-    setPendingCameraSettings(activeCamera.cameraId, settings, result.requestId);
+    setPendingCameraSettings(activeCamera.cameraId, settings, result.requestId, expandsRelated);
     setOverviewState(result.overview);
     resetSettingsDraft(activeCamera.cameraId);
     renderActiveCamera({ forceSettings: true });
+    if (expandsRelated) {
+      setTimeout(() => { loadOverview().catch(() => {}); }, 500);
+    }
   } catch (error) {
     pendingCameraSettings.delete(activeCamera.cameraId);
     setSettingsFeedback(activeCamera.cameraId, `Parameter konnten nicht gesetzt werden: ${error.message}`, true, 0);
@@ -960,20 +1227,158 @@ bindCameraAction(settingsForm, "submit", async (event) => {
 });
 
 settingsForm?.addEventListener("input", (event) => {
-  captureSettingsDraft(event.target);
+  const target = event.target;
+  if (target?.matches?.("[data-range-for]")) {
+    const key = target.dataset.rangeFor;
+    const numberInput = settingsForm.elements.namedItem(key);
+    if (numberInput) {
+      numberInput.value = target.value;
+      // Selecting an individual image slider switches preset draft indicator to custom (0) visually if present.
+      if (key !== "preset") {
+        const presetSelect = settingsForm.elements.namedItem("preset");
+        if (presetSelect && !STREAM_RECONNECT_KEYS.has(key) && key !== "hflip" && key !== "vflip" &&
+            !key.startsWith("server_capture_")) {
+          presetSelect.value = "0";
+        }
+      }
+      captureSettingsDraft(numberInput);
+      if (!STREAM_RECONNECT_KEYS.has(key)) {
+        scheduleLiveApply(260);
+      }
+    }
+    return;
+  }
+
+  if (target?.name) {
+    const slider = settingsForm.querySelector(`[data-range-for="${CSS.escape(target.name)}"]`);
+    if (slider && target.value !== "" && Number.isFinite(Number(target.value))) {
+      slider.value = target.value;
+    }
+    captureSettingsDraft(target);
+  }
 });
 
 settingsForm?.addEventListener("change", (event) => {
-  captureSettingsDraft(event.target);
+  const target = event.target;
+  if (target?.matches?.("[data-range-for]")) {
+    const key = target.dataset.rangeFor;
+    const numberInput = settingsForm.elements.namedItem(key);
+    if (numberInput) {
+      numberInput.value = target.value;
+      captureSettingsDraft(numberInput);
+      scheduleLiveApply(120);
+    }
+    return;
+  }
+
+  if (target?.name) {
+    const slider = settingsForm.querySelector(`[data-range-for="${CSS.escape(target.name)}"]`);
+    if (slider && target.value !== "" && Number.isFinite(Number(target.value))) {
+      slider.value = target.value;
+    }
+    captureSettingsDraft(target);
+    scheduleLiveApply(120);
+  }
 });
 
-settingsForm?.addEventListener('click', (event) => {
-  if (!event.target.closest('[data-settings-reset]') || cameraOperationInFlight) return;
+settingsForm?.addEventListener("click", (event) => {
+  const defaultBtn = event.target.closest("[data-field-default]");
+  if (defaultBtn && !cameraOperationInFlight) {
+    const key = defaultBtn.dataset.fieldDefault;
+    const defVal = defaultBtn.dataset.defaultValue;
+    const input = settingsForm.elements.namedItem(key);
+    if (input && defVal != null) {
+      input.value = defVal;
+      const slider = settingsForm.querySelector(`[data-range-for="${CSS.escape(key)}"]`);
+      if (slider) slider.value = defVal;
+      captureSettingsDraft(input);
+      scheduleLiveApply(100);
+    }
+    return;
+  }
+
+  if (!event.target.closest("[data-settings-reset]") || cameraOperationInFlight) return;
+  clearTimeout(liveApplyTimer);
   resetSettingsDraft(activeCameraId);
-  setSettingsFeedback(activeCameraId, '');
+  setSettingsFeedback(activeCameraId, "");
   renderActiveCamera({ forceSettings: true });
 });
-overviewRefreshEl?.addEventListener('click', () => loadOverview().catch(() => {}));
+
+snapshotCaptureEl?.addEventListener("click", async () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera || snapshotInFlight) return;
+
+  snapshotInFlight = true;
+  snapshotCaptureEl.disabled = true;
+  if (snapshotPinEl) snapshotPinEl.disabled = true;
+  setStatusLine(snapshotStatusEl, `Nehme Live-Schnappschuss von ${activeCamera.label} auf...`);
+
+  try {
+    const { blob, timestamp } = await fetchCameraSnapshot(activeCamera.cameraId);
+    const objectUrl = URL.createObjectURL(blob);
+    const entry = cameraSnapshots.get(activeCamera.cameraId) || { current: null, before: null };
+    if (entry.current?.url && entry.current.url !== entry.before?.url) {
+      URL.revokeObjectURL(entry.current.url);
+    }
+    const stamp = new Date(timestamp);
+    const timeText = Number.isNaN(stamp.getTime()) ? timestamp : stamp.toLocaleTimeString();
+    const fileStamp = new Date().toISOString().replace(/[:.]/g, "-");
+    entry.current = {
+      url: objectUrl,
+      meta: `${timeText} · ${formatBytes(blob.size)}`,
+      filename: `${activeCamera.cameraId}-snapshot-${fileStamp}.jpg`,
+    };
+    cameraSnapshots.set(activeCamera.cameraId, entry);
+    if (activeCamera.cameraId === getActiveCamera()?.cameraId) {
+      renderSnapshotCompare(activeCamera);
+      setStatusLine(
+        snapshotStatusEl,
+        entry.before
+          ? "Neuer Schnappschuss geladen – direkter Vorher/Nachher-Vergleich aktiv."
+          : "Schnappschuss aufgenommen. Klicke auf „Als Vorher-Referenz merken“, bevor du Regler verstellst."
+      );
+    }
+  } catch (error) {
+    const hint = error.message === "camera_stream_inactive"
+      ? "Livestream ist aktuell nicht aktiv."
+      : error.message;
+    setStatusLine(snapshotStatusEl, `Schnappschuss fehlgeschlagen: ${hint}`, true);
+  } finally {
+    snapshotInFlight = false;
+    snapshotCaptureEl.disabled = false;
+    renderSnapshotCompare(getActiveCamera());
+  }
+});
+
+snapshotPinEl?.addEventListener("click", () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera) return;
+  const entry = cameraSnapshots.get(activeCamera.cameraId);
+  if (!entry?.current) return;
+
+  if (entry.before?.url && entry.before.url !== entry.current.url) {
+    URL.revokeObjectURL(entry.before.url);
+  }
+  entry.before = { ...entry.current };
+  cameraSnapshots.set(activeCamera.cameraId, entry);
+  renderSnapshotCompare(activeCamera);
+  setStatusLine(snapshotStatusEl, "Als „Vorher“-Referenz gespeichert. Verstelle nun die Bildregler und nimm einen neuen Schnappschuss auf.");
+});
+
+snapshotClearEl?.addEventListener("click", () => {
+  const activeCamera = getActiveCamera();
+  if (!activeCamera) return;
+  const entry = cameraSnapshots.get(activeCamera.cameraId);
+  if (entry) {
+    if (entry.current?.url) URL.revokeObjectURL(entry.current.url);
+    if (entry.before?.url && entry.before.url !== entry.current?.url) URL.revokeObjectURL(entry.before.url);
+    cameraSnapshots.delete(activeCamera.cameraId);
+  }
+  renderSnapshotCompare(activeCamera);
+  setStatusLine(snapshotStatusEl, "");
+});
+
+overviewRefreshEl?.addEventListener("click", () => loadOverview().catch(() => {}));
 
 loadOverview().catch((error) => {
   setStatusLine(commandStatusEl, `Kamera-Uebersicht konnte nicht geladen werden: ${error.message}`, true);

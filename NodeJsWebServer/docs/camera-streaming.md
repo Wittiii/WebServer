@@ -130,12 +130,17 @@ Die Kamera publiziert retained Statuswerte unter
 `config`, `stream` und `error`. Der Webserver leitet bei dieser Kamera den
 Streamingzustand aus `status/stream.active` und dem Onlinezustand ab.
 Die Firmware meldet unter `status/config.image_controls` verfuegbare Regler
-mit `min`, `max`, `step` und `value`; unter `image` stehen die aktuellen Werte.
+mit `min`, `max`, `step`, `value` und `default`; unter `image` stehen die aktuellen Werte.
 Unter `setting_controls` meldet sie weitere unterstuetzte Stream-/Capture-Regler.
-Nur diese Regler (Helligkeit, Kontrast, Saettigung, hflip/vflip, Farbton,
-Belichtungsziel sowie FPS, Bitrate, GOP, Capture an/aus und Aufnahmeintervall) erscheinen im
-Formular. Die API validiert gegen dieselben Grenzen und sendet mit QoS 1 ohne
-Retain an `cmd/set`. Die Firmware wendet die Werte an und speichert sie in NVS,
+Nur diese gemeldeten Regler (Bildprofil-Preset, Helligkeit, Kontrast, Saettigung,
+Farbton, Gamma/Tonwertkurve, ISP-Kantenschaerfe, Bayer-Entrauschung, Belichtungsziel,
+Auto-Weissabgleich, Rot-/Blau-Balance, hflip/vflip sowie FPS, Bitrate, GOP,
+Capture an/aus und Aufnahmeintervall) erscheinen im Formular. Die API validiert
+gegen dieselben Grenzen und sendet mit QoS 1 ohne Retain an `cmd/set` bzw.
+`cmd/reset` (setzt die Bildtuning-Werte auf die kalibrierten IPA-Standardwerte zurueck).
+Auf `/camera` stehen zusaetzlich synchronisierte Schieberegler mit Live-Uebernahme
+sowie ein Live-Schnappschuss-Werkzeug (`/api/camera/snapshot`) mit direktem
+Vorher/Nachher-Vergleich zur Verfuegung. Die Firmware wendet die Werte an und speichert sie in NVS,
 bevor sie eine positive Quittung sendet. Die Firmware bestaetigt jede Anfrage als JSON unter
 `status/command/<request-id>`; die Oberflaeche zeigt eine P4-Einstellung erst
 nach dieser positiven, korrelierten Quittung als uebernommen an.

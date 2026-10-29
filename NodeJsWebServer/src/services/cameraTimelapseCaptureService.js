@@ -1,4 +1,5 @@
 const fs = require("fs/promises");
+const os = require("os");
 const path = require("path");
 const { getMediaThreads, runMediaProcess } = require("./mediaProcessService");
 const { listTimelapseFiles, recordTimelapseFrame } = require("./timelapseService");
@@ -11,6 +12,7 @@ const GIB = 1024 ** 3;
 const jobs = new Map();
 let supervisorTimer = null;
 let captureOwner = null;
+let liveSnapshotInFlight = false;
 let stopping = false;
 
 function toNumber(value, fallback) {
@@ -363,7 +365,54 @@ function getCameraTimelapseCaptureSnapshot(cameraId) {
   };
 }
 
+async function captureCameraLiveSnapshot(camera) {
+  if (!camera || !camera.streamPath) {
+    throw new Error("invalid_camera_id");
+  }
+  if (liveSnapshotInFlight) {
+    throw new Error("snapshot_busy");
+  }
+  if (!sourceIsReady(camera)) {
+    throw new Error("camera_stream_inactive");
+  }
+
+  liveSnapshotInFlight = true;
+  const safeId = String(camera.cameraId || "camera").replace(/[^A-Za-z0-9_-]/g, "_");
+  const tempPath = path.join(
+    os.tmpdir(),
+    `camera-live-snapshot-${safeId}-${process.pid}-${Date.now()}.jpg`
+  );
+  const timeoutMs = Math.min(12000, captureTimeoutMs(camera));
+  const threads = String(getMediaThreads(process.env.TIMELAPSE_FFMPEG_THREADS));
+
+  try {
+    await fs.unlink(tempPath).catch(() => {});
+    await runMediaProcess(
+      process.env.TIMELAPSE_FFMPEG_PATH || "ffmpeg",
+      [
+        "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
+        "-threads", threads, "-filter_threads", "1",
+        "-rtsp_transport", "tcp",
+        "-timeout", String(timeoutMs * 1000),
+        "-i", getMediaMtxUrl(camera),
+        "-map", "0:v:0", "-frames:v", "1", "-c:v", "mjpeg", "-threads", threads, "-q:v", "2",
+        "-f", "image2", tempPath,
+      ],
+      { timeoutMs, timeoutError: "snapshot_timeout" }
+    );
+    const buffer = await fs.readFile(tempPath);
+    if (!buffer || buffer.length === 0) {
+      throw new Error("snapshot_file_empty");
+    }
+    return buffer;
+  } finally {
+    await fs.unlink(tempPath).catch(() => {});
+    liveSnapshotInFlight = false;
+  }
+}
+
 module.exports = {
+  captureCameraLiveSnapshot,
   getCameraTimelapseCaptureSnapshot,
   startCameraTimelapseCaptureSupervisor,
   stopCameraTimelapseCaptureSupervisor,

@@ -8,7 +8,7 @@ const cameraConfig = require("../src/config/cameraConfig");
 
 // Exercise the actual HTTP controller with a fake broker. Do not open the
 // application's database, connect to MQTT, or start a camera/transcoder.
-function controllerWithBroker() {
+function controllerWithBroker({ captureSnapshot } = {}) {
   const published = [];
   const topics = new Map();
   const file = path.join(__dirname, "../src/controllers/cameraController.js");
@@ -22,7 +22,10 @@ function controllerWithBroker() {
     },
     "../config/cameraConfig": cameraConfig,
     "../services/esp32TranscodeService": { getEsp32BridgeSnapshot: () => null },
-    "../services/cameraTimelapseCaptureService": { getCameraTimelapseCaptureSnapshot: () => null },
+    "../services/cameraTimelapseCaptureService": {
+      getCameraTimelapseCaptureSnapshot: () => null,
+      ...(captureSnapshot ? { captureCameraLiveSnapshot: captureSnapshot } : {}),
+    },
     "../services/timelapseService": {},
   };
   vm.runInNewContext(fs.readFileSync(file, "utf8"), {
@@ -39,7 +42,10 @@ function controllerWithBroker() {
 function response() {
   return {
     statusCode: 200,
+    headers: {},
     status(code) { this.statusCode = code; return this; },
+    set(values) { Object.assign(this.headers, values); return this; },
+    send(body) { this.body = body; return this; },
     json(body) { this.body = body; return this; },
   };
 }
@@ -255,4 +261,159 @@ test("invalid DFR gain selections and mistaken raw register values never reach M
     assert.equal(res.body.ok, false);
   }
   assert.equal(published.length, 0);
+});
+
+
+test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve and validate cleanly", async () => {
+  const { controller, published, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  topics.set(`${camera.mqttTopicBase}/status/config`, {
+    lastMessage: JSON.stringify({
+      image: {
+        preset: 1,
+        contrast: 136,
+        saturation: 146,
+        gamma: 62,
+        sharpness: 40,
+        denoise: 4,
+        awb: true,
+        red_balance: 1000,
+        blue_balance: 1000,
+      },
+      image_controls: {
+        preset: { min: 0, max: 4, step: 1, default: 1, value: 1 },
+        contrast: { min: 0, max: 255, step: 1, default: 136, value: 136 },
+        saturation: { min: 0, max: 255, step: 1, default: 146, value: 146 },
+        gamma: { min: 40, max: 100, step: 1, default: 62, value: 62 },
+        sharpness: { min: 0, max: 100, step: 1, default: 40, value: 40 },
+        denoise: { min: 0, max: 20, step: 1, default: 4, value: 4 },
+        awb: { min: 0, max: 1, step: 1, default: 1, value: 1 },
+        red_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
+        blue_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
+      },
+      setting_controls: {
+        fps: { min: 1, max: 30, step: 1, default: 20, value: 20 },
+      },
+    }),
+    timestamp: Date.now(),
+  });
+
+  const overviewRes = response();
+  controller.getOverview({ hostname: "localhost" }, overviewRes);
+  const overview = overviewRes.body.cameras.find((item) => item.cameraId === camera.cameraId);
+  const fieldsByKey = new Map(overview.controls.fields.map((field) => [field.key, field]));
+
+  assert.equal(fieldsByKey.get("preset").section, "Bild & Farbabstimmung");
+  assert.deepEqual(fieldsByKey.get("preset").options.map((option) => option.value), [0, 1, 2, 3, 4]);
+  assert.equal(fieldsByKey.get("contrast").section, undefined);
+  assert.equal(fieldsByKey.get("contrast").default, 136);
+  assert.equal(fieldsByKey.get("saturation").default, 146);
+  assert.equal(fieldsByKey.get("gamma").default, 62);
+  assert.equal(fieldsByKey.get("sharpness").default, 40);
+  assert.equal(fieldsByKey.get("denoise").default, 4);
+  assert.equal(fieldsByKey.get("awb").section, "Weissabgleich & Ausrichtung");
+  assert.equal(fieldsByKey.get("red_balance").section, undefined);
+  assert.equal(fieldsByKey.get("fps").section, "Livestream");
+
+  const validRes = response();
+  const validSettings = {
+    preset: "3",
+    gamma: 58,
+    sharpness: 52,
+    denoise: 3,
+    awb: false,
+    red_balance: 1120,
+    blue_balance: 940,
+  };
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, action: "set", settings: validSettings },
+  }, validRes);
+  assert.equal(validRes.statusCode, 200);
+  assert.equal(published.length, 1);
+  assert.deepEqual(published[0].payload, {
+    ...validSettings,
+    preset: 3,
+    _request_id: validRes.body.requestId,
+  });
+
+  for (const invalid of [
+    { preset: -1 },
+    { preset: 5 },
+    { preset: 1.5 },
+    { gamma: 39 },
+    { sharpness: 101 },
+    { denoise: -1 },
+    { awb: 2 },
+    { red_balance: 200 },
+    { blue_balance: 4000 },
+  ]) {
+    const invalidRes = response();
+    await controller.sendCommand({
+      hostname: "localhost",
+      body: { cameraId: camera.cameraId, action: "set", settings: invalid },
+    }, invalidRes);
+    assert.equal(invalidRes.statusCode, 400, JSON.stringify(invalid));
+  }
+  assert.equal(published.length, 1);
+});
+
+test("ESP32-P4 reset command publishes QoS 1 without retain and rejects non-P4 cameras", async () => {
+  const { controller, published } = controllerWithBroker();
+  const camera = p4Camera();
+  const pi = cameraConfig.getCameraConfigs("localhost").find((item) => item.kind === "pi");
+
+  const imageResetRes = response();
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, action: "reset" },
+  }, imageResetRes);
+  assert.equal(imageResetRes.statusCode, 200);
+  assert.equal(published[0].topic, `${camera.mqttTopicBase}/cmd/reset`);
+  assert.deepEqual(published[0].payload, { _request_id: imageResetRes.body.requestId });
+  assert.equal(published[0].options.qos, 1);
+  assert.equal(Boolean(published[0].options.retain), false);
+
+  const fullResetRes = response();
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, action: "reset", payload: "all" },
+  }, fullResetRes);
+  assert.equal(fullResetRes.statusCode, 200);
+  assert.deepEqual(published[1].payload, { _request_id: fullResetRes.body.requestId, scope: "all" });
+
+  const rejectedRes = response();
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: pi.cameraId, action: "reset" },
+  }, rejectedRes);
+  assert.equal(rejectedRes.statusCode, 400);
+  assert.equal(published.length, 2);
+});
+
+test("Live camera snapshot endpoint streams uncached JPEG and maps inactive/busy errors to 409", async () => {
+  let nextResult = () => Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const { controller } = controllerWithBroker({
+    captureSnapshot: async (camera) => nextResult(camera),
+  });
+  const camera = p4Camera();
+
+  const badIdRes = response();
+  await controller.getSnapshot({ hostname: "localhost", query: { cameraId: "unknown-cam" } }, badIdRes);
+  assert.equal(badIdRes.statusCode, 400);
+
+  const okRes = response();
+  await controller.getSnapshot({ hostname: "localhost", query: { cameraId: camera.cameraId } }, okRes);
+  assert.equal(okRes.statusCode, 200);
+  assert.equal(okRes.headers["Content-Type"], "image/jpeg");
+  assert.match(okRes.headers["Cache-Control"], /no-store/);
+  assert.ok(Buffer.isBuffer(okRes.body));
+
+  for (const code of ["camera_stream_inactive", "snapshot_busy"]) {
+    nextResult = () => { throw new Error(code); };
+    const conflictRes = response();
+    await controller.getSnapshot({ hostname: "localhost", query: { cameraId: camera.cameraId } }, conflictRes);
+    assert.equal(conflictRes.statusCode, 409);
+    assert.equal(conflictRes.body.error, code);
+  }
 });

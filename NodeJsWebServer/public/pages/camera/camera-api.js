@@ -22,6 +22,33 @@ export async function postCameraCommand(cameraId, action, body = {}) {
   }));
 }
 
+export async function fetchCameraSnapshot(cameraId) {
+  const query = new URLSearchParams({ cameraId, t: String(Date.now()) });
+  const response = await fetch(`/api/camera/snapshot?${query}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      if (response.status === 401 && data.error === "not_authenticated") {
+        const next = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+        throw new Error("session_expired");
+      }
+      if (data?.error) message = data.error;
+    } catch (error) {
+      if (error?.message === "session_expired") throw error;
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const timestamp = response.headers.get("X-Snapshot-Timestamp") || new Date().toISOString();
+  return { blob, timestamp };
+}
+
 export async function fetchTimelapse(cameraId, offset = 0) {
   const query = new URLSearchParams({ cameraId, offset, limit: 200 });
   return readJson(await fetch(`/api/camera/timelapse?${query}`, {

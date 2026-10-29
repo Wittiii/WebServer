@@ -5,6 +5,7 @@ const {
   buildTimelapse,
   deleteTimelapse,
   getOverview,
+  getSnapshot,
   getTimelapse,
   getTimelapseFile,
   sendCommand,
@@ -13,6 +14,7 @@ const {
 const router = Router();
 
 router.get("/overview", apiAuth, getOverview);
+router.get("/snapshot", apiAuth, getSnapshot);
 router.get("/timelapse", apiAuth, getTimelapse);
 router.get("/timelapse/file", apiAuth, getTimelapseFile);
 router.post("/command", apiAuth, sendCommand);
