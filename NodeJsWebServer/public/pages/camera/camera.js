@@ -73,7 +73,7 @@ let timelapseRefreshInFlight = false;
 let overviewRefreshInFlight = false;
 const TIMELAPSE_COLLAPSED_STORAGE_KEY = "camera-timelapse-collapsed";
 const LIVE_APPLY_STORAGE_KEY = "camera-live-apply";
-const STREAM_RECONNECT_KEYS = new Set(["fps", "bitrate_bps", "gop", "width", "height", "framerate", "bitrate", "framesize"]);
+const STREAM_RECONNECT_KEYS = new Set(["resolution", "fps", "bitrate_bps", "gop", "width", "height", "framerate", "bitrate", "framesize"]);
 
 let timelapseCollapsed = true;
 try { timelapseCollapsed = localStorage.getItem(TIMELAPSE_COLLAPSED_STORAGE_KEY) !== "false"; } catch {}
@@ -342,7 +342,7 @@ function getStateColor(camera) {
   if (camera?.status?.online === true && (state === "streaming" || state === "running" || state === "ready")) {
     return "#10b981";
   }
-  if (state === "paused" || state === "wifi_down") {
+  if (state === "paused" || state === "wifi_down" || state === "updating" || state === "recovering") {
     return "#f59e0b";
   }
   return "#f87171";
@@ -371,7 +371,7 @@ function syncActionButtons(camera) {
   }
   const pingBtn = document.querySelector('[data-camera-action="ping"]');
   if (pingBtn) {
-    pingBtn.hidden = isP4;
+    pingBtn.hidden = false;
   }
 }
 
@@ -1007,6 +1007,7 @@ function readSettingsFromForm(camera) {
 function settingsExpandRelatedControls(settings) {
   return (
     (Object.prototype.hasOwnProperty.call(settings, "preset") && Number(settings.preset) >= 1) ||
+    Object.prototype.hasOwnProperty.call(settings, "resolution") ||
     Object.prototype.hasOwnProperty.call(settings, "red_balance") ||
     Object.prototype.hasOwnProperty.call(settings, "blue_balance")
   );
@@ -1156,6 +1157,9 @@ document.querySelectorAll("[data-camera-action]").forEach((button) => {
       await sendCommand(activeCamera.cameraId, action);
       renderActiveCamera();
       setStatusLine(commandStatusEl, `Befehl ${action} an ${activeCamera.label} gesendet.`);
+      if (action === "ping") {
+        setTimeout(() => { loadOverview().catch(() => {}); }, 450);
+      }
     } catch (error) {
       setStatusLine(commandStatusEl, `Befehl fehlgeschlagen: ${error.message}`, true);
     }

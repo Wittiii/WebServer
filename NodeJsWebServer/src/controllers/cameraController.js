@@ -197,13 +197,17 @@ function buildCameraOverview(config) {
   const lightSensorValue = getLatestTopicValue(statusTopics, "light_sensor");
   const sdValue = getLatestTopicValue(statusTopics, "sd");
   const archiveUrlValue = getLatestTopicValue(statusTopics, "archive_url");
-  const timelapseStateValue = getLatestTopicValue(statusTopics, "timelapse/state");
-  const timelapseErrorValue = getLatestTopicValue(statusTopics, "timelapse/error");
+  const timelapseStateValue = getLatestTopicValue(statusTopics, "timelapse/state")
+    || getLatestTopicValue(statusTopics, "capture_request/state");
+  const timelapseErrorValue = getLatestTopicValue(statusTopics, "timelapse/error")
+    || getLatestTopicValue(statusTopics, "capture_request/error");
   const timelapseStorageBytesValue = getLatestTopicValue(statusTopics, "timelapse/storage_bytes");
   const timelapseLastImageValue = getLatestTopicValue(statusTopics, "timelapse/last_image");
   const timelapseOutputDirValue = getLatestTopicValue(statusTopics, "timelapse/output_dir");
-  const timelapseEnabledValue = getLatestTopicValue(statusTopics, "timelapse/enabled");
-  const timelapseIntervalValue = getLatestTopicValue(statusTopics, "timelapse/interval_seconds");
+  const timelapseEnabledValue = getLatestTopicValue(statusTopics, "timelapse/enabled")
+    || getLatestTopicValue(statusTopics, "capture_request/enabled");
+  const timelapseIntervalValue = getLatestTopicValue(statusTopics, "timelapse/interval_seconds")
+    || getLatestTopicValue(statusTopics, "capture_request/interval_seconds");
   const ipValue = getLatestTopicValue(statusTopics, "ip");
   const rtspUrlValue = getLatestTopicValue(statusTopics, "rtsp_url");
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
@@ -231,7 +235,17 @@ function buildCameraOverview(config) {
     : null;
   const online = mqttClient ? Boolean(mqttClient.connected && reportedOnline !== false) : reportedOnline;
   const cameraState = config.kind === "esp32-p4"
-    ? (online === false ? "offline" : streamStatus?.active === true && online === true ? "streaming" : errorValue ? "error" : "idle")
+    ? (
+        online === false
+          ? "offline"
+          : streamStatus?.active === true && online === true
+            ? "streaming"
+            : ["paused", "updating", "recovering"].includes(stateValue)
+              ? stateValue
+              : errorValue
+                ? "error"
+                : "idle"
+      )
     : stateValue || "unknown";
 
   return {

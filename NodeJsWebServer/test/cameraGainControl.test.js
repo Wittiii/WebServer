@@ -417,3 +417,71 @@ test("Live camera snapshot endpoint streams uncached JPEG and maps inactive/busy
     assert.equal(conflictRes.body.error, code);
   }
 });
+
+test("ESP32-P4 resolution mode, ping command, intermediate states, and capture_request fallback work end to end", async () => {
+  const { controller, published, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  topics.set(`${camera.mqttTopicBase}/status/online`, { lastMessage: "true", timestamp: Date.now() });
+  topics.set(`${camera.mqttTopicBase}/status/state`, { lastMessage: "updating", timestamp: Date.now() });
+  topics.set(`${camera.mqttTopicBase}/status/stream`, {
+    lastMessage: JSON.stringify({ active: false, width: 1280, height: 960, fps: 20, bitrate_bps: 4000000 }),
+    timestamp: Date.now(),
+  });
+  topics.set(`${camera.mqttTopicBase}/status/capture_request/state`, { lastMessage: "running", timestamp: Date.now() });
+  topics.set(`${camera.mqttTopicBase}/status/capture_request/enabled`, { lastMessage: "true", timestamp: Date.now() });
+  topics.set(`${camera.mqttTopicBase}/status/capture_request/interval_seconds`, { lastMessage: "90", timestamp: Date.now() });
+  topics.set(`${camera.mqttTopicBase}/status/config`, {
+    lastMessage: JSON.stringify({
+      width: 1280,
+      height: 960,
+      resolution: 1,
+      fps: 20,
+      setting_controls: {
+        resolution: { min: 0, max: 2, step: 1, default: 0, value: 1 },
+        fps: { min: 1, max: 30, step: 1, default: 20, value: 20 },
+      },
+    }),
+    timestamp: Date.now(),
+  });
+
+  const overviewRes = response();
+  controller.getOverview({ hostname: "localhost" }, overviewRes);
+  const overview = overviewRes.body.cameras.find((item) => item.cameraId === camera.cameraId);
+  assert.equal(overview.status.state, "updating");
+  assert.equal(overview.timelapse.state, "running");
+  assert.equal(overview.timelapse.enabled, true);
+  assert.equal(overview.timelapse.intervalSeconds, 90);
+
+  const fieldsByKey = new Map(overview.controls.fields.map((field) => [field.key, field]));
+  assert.equal(fieldsByKey.get("resolution").section, "Livestream");
+  assert.equal(fieldsByKey.get("fps").section, undefined);
+  assert.deepEqual(fieldsByKey.get("resolution").options.map((opt) => opt.value), [0, 1, 2]);
+
+  const setRes = response();
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, action: "set", settings: { resolution: "1" } },
+  }, setRes);
+  assert.equal(setRes.statusCode, 200);
+  assert.equal(published[0].topic, `${camera.mqttTopicBase}/cmd/set`);
+  assert.deepEqual(published[0].payload, { resolution: 1, _request_id: setRes.body.requestId });
+
+  for (const bad of [{ resolution: -1 }, { resolution: 3 }, { resolution: 1.5 }]) {
+    const badRes = response();
+    await controller.sendCommand({
+      hostname: "localhost",
+      body: { cameraId: camera.cameraId, action: "set", settings: bad },
+    }, badRes);
+    assert.equal(badRes.statusCode, 400);
+  }
+
+  const pingRes = response();
+  await controller.sendCommand({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, action: "ping" },
+  }, pingRes);
+  assert.equal(pingRes.statusCode, 200);
+  assert.equal(published[1].topic, `${camera.mqttTopicBase}/cmd/ping`);
+  assert.equal(published[1].options.qos, 1);
+  assert.equal(Boolean(published[1].options.retain), false);
+});

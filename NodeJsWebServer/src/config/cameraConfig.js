@@ -340,6 +340,18 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
         { key: "blue_balance", label: "Blau-Balance (1000 = 1.0x)", type: "number", integer: true, slider: true, group: "Weissabgleich & Ausrichtung" },
         { key: "hflip", label: "Horizontal spiegeln", type: "checkbox", group: "Weissabgleich & Ausrichtung" },
         { key: "vflip", label: "Vertikal spiegeln", type: "checkbox", group: "Weissabgleich & Ausrichtung" },
+        {
+          key: "resolution",
+          label: "Aufloesung / Sensormodus",
+          type: "select",
+          integer: true,
+          group: "Livestream",
+          options: [
+            { value: 0, label: "1920x1080 (Full-HD 16:9)" },
+            { value: 1, label: "1280x960 (Weitwinkel 2x2-Binning)" },
+            { value: 2, label: "800x640 (Kompakt / Sparsam)" },
+          ],
+        },
         { key: "fps", label: "FPS", type: "number", integer: true, slider: true, group: "Livestream" },
         { key: "bitrate_bps", label: "Bitrate (bit/s)", type: "number", integer: true, group: "Livestream" },
         { key: "gop", label: "Keyframe-Abstand (Frames)", type: "number", integer: true, slider: true, group: "Livestream" },

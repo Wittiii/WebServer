@@ -126,27 +126,38 @@ Der MediaMTX-Pfad verwendet `source: publisher`; eine Kamera-Quell-URL und
 `sourceOnDemand` sind fuer diesen Publisher nicht erforderlich.
 
 Die Kamera publiziert retained Statuswerte unter
-`camera/esp32-p4-cam-01/status/`, darunter `online`, `ip`, `rtsp_url`,
-`config`, `stream` und `error`. Der Webserver leitet bei dieser Kamera den
-Streamingzustand aus `status/stream.active` und dem Onlinezustand ab.
+`camera/esp32-p4-cam-01/status/` (mit Payload-Deduplizierung fuer statische/Konfig-Topics
+und 5-Sekunden-Telemetrietakt), darunter `online`, `state` (`streaming`, `paused`,
+`updating`, `recovering`, `error`, `idle`), `ip`, `rtsp_url`, `config`, `stream`,
+`error`, `pong`, `mqtt_connected`, `publisher_connected`, `configured_fps`,
+`stream_bytes_total`, `stream_last_data_age_seconds`, `wifi_reconnect_count`,
+`mqtt_reconnect_count`, `camera_recovery_count`, `mqtt_publish_failures`,
+`last_status` (inkl. Reset-Grund beim Boot) sowie `capture_request/*`.
+Der Webserver leitet bei dieser Kamera den Streamingzustand aus `status/stream.active`,
+dem Onlinezustand und Zwischenzustaenden (`paused`, `updating`, `recovering`) ab.
 Die Firmware meldet unter `status/config.image_controls` verfuegbare Regler
 mit `min`, `max`, `step`, `value` und `default`; unter `image` stehen die aktuellen Werte.
 Unter `setting_controls` meldet sie weitere unterstuetzte Stream-/Capture-Regler.
 Nur diese gemeldeten Regler (Bildprofil-Preset, Helligkeit, Kontrast, Saettigung,
 Farbton, Gamma/Tonwertkurve, ISP-Kantenschaerfe, Bayer-Entrauschung, Belichtungsziel,
-Auto-Weissabgleich, Rot-/Blau-Balance, hflip/vflip sowie FPS, Bitrate, GOP,
-Capture an/aus und Aufnahmeintervall) erscheinen im Formular. Die API validiert
-gegen dieselben Grenzen und sendet mit QoS 1 ohne Retain an `cmd/set` bzw.
-`cmd/reset` (setzt die Bildtuning-Werte auf die kalibrierten IPA-Standardwerte zurueck).
+Auto-Weissabgleich, Rot-/Blau-Balance, hflip/vflip sowie Aufloesung/Sensormodus,
+FPS, Bitrate, GOP, Capture an/aus und Aufnahmeintervall) erscheinen im Formular. Die API validiert
+gegen dieselben Grenzen und sendet mit QoS 1 ohne Retain an `cmd/set`, `cmd/reset`
+(setzt die Bildtuning-Werte auf die kalibrierten IPA-Standardwerte zurueck), `cmd/ping`
+(`status/pong`) sowie `cmd/timelapse/start|stop|set`.
 Auf `/camera` stehen zusaetzlich synchronisierte Schieberegler mit Live-Uebernahme
 sowie ein Live-Schnappschuss-Werkzeug (`/api/camera/snapshot`) mit direktem
-Vorher/Nachher-Vergleich zur Verfuegung. Die Firmware wendet die Werte an und speichert sie in NVS,
-bevor sie eine positive Quittung sendet. Die Firmware bestaetigt jede Anfrage als JSON unter
-`status/command/<request-id>`; die Oberflaeche zeigt eine P4-Einstellung erst
-nach dieser positiven, korrelierten Quittung als uebernommen an.
-Die Aufloesung bleibt vorerst 1920x1080. FPS/Bitrate/GOP koennen mit der
-erweiterten Firmware gesetzt werden; danach verbindet sich der Publisher kurz
-neu. Capture-Intervall und Aktivierung werden als `server_capture_*` in der
+Vorher/Nachher-Vergleich zur Verfuegung. Die Firmware wendet V4L2-/ISP-Werte sofort im RAM an
+und persistiert geaenderte Werte entprellt nach 2,5 s Ruhezeit in NVS (bzw. sofort vor
+Aufloesungswechsel oder `cmd/restart`), um Flash-Verschleiss und Stream-Ruckler zu vermeiden.
+Die Firmware bestaetigt jede Anfrage als JSON unter `status/command/<request-id>`; die
+Oberflaeche zeigt eine P4-Einstellung erst nach dieser positiven, korrelierten Quittung als uebernommen an.
+Ueber `resolution` werden drei OV5647-Sensormodi unterstuetzt: `0 = 1920x1080` (Full-HD 16:9, Standard),
+`1 = 1280x960` (volles 4:3-Sensorfeld mit 2x2-Binning fuer groesseren Blickwinkel und besseres Schwachlicht)
+und `2 = 800x640` (kompakter Strom-/Bandbreitensparmodus). Bei Aufloesungs-, FPS-, Bitrate- oder GOP-Wechsel
+oeffnet die Kamera den Pfad bzw. RTSP-Publisher geplant neu. Waehrend eines ArduinoOTA-Uploads
+pausiert die Firmware den RTSP-Upload automatisch (`state = updating`), damit die ESP32-C6-WLAN-Bruecke
+frei bleibt. Capture-Intervall und Aktivierung werden als `server_capture_*` (und Alias `timelapse_*`) in der
 Firmware gespeichert und gemeldet. Der Server verwendet diese gemeldeten Werte
 vor seinen CAMERA_ESP32_P4_TIMELAPSE_*-Umgebungsdefaults. Capture aus stoppt neue
 Serverbilder, ohne den Livestream anzuhalten. Ein bereits gestartetes Bild darf
