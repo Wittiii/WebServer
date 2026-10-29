@@ -540,7 +540,7 @@ function renderStream(camera) {
       isJpegCamera(camera)
         ? `${camera.label} liefert RTSP(MJPEG). Der Webserver startet im Hintergrund ffmpeg und published H264 an MediaMTX. Falls das IFrame leer bleibt, zuerst den Bridge-Status pruefen.`
         : camera.kind === "esp32-p4"
-          ? "ESP32-P4 liefert H264 per lokalem RTSP; MediaMTX liest diese Quelle ohne FFmpeg-Transkodierung und stellt WebRTC bereit."
+          ? "ESP32-P4 publiziert H264 direkt an MediaMTX. Bildregler werden angezeigt, sobald die Kamera ihre unterstuetzten Einstellungen meldet."
           : "Pi-Kamera publiziert ueber den Pi-Streamer nach MediaMTX. Falls WebRTC nicht sofort startet, oeffne die Links direkt.";
   }
 }

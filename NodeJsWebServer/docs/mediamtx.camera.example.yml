@@ -19,8 +19,6 @@ paths:
   pi-zero-01: {}
   esp32-cam-01: {}
   dfr1154-cam-01: {}
-  # Set P4_CAMERA_RTSP_URL in the MediaMTX environment, for example
-  # rtsp://<camera-ip>:8554/live.  The P4 is already H264; no FFmpeg bridge.
+  # The P4 publishes H264 directly via ANNOUNCE / SETUP / RECORD.
   esp32-p4-cam-01:
-    source: ${P4_CAMERA_RTSP_URL}
-    sourceOnDemand: true
+    source: publisher

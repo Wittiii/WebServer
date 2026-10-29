@@ -54,7 +54,7 @@ function normalizeCommandSettings(config, settings) {
     }
 
     if (field.type === "number" || field.type === "select") {
-      if (config.kind === "pi" &&
+      if ((config.kind === "pi" || config.kind === "esp32-p4") &&
           !((typeof rawValue === "number") || (typeof rawValue === "string" && rawValue.trim()))) {
         throw new Error(`invalid_number:${key}`);
       }
@@ -62,6 +62,8 @@ function normalizeCommandSettings(config, settings) {
       if (!Number.isFinite(numberValue)) throw new Error(`invalid_number:${key}`);
       if (field.integer && !Number.isInteger(numberValue)) throw new Error(`invalid_number:${key}`);
       if (field.multipleOf && numberValue % field.multipleOf !== 0) throw new Error(`invalid_number:${key}`);
+      if (config.kind === "esp32-p4" && field.step &&
+          (numberValue - field.min) % field.step !== 0) throw new Error(`invalid_number:${key}`);
       if (config.kind === "pi" && key === "server_capture_interval_seconds" && !Number.isInteger(numberValue)) {
         throw new Error(`invalid_number:${key}`);
       }
@@ -112,6 +114,20 @@ function getLatestTopicValue(entries, suffix) {
 
 function getStateValue(overview) {
   return overview.status.state || "unknown";
+}
+
+function resolveCameraControls(config, reportedConfig) {
+  if (config.kind !== "esp32-p4") return config.controls;
+  const reported = reportedConfig?.image_controls;
+  const fields = (config.controls.imageFields || []).flatMap((field) => {
+    const control = reported?.[field.key];
+    if (!control || !Number.isSafeInteger(control.min) || !Number.isSafeInteger(control.max) ||
+        !Number.isSafeInteger(control.step) || control.step < 1 || control.min > control.max ||
+        Math.abs(control.min) > 1000000 || Math.abs(control.max) > 1000000) return [];
+    if (field.type === "checkbox" && (control.min !== 0 || control.max !== 1 || control.step !== 1)) return [];
+    return [{ ...field, min: control.min, max: control.max, step: control.step }];
+  });
+  return { profile: config.controls.profile, fields: [...fields, ...config.controls.fields] };
 }
 
 function buildCameraOverview(config) {
@@ -168,6 +184,7 @@ function buildCameraOverview(config) {
   const streamConfig = {
     ...(streamStatus && typeof streamStatus === "object" ? streamStatus : {}),
     ...(reportedConfig && typeof reportedConfig === "object" ? reportedConfig : {}),
+    ...(config.kind === "esp32-p4" && reportedConfig?.image && typeof reportedConfig.image === "object" ? reportedConfig.image : {}),
   };
   const commandAcknowledgement = statusTopics
     .filter((entry) => entry.suffix.startsWith("command/"))
@@ -181,13 +198,18 @@ function buildCameraOverview(config) {
   const serverCapture = config.archive?.type === "server_capture"
     ? getCameraTimelapseCaptureSnapshot(config.cameraId)
     : null;
+  const online = mqttClient ? Boolean(mqttClient.connected && reportedOnline !== false) : reportedOnline;
+  const cameraState = config.kind === "esp32-p4"
+    ? (online === false ? "offline" : streamStatus?.active === true && online === true ? "streaming" : errorValue ? "error" : "idle")
+    : stateValue || "unknown";
 
   return {
     cameraId: config.cameraId,
     label: config.label,
     kind: config.kind,
     capabilities: config.capabilities,
-    controls: config.controls,
+    controls: resolveCameraControls(config, reportedConfig),
+    requiresCommandAck: Boolean(config.requiresCommandAck),
     mqtt: {
       topicBase: config.mqttTopicBase,
       clientId: config.mqttClientId,
@@ -226,10 +248,8 @@ function buildCameraOverview(config) {
     mediamtx: config.mediaMTX,
     bridge,
     status: {
-      online: mqttClient
-        ? Boolean(mqttClient.connected && reportedOnline !== false)
-        : reportedOnline,
-      state: stateValue || "unknown",
+      online,
+      state: cameraState,
       error: errorValue || "",
       pong: pongValue || "",
       clients: clientsValue || "",
@@ -448,7 +468,8 @@ async function sendCommand(req, res) {
         }
         await publish(
           topicFor("set"),
-          JSON.stringify({ ...normalizeCommandSettings(config, settings), _request_id: requestId }),
+          JSON.stringify({ ...normalizeCommandSettings({ ...config, controls: resolveCameraControls(config,
+            parseJson(getLatestTopicValue(collectCameraTopics(config.mqttTopicBase), "config"))) }, settings), _request_id: requestId }),
           { qos: 1 }
         );
         break;

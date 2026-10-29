@@ -120,19 +120,27 @@ Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
 ## ESP32-P4 H.264-Quelle
 
 Die ESP32-P4-Kamera liefert H.264 direkt und wird **nicht** von der
-ESP32-FFmpeg-Bridge verarbeitet. Im ersten Betriebsmodus betreibt die Firmware
-einen lokalen RTSP-Server unter `rtsp://<kamera-ip>:8554/live`; MediaMTX liest
-diese Quelle als `esp32-p4-cam-01`. Die MediaMTX-Beispielkonfiguration erwartet
-dafuer die Umgebungsvariable `P4_CAMERA_RTSP_URL`, beispielsweise
-`rtsp://<kamera-ip>:8554/live`.
+ESP32-FFmpeg-Bridge verarbeitet. Die Firmware publiziert mit ANNOUNCE, SETUP
+und RECORD direkt an `rtsp://<mediamtx-host>:8554/esp32-p4-cam-01`.
+Der MediaMTX-Pfad verwendet `source: publisher`; eine Kamera-Quell-URL und
+`sourceOnDemand` sind fuer diesen Publisher nicht erforderlich.
 
 Die Kamera publiziert retained Statuswerte unter
 `camera/esp32-p4-cam-01/status/`, darunter `online`, `ip`, `rtsp_url`,
-`config`, `stream` und `error`. Die Einstellungen `width`, `height`, `fps`,
-`bitrate_bps`, `gop` und `rtsp_path` werden mit QoS 1, ohne Retain an
-`cmd/set` gesendet. Die Firmware bestaetigt jede Anfrage als JSON unter
+`config`, `stream` und `error`. Der Webserver leitet bei dieser Kamera den
+Streamingzustand aus `status/stream.active` und dem Onlinezustand ab.
+Die Firmware meldet unter `status/config.image_controls` verfuegbare Regler
+mit `min`, `max`, `step` und `value`; unter `image` stehen die aktuellen Werte.
+Nur diese Regler (Helligkeit, Kontrast, Saettigung, hflip/vflip) erscheinen im
+Formular. Die API validiert gegen dieselben Grenzen und sendet mit QoS 1 ohne
+Retain an `cmd/set`. Die Firmware wendet die Werte an und speichert sie in NVS,
+bevor sie eine positive Quittung sendet. Die Firmware bestaetigt jede Anfrage als JSON unter
 `status/command/<request-id>`; die Oberflaeche zeigt eine P4-Einstellung erst
 nach dieser positiven, korrelierten Quittung als uebernommen an.
+Aufloesung/FPS/Bitrate/GOP sind vorerst Firmware-Buildwerte. Serveraufnahme-
+Intervall und Aktivierung werden fuer den P4 ueber die CAMERA_ESP32_P4_TIMELAPSE_*
+Umgebungsvariablen gesetzt. Nach dem Update muessen Firmware hochgeladen und
+Webserver neu gestartet werden; Regler/Persistenz sind am Board zu pruefen.
 
 ## Zeitraffer im Webserver
 

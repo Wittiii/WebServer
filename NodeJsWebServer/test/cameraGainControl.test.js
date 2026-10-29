@@ -66,10 +66,18 @@ test("ESP32-P4 is a direct H264 MediaMTX camera without an FFmpeg bridge", () =>
 });
 
 test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () => {
-  const { controller, published } = controllerWithBroker();
+  const { controller, published, topics } = controllerWithBroker();
   const camera = p4Camera();
+  topics.set(`${camera.mqttTopicBase}/status/config`, { lastMessage: JSON.stringify({
+    image: { brightness: 0, contrast: 128, hflip: 0 },
+    image_controls: {
+      brightness: { min: -128, max: 127, step: 1, value: 0 },
+      contrast: { min: 0, max: 255, step: 1, value: 128 },
+      hflip: { min: 0, max: 1, step: 1, value: 0 },
+    },
+  }), timestamp: Date.now() });
   const res = response();
-  const settings = { width: 1280, height: 720, fps: 20, bitrate_bps: 2500000, gop: 20, rtsp_path: "live" };
+  const settings = { brightness: 10, contrast: 130, hflip: true };
   await controller.sendCommand({ hostname: "localhost", body: {
     cameraId: camera.cameraId, action: "set", settings,
   } }, res);
@@ -82,8 +90,9 @@ test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () =
   assert.equal(Boolean(published[0].options.retain), false);
 
   for (const invalid of [
-    { width: 1279 }, { height: 1082 }, { fps: 30.5 }, { bitrate_bps: 99999 },
-    { gop: 121 }, { rtsp_path: "../secret" }, { rtsp_path: "rtsp://other-host/live" },
+    { width: 1280 }, { height: 720 }, { fps: 20 }, { bitrate_bps: 2500000 },
+    { gop: 20 }, { rtsp_path: "live" }, { brightness: 128 }, { contrast: -1 },
+    { saturation: 128 }, { brightness: 0.5 }, { brightness: null }, { contrast: true },
   ]) {
     const invalidResponse = response();
     await controller.sendCommand({ hostname: "localhost", body: {
@@ -92,6 +101,37 @@ test("ESP32-P4 settings are validated and sent QoS 1 without retain", async () =
     assert.equal(invalidResponse.statusCode, 400);
   }
   assert.equal(published.length, 1);
+});
+
+test("P4 stream JSON drives streaming state, image controls and reported values", () => {
+  const { controller, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  const add = (suffix, value) => topics.set(`${camera.mqttTopicBase}/status/${suffix}`, {
+    lastMessage: typeof value === "string" ? value : JSON.stringify(value), timestamp: Date.now(),
+  });
+  add("online", "true");
+  add("stream", { active: true, codec: "h264", transport: "rtsp-publisher" });
+  add("config", { image: { brightness: 12 }, image_controls: {
+    brightness: { min: -128, max: 127, step: 1, value: 12 },
+    contrast: { min: 0, max: 255, step: 0 },
+    hflip: { min: -10, max: 10, step: 1 },
+  } });
+  let res = response(); controller.getOverview({ hostname: "localhost" }, res);
+  let overview = res.body.cameras.find((item) => item.cameraId === camera.cameraId);
+  assert.equal(overview.status.state, "streaming");
+  assert.equal(res.body.summary.streaming, 1);
+  assert.equal(overview.requiresCommandAck, true);
+  assert.equal(overview.stream.currentConfig.brightness, 12);
+  assert.equal(overview.controls.fields.length, 1);
+  assert.equal(overview.controls.fields[0].key, "brightness");
+  add("stream", { active: false });
+  res = response(); controller.getOverview({ hostname: "localhost" }, res);
+  assert.equal(res.body.summary.streaming, 0);
+  add("online", "false"); add("stream", { active: true });
+  res = response(); controller.getOverview({ hostname: "localhost" }, res);
+  overview = res.body.cameras.find((item) => item.cameraId === camera.cameraId);
+  assert.equal(overview.status.state, "offline");
+  assert.equal(res.body.summary.streaming, 0);
 });
 
 test("ESP32-P4 command acknowledgement is read safely from its correlated status topic", () => {

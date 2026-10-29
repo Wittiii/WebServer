@@ -312,16 +312,14 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
     requiresCommandAck: true,
     controls: {
       profile: "esp32-p4",
-      fields: [
-        { key: "width", label: "Breite", type: "number", min: 80, max: 1920, step: 2, integer: true, multipleOf: 2, placeholder: "1920", section: "Bild und Stream" },
-        { key: "height", label: "Hoehe", type: "number", min: 80, max: 1080, step: 2, integer: true, multipleOf: 2, placeholder: "1080" },
-        { key: "fps", label: "FPS", type: "number", min: 1, max: 30, step: 1, integer: true, placeholder: "20" },
-        { key: "bitrate_bps", label: "Bitrate (bit/s)", type: "number", min: 100000, max: 10000000, step: 1000, integer: true, placeholder: "4000000" },
-        { key: "gop", label: "Keyframe-Intervall (GOP)", type: "number", min: 1, max: 120, step: 1, integer: true, placeholder: "20" },
-        { key: "rtsp_path", label: "Lokaler RTSP-Pfad", type: "text", maxLength: 128, placeholder: "live" },
-        { key: "server_capture_interval_seconds", label: "Serveraufnahme Intervall (s)", type: "number", min: 10, max: 86400, step: 1, integer: true, placeholder: "60", section: "Serveraufnahme" },
-        { key: "server_capture_enabled", label: "Serveraufnahme aktiv", type: "checkbox" },
+      imageFields: [
+        { key: "brightness", label: "Helligkeit", type: "number", integer: true, section: "Bild" },
+        { key: "contrast", label: "Kontrast", type: "number", integer: true },
+        { key: "saturation", label: "Saettigung", type: "number", integer: true },
+        { key: "hflip", label: "Horizontal spiegeln", type: "checkbox" },
+        { key: "vflip", label: "Vertikal spiegeln", type: "checkbox" },
       ],
+      fields: [],
     },
   };
 }
