@@ -522,7 +522,8 @@ function renderState(camera) {
       <div><strong>MQTT zuletzt</strong><span>${escapeHtml(camera.mqtt.lastTopic || "-")}</span></div>
       <div><strong>Direkte Sessions</strong><span>${escapeHtml(camera.status.directSessions ?? camera.status.clients ?? "-")}</span></div>
       <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients ?? camera.status.clients ?? "-")}</span></div>
-      <div><strong>Quell-FPS</strong><span>${escapeHtml(camera.status.frameFps ?? "-")}</span></div>
+      <div><strong>${camera.kind === "esp32-p4" ? "Encoder-FPS" : "Quell-FPS"}</strong><span>${escapeHtml(camera.status.frameFps ?? "-")}</span></div>
+      ${camera.kind === "esp32-p4" ? `<div><strong>Publisher-FPS</strong><span>${escapeHtml(camera.status.publisherReadFps || "-")}</span></div>` : ""}
       <div><strong>Publisher</strong><span>${camera.status.publisherConnected === true ? "VERBUNDEN" : camera.status.publisherConnected === false ? "GETRENNT" : "-"}</span></div>
       <div><strong>Reconnects</strong><span>${escapeHtml(camera.status.reconnectCount ?? "-")}</span></div>
       <div><strong>WLAN / MQTT Reconnects</strong><span>${escapeHtml(camera.status.wifiReconnectCount ?? 0)} / ${escapeHtml(camera.status.mqttReconnectCount ?? 0)}</span></div>

@@ -218,6 +218,7 @@ function buildCameraOverview(config) {
   const directSessionsValue = getLatestTopicValue(statusTopics, "direct_sessions");
   const directStreamingClientsValue = getLatestTopicValue(statusTopics, "direct_streaming_clients");
   const frameFpsValue = getLatestTopicValue(statusTopics, "frame_fps");
+  const publisherReadFpsValue = getLatestTopicValue(statusTopics, "publisher_read_fps");
   const configuredFpsValue = getLatestTopicValue(statusTopics, "configured_fps");
   const publisherConnectedValue = getLatestTopicValue(statusTopics, "publisher_connected");
   const mqttConnectedValue = getLatestTopicValue(statusTopics, "mqtt_connected");
@@ -346,6 +347,7 @@ function buildCameraOverview(config) {
       directSessions: directSessionsValue || "",
       directStreamingClients: directStreamingClientsValue || "",
       frameFps: frameFpsValue || "",
+      publisherReadFps: publisherReadFpsValue || "",
       configuredFps: configuredFpsValue || "",
       publisherConnected: parseBoolean(publisherConnectedValue),
       mqttConnected: parseBoolean(mqttConnectedValue),

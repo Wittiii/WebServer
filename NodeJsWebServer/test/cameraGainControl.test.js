@@ -174,6 +174,8 @@ test("P4 stream JSON drives streaming state, image controls and reported values"
   });
   add("online", "true");
   add("stream", { active: true, codec: "h264", transport: "rtsp-publisher" });
+  add("frame_fps", "20.0");
+  add("publisher_read_fps", "4.4");
   add("config", { image: { brightness: 12 }, image_controls: {
     brightness: { min: -128, max: 127, step: 1, value: 12 },
     contrast: { min: 0, max: 255, step: 0 },
@@ -182,6 +184,8 @@ test("P4 stream JSON drives streaming state, image controls and reported values"
   let res = response(); controller.getOverview({ hostname: "localhost" }, res);
   let overview = res.body.cameras.find((item) => item.cameraId === camera.cameraId);
   assert.equal(overview.status.state, "streaming");
+  assert.equal(overview.status.frameFps, "20.0");
+  assert.equal(overview.status.publisherReadFps, "4.4");
   assert.equal(res.body.summary.streaming, 1);
   assert.equal(overview.requiresCommandAck, true);
   assert.equal(overview.stream.currentConfig.brightness, 12);
@@ -325,6 +329,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         sharpness: 55,
         denoise: 1,
         gain_limit: 15500,
+        adaptive_image: true,
         awb: true,
         red_balance: 1000,
         blue_balance: 1000,
@@ -337,6 +342,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         sharpness: { min: 0, max: 100, step: 1, default: 55, value: 55 },
         denoise: { min: 0, max: 20, step: 1, default: 1, value: 1 },
         gain_limit: { min: 1000, max: 15500, step: 500, default: 15500, value: 15500 },
+        adaptive_image: { min: 0, max: 1, step: 1, default: 1, value: 1 },
         awb: { min: 0, max: 1, step: 1, default: 1, value: 1 },
         red_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
         blue_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
@@ -364,6 +370,8 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
   assert.equal(fieldsByKey.get("denoise").default, 1);
   assert.equal(fieldsByKey.get("gain_limit").max, 15500);
   assert.equal(fieldsByKey.get("gain_limit").step, 500);
+  assert.equal(fieldsByKey.get("adaptive_image").type, "checkbox");
+  assert.equal(fieldsByKey.get("adaptive_image").default, 1);
   assert.equal(fieldsByKey.get("awb").section, "Weissabgleich & Ausrichtung");
   assert.equal(fieldsByKey.get("red_balance").section, undefined);
   assert.equal(fieldsByKey.get("fps").section, "Livestream");
@@ -375,6 +383,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
     sharpness: 52,
     denoise: 3,
     gain_limit: 8000,
+    adaptive_image: false,
     awb: false,
     red_balance: 1120,
     blue_balance: 940,
@@ -400,6 +409,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
     { denoise: -1 },
     { gain_limit: 16000 },
     { gain_limit: 8250 },
+    { adaptive_image: 2 },
     { awb: 2 },
     { red_balance: 200 },
     { blue_balance: 4000 },
