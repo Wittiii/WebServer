@@ -24,6 +24,8 @@ const settingsStatusEl = document.getElementById("camera-settings-status");
 const settingsForm = document.getElementById("camera-settings-form");
 const liveApplyCheckboxEl = document.getElementById("camera-live-apply");
 const resetDefaultsBtnEl = document.getElementById("camera-reset-defaults");
+const matchPiBtnEl = document.getElementById("camera-match-pi");
+const matchPiInfoEl = document.getElementById("camera-match-pi-info");
 const streamFrame = document.getElementById("camera-stream-frame");
 const streamHintEl = document.getElementById("camera-stream-hint");
 const openWebRtcEl = document.getElementById("camera-open-webrtc");
@@ -96,7 +98,7 @@ function bindCameraAction(element, eventName, handler) {
     if (eventName === "submit") event.preventDefault();
     if (cameraOperationInFlight) return;
     cameraOperationInFlight = true;
-    const controls = [...document.querySelectorAll(".camera-picker button, [data-camera-action], #camera-reset-defaults, #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh")];
+    const controls = [...document.querySelectorAll(".camera-picker button, [data-camera-action], #camera-reset-defaults, #camera-match-pi, #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh")];
     const previous = controls.map((control) => [control, control.disabled]);
     controls.forEach((control) => { control.disabled = true; });
     element.setAttribute("aria-busy", "true");
@@ -365,6 +367,16 @@ function getCapabilityBadges(camera) {
 
 function syncActionButtons(camera) {
   const isP4 = camera?.kind === "esp32-p4";
+  if (matchPiBtnEl) {
+    matchPiBtnEl.hidden = !isP4;
+    matchPiBtnEl.disabled = cameraOperationInFlight || !camera?.mqtt?.connected;
+    const pi = getCameras().find((item) => item.kind === "pi");
+    matchPiBtnEl.textContent = pi?.status?.online ? "Pi-Werte übernehmen" : "Letzte Pi-Werte übernehmen";
+    if (matchPiInfoEl) {
+      matchPiInfoEl.hidden = !isP4;
+      matchPiInfoEl.textContent = `${pi?.status?.online ? "Gemeinsame Pi-Einstellungen werden umgerechnet." : "Pi offline: Es werden seine zuletzt gemeldeten Einstellungen verwendet."} Die Bildabstimmung ist eine Annaeherung; Montage und Zeitraffer bleiben erhalten.`;
+    }
+  }
   if (resetDefaultsBtnEl) {
     resetDefaultsBtnEl.hidden = !isP4;
     resetDefaultsBtnEl.disabled = cameraOperationInFlight || !camera?.mqtt?.connected;
@@ -1164,6 +1176,27 @@ document.querySelectorAll("[data-camera-action]").forEach((button) => {
       setStatusLine(commandStatusEl, `Befehl fehlgeschlagen: ${error.message}`, true);
     }
   });
+});
+
+bindCameraAction(matchPiBtnEl, "click", async () => {
+  const camera = getActiveCamera();
+  if (!camera || camera.kind !== "esp32-p4") return;
+  clearTimeout(liveApplyTimer);
+  try {
+    const result = await sendCommand(camera.cameraId, "match_pi");
+    resetSettingsDraft(camera.cameraId);
+    setPendingCameraSettings(camera.cameraId, result.settings, result.requestId);
+    setOverviewState(result.overview);
+    setSettingsFeedback(camera.cameraId,
+      `Pi-Werte gesendet${result.reference.online ? "" : " (Pi offline: zuletzt gemeldete Werte)"}. Warte auf Kamera-Bestaetigung. Die Bildabstimmung ist eine Annaeherung.`, false, 15000);
+    renderActiveCamera({ forceSettings: true });
+  } catch (error) {
+    const reason = error.message === "pi_reference_unavailable" ? "Keine Pi-Einstellungen gemeldet. Pi zuerst verbinden."
+      : error.message === "pi_resolution_not_supported" ? "Die Pi-Aufloesung wird vom P4 nicht unterstuetzt."
+      : error.message;
+    setSettingsFeedback(camera.cameraId, `Pi-Werte konnten nicht uebernommen werden: ${reason}`, true, 10000);
+    setStatusLine(settingsStatusEl, `Pi-Abgleich fehlgeschlagen: ${reason}`, true);
+  }
 });
 
 bindCameraAction(resetDefaultsBtnEl, "click", async () => {

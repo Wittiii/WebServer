@@ -58,6 +58,54 @@ function p4Camera() {
   return cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "esp32-p4");
 }
 
+test("Pi reference maps platform units, preserves mounting/capture and reports offline retained values", async () => {
+  const { controller, published, topics } = controllerWithBroker();
+  const p4 = p4Camera();
+  const source = cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "pi");
+  const put = (base, suffix, value) => topics.set(`${base}/status/${suffix}`, {
+    lastMessage: JSON.stringify(value), timestamp: Date.now(),
+  });
+  const pi = { width: 1920, height: 1080, framerate: 20, bitrate: 5000000,
+    brightness: 0.1, contrast: 1.5, saturation: 0.5, sharpness: 1 };
+  put(source.mqttTopicBase, "config", pi); put(source.mqttTopicBase, "online", false);
+  put(p4.mqttTopicBase, "config", {
+    width: 1920, height: 1080, server_capture_enabled: false,
+    image_controls: {
+      brightness: { min: -128, max: 127, step: 1, default: 0 },
+      contrast: { min: 0, max: 255, step: 1, default: 128 },
+      saturation: { min: 0, max: 255, step: 1, default: 128 },
+      sharpness: { min: 0, max: 100, step: 1, default: 45 },
+    },
+    setting_controls: {
+      fps: { min: 1, max: 30, step: 1 }, bitrate_bps: { min: 100000, max: 10000000, step: 1000 },
+      gop: { min: 1, max: 120, step: 1 }, resolution: { min: 0, max: 2, step: 1 },
+    },
+  });
+  let res = response();
+  await controller.sendCommand({ hostname: "localhost", body: { cameraId: p4.cameraId, action: "match_pi" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].topic, `${p4.mqttTopicBase}/cmd/set`);
+  assert.deepEqual(published[0].payload, { fps: 20, bitrate_bps: 5000000, gop: 20, resolution: 0,
+    brightness: 26, contrast: 192, saturation: 64, sharpness: 45, _request_id: res.body.requestId });
+  assert.equal(res.body.reference.online, false);
+  assert.equal(res.body.reference.approximate, true);
+  assert.equal(published[0].options.qos, 1);
+  assert.equal(Boolean(published[0].options.retain), false);
+  for (const change of [{ width: 1280, height: 720 }, { bitrate: 50000000 }, { sharpness: 16 }]) {
+    put(source.mqttTopicBase, "config", { ...pi, ...change });
+    res = response();
+    await controller.sendCommand({ hostname: "localhost", body: { cameraId: p4.cameraId, action: "match_pi" } }, res);
+    assert.equal(res.statusCode, 400);
+    assert.equal(published.length, 1);
+  }
+  topics.delete(`${source.mqttTopicBase}/status/config`);
+  res = response();
+  await controller.sendCommand({ hostname: "localhost", body: { cameraId: p4.cameraId, action: "match_pi" } }, res);
+  assert.equal(res.body.error, "pi_reference_unavailable");
+  assert.equal(published.length, 1);
+});
+
 test("ESP32-P4 is a direct H264 MediaMTX camera without an FFmpeg bridge", () => {
   const camera = p4Camera();
   assert.ok(camera);
@@ -274,8 +322,8 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         contrast: 130,
         saturation: 132,
         gamma: 65,
-        sharpness: 36,
-        denoise: 4,
+        sharpness: 55,
+        denoise: 1,
         awb: true,
         red_balance: 1000,
         blue_balance: 1000,
@@ -285,8 +333,8 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         contrast: { min: 0, max: 255, step: 1, default: 130, value: 130 },
         saturation: { min: 0, max: 255, step: 1, default: 132, value: 132 },
         gamma: { min: 40, max: 100, step: 1, default: 65, value: 65 },
-        sharpness: { min: 0, max: 100, step: 1, default: 36, value: 36 },
-        denoise: { min: 0, max: 20, step: 1, default: 4, value: 4 },
+        sharpness: { min: 0, max: 100, step: 1, default: 55, value: 55 },
+        denoise: { min: 0, max: 20, step: 1, default: 1, value: 1 },
         awb: { min: 0, max: 1, step: 1, default: 1, value: 1 },
         red_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
         blue_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
@@ -305,13 +353,13 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
 
   assert.equal(fieldsByKey.get("preset").section, "Bild & Farbabstimmung");
   assert.deepEqual(fieldsByKey.get("preset").options.map((option) => option.value), [0, 1, 2, 3, 4]);
-  assert.equal(fieldsByKey.get("preset").options[1].label, "Raspberry Pi (Standard)");
+  assert.equal(fieldsByKey.get("preset").options[1].label, "OV5647 Standard (Pi-Abgleich als Annaeherung)");
   assert.equal(fieldsByKey.get("contrast").section, undefined);
   assert.equal(fieldsByKey.get("contrast").default, 130);
   assert.equal(fieldsByKey.get("saturation").default, 132);
   assert.equal(fieldsByKey.get("gamma").default, 65);
-  assert.equal(fieldsByKey.get("sharpness").default, 36);
-  assert.equal(fieldsByKey.get("denoise").default, 4);
+  assert.equal(fieldsByKey.get("sharpness").default, 55);
+  assert.equal(fieldsByKey.get("denoise").default, 1);
   assert.equal(fieldsByKey.get("awb").section, "Weissabgleich & Ausrichtung");
   assert.equal(fieldsByKey.get("red_balance").section, undefined);
   assert.equal(fieldsByKey.get("fps").section, "Livestream");

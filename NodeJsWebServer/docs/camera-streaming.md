@@ -119,6 +119,16 @@ Die `/camera`-Seite zeigt den Bridge-Status und das MediaMTX-Ziel direkt an.
 
 ## ESP32-P4 H.264-Quelle
 
+Beim P4 kann **Pi-Werte uebernehmen** die zuletzt per MQTT gemeldeten Pi-Werte
+fuer Aufloesung, FPS, Bitrate, GOP und die gemeinsamen Bildregler uebertragen.
+Die Regler werden in die gemeldeten P4-Bereiche umgerechnet. Ein Offline-Pi
+wird als Quelle zuletzt gemeldeter Werte kenntlich gemacht. Fehlende Daten,
+nicht unterstuetzte Aufloesungen und Werte ausserhalb der Grenzen werden
+abgelehnt. Montage-Flips und Zeitraffer werden dadurch nicht veraendert.
+Die normale korrelierte Kameraquittung bleibt erforderlich. Das ist ein
+Abgleich der Bedienwerte, keine identische libcamera-/P4-ISP-Bildverarbeitung.
+Der Pi selbst wird durch diese Aktion nicht umkonfiguriert.
+
 Die ESP32-P4-Kamera liefert H.264 direkt und wird **nicht** von der
 ESP32-FFmpeg-Bridge verarbeitet. Die Firmware publiziert mit ANNOUNCE, SETUP
 und RECORD direkt an `rtsp://<mediamtx-host>:8554/esp32-p4-cam-01`.

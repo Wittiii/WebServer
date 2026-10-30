@@ -161,6 +161,51 @@ function resolveCameraControls(config, reportedConfig) {
   return { profile: config.controls.profile, fields: [...fields, ...config.controls.fields] };
 }
 
+function piReferenceSettings(target, hostname) {
+  const source = getCameraConfigs(hostname).find((camera) => camera.kind === "pi");
+  const sourceTopics = source ? collectCameraTopics(source.mqttTopicBase) : [];
+  const entry = sourceTopics.find((topic) => topic.suffix === "config");
+  const pi = parseJson(entry?.value);
+  const targetConfig = parseJson(getLatestTopicValue(collectCameraTopics(target.mqttTopicBase), "config"));
+  if (!pi || !targetConfig) throw new Error("pi_reference_unavailable");
+  const controls = resolveCameraControls(target, targetConfig);
+  const fields = new Map(controls.fields.map((field) => [field.key, field]));
+  const imageControls = targetConfig.image_controls || {};
+  const number = (key) => {
+    if (typeof pi[key] !== "number" || !Number.isFinite(pi[key])) throw new Error(`invalid_pi_reference:${key}`);
+    return pi[key];
+  };
+  const defaults = (key) => {
+    const value = imageControls[key]?.default;
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`invalid_pi_reference:${key}`);
+    return value;
+  };
+  const settings = { fps: number("framerate"), bitrate_bps: number("bitrate"), gop: number("framerate") };
+  const width = number("width"), height = number("height");
+  const modes = [[1920, 1080], [1280, 960], [800, 640]];
+  const resolution = modes.findIndex(([w, h]) => w === width && h === height);
+  if (resolution < 0) throw new Error("pi_resolution_not_supported");
+  if (fields.has("resolution")) settings.resolution = resolution;
+  else if (targetConfig.width !== width || targetConfig.height !== height) throw new Error("pi_resolution_not_supported");
+  // libcamera brightness is a fraction of the full 8-bit output range.
+  // Contrast/saturation/sharpening are relative to their platform defaults.
+  // These are comparable controls, not a port of libcamera's image algorithms.
+  settings.brightness = Math.round(number("brightness") * 255);
+  settings.contrast = Math.round(number("contrast") * defaults("contrast"));
+  settings.saturation = Math.round(number("saturation") * defaults("saturation"));
+  settings.sharpness = Math.round(number("sharpness") * defaults("sharpness"));
+  const normalized = normalizeCommandSettings({ ...target, controls }, settings);
+  return {
+    settings: normalized,
+    reference: {
+      cameraId: source.cameraId,
+      online: getLatestTopicValue(sourceTopics, "online") === "true" && Boolean(getClientSnapshot(source.mqttClientId)?.connected),
+      timestamp: new Date(entry.timestamp).toISOString(),
+      approximate: true,
+    },
+  };
+}
+
 function buildCameraOverview(config) {
   const statusTopics = collectCameraTopics(config.mqttTopicBase);
   const onlineValue = getLatestTopicValue(statusTopics, "online");
@@ -556,6 +601,12 @@ async function sendCommand(req, res) {
           { qos: 1 }
         );
         break;
+      case "match_pi": {
+        if (config.kind !== "esp32-p4") return res.status(400).json({ ok: false, error: "unsupported_action" });
+        const match = piReferenceSettings(config, req.hostname);
+        await publish(topicFor("set"), JSON.stringify({ ...match.settings, _request_id: requestId }), { qos: 1 });
+        return res.json({ ok: true, requestId, ...match, overview: buildOverview(req) });
+      }
       default:
         return res.status(400).json({ ok: false, error: "invalid_action" });
     }
@@ -563,7 +614,8 @@ async function sendCommand(req, res) {
     res.json({ ok: true, requestId, overview: buildOverview(req) });
   } catch (error) {
     const message = String(error?.message || error);
-    const invalidSetting = /^(?:unsupported_setting|invalid_boolean|invalid_number|invalid_text|value_below_minimum|value_above_maximum|invalid_option):/.test(message);
+    const invalidSetting = /^(?:unsupported_setting|invalid_boolean|invalid_number|invalid_text|value_below_minimum|value_above_maximum|invalid_option|invalid_pi_reference):/.test(message) ||
+      ["pi_reference_unavailable", "pi_resolution_not_supported"].includes(message);
     res.status(invalidSetting ? 400 : 500).json({ ok: false, error: message });
   }
 }
