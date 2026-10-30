@@ -3,7 +3,7 @@ const path = require("path");
 const { randomUUID } = require("crypto");
 
 const { getClientSnapshot, publish, topics } = require("../mqttBroker");
-const { getCameraConfigs, getCameraConfigById } = require("../config/cameraConfig");
+const { getCameraConfigs, getCameraConfigById, getCameraImageProfiles } = require("../config/cameraConfig");
 const { getEsp32BridgeSnapshot } = require("../services/esp32TranscodeService");
 const {
   captureCameraLiveSnapshot,
@@ -161,6 +161,18 @@ function resolveCameraControls(config, reportedConfig) {
   return { profile: config.controls.profile, fields: [...fields, ...config.controls.fields] };
 }
 
+function resolveImageProfiles(config, reportedConfig) {
+  const controls = resolveCameraControls(config, reportedConfig);
+  return getCameraImageProfiles(config.kind).map((profile) => {
+    try {
+      const settings = normalizeCommandSettings({ ...config, controls }, profile.settings);
+      return { ...profile, settings, available: true };
+    } catch {
+      return { ...profile, available: false };
+    }
+  });
+}
+
 function piReferenceSettings(target, hostname) {
   const source = getCameraConfigs(hostname).find((camera) => camera.kind === "pi");
   const sourceTopics = source ? collectCameraTopics(source.mqttTopicBase) : [];
@@ -300,6 +312,7 @@ function buildCameraOverview(config) {
     kind: config.kind,
     capabilities: config.capabilities,
     controls: resolveCameraControls(config, reportedConfig),
+    imageProfiles: resolveImageProfiles(config, reportedConfig),
     requiresCommandAck: Boolean(config.requiresCommandAck),
     mqtt: {
       topicBase: config.mqttTopicBase,
@@ -546,7 +559,7 @@ async function getSnapshot(req, res) {
 }
 
 async function sendCommand(req, res) {
-  const { cameraId, action, settings, payload } = req.body || {};
+  const { cameraId, action, settings, payload, profileId } = req.body || {};
   const config = getCameraConfigById(cameraId, req.hostname);
 
   if (!config) {
@@ -603,6 +616,16 @@ async function sendCommand(req, res) {
           { qos: 1 }
         );
         break;
+      case "image_profile": {
+        if (config.kind !== "esp32-p4") return res.status(400).json({ ok: false, error: "unsupported_action" });
+        const reported = parseJson(getLatestTopicValue(collectCameraTopics(config.mqttTopicBase), "config"));
+        const profile = resolveImageProfiles(config, reported).find((entry) => entry.id === profileId);
+        if (!profile) return res.status(400).json({ ok: false, error: "invalid_image_profile" });
+        if (!profile.available) return res.status(409).json({ ok: false, error: "image_profile_unavailable" });
+        if (settings != null || payload != null) return res.status(400).json({ ok: false, error: "invalid_profile_override" });
+        await publish(topicFor("set"), JSON.stringify({ ...profile.settings, _request_id: requestId }), { qos: 1 });
+        return res.json({ ok: true, requestId, profileId: profile.id, settings: profile.settings, overview: buildOverview(req) });
+      }
       case "match_pi": {
         if (config.kind !== "esp32-p4") return res.status(400).json({ ok: false, error: "unsupported_action" });
         const match = piReferenceSettings(config, req.hostname);

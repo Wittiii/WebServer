@@ -26,6 +26,10 @@ const liveApplyCheckboxEl = document.getElementById("camera-live-apply");
 const resetDefaultsBtnEl = document.getElementById("camera-reset-defaults");
 const matchPiBtnEl = document.getElementById("camera-match-pi");
 const matchPiInfoEl = document.getElementById("camera-match-pi-info");
+const imageProfilesEl = document.getElementById("camera-image-profiles");
+const imageProfileSelectEl = document.getElementById("camera-image-profile");
+const imageProfileApplyEl = document.getElementById("camera-apply-image-profile");
+const imageProfileInfoEl = document.getElementById("camera-image-profile-info");
 const streamFrame = document.getElementById("camera-stream-frame");
 const streamHintEl = document.getElementById("camera-stream-hint");
 const openWebRtcEl = document.getElementById("camera-open-webrtc");
@@ -98,7 +102,7 @@ function bindCameraAction(element, eventName, handler) {
     if (eventName === "submit") event.preventDefault();
     if (cameraOperationInFlight) return;
     cameraOperationInFlight = true;
-    const controls = [...document.querySelectorAll(".camera-picker button, [data-camera-action], #camera-reset-defaults, #camera-match-pi, #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh")];
+      const controls = [...document.querySelectorAll(".camera-picker button, [data-camera-action], #camera-reset-defaults, #camera-match-pi, #camera-image-profiles select, #camera-image-profiles button, #camera-settings-form input, #camera-settings-form select, #camera-settings-form button, #timelapse-panel button, #camera-overview-refresh")];
     const previous = controls.map((control) => [control, control.disabled]);
     controls.forEach((control) => { control.disabled = true; });
     element.setAttribute("aria-busy", "true");
@@ -365,7 +369,37 @@ function getCapabilityBadges(camera) {
   return badges;
 }
 
+function describeImageProfile(camera) {
+  const profile = camera?.imageProfiles?.find((entry) => entry.id === imageProfileSelectEl?.value);
+  if (imageProfileInfoEl) imageProfileInfoEl.textContent = profile
+    ? `${profile.description} Nach dem Anwenden kurz auf das neue HLS-Bild warten.`
+    : "Die Kamera muss ihre unterstützten Bildregler zuerst melden.";
+}
+
+function syncImageProfiles(camera) {
+  if (!imageProfilesEl || !imageProfileSelectEl || !imageProfileApplyEl) return;
+  const profiles = camera?.imageProfiles || [];
+  imageProfilesEl.hidden = camera?.kind !== "esp32-p4";
+  const signature = JSON.stringify([camera?.cameraId, profiles]);
+  if (imageProfileSelectEl.dataset.signature !== signature) {
+    const previous = imageProfileSelectEl.dataset.cameraId === camera?.cameraId ? imageProfileSelectEl.value : "";
+    imageProfileSelectEl.innerHTML = profiles.map((profile) =>
+      `<option value="${escapeHtml(profile.id)}"${profile.available ? "" : " disabled"}>${escapeHtml(profile.label)}${profile.available ? "" : " (nicht verfügbar)"}</option>`
+    ).join("");
+    imageProfileSelectEl.value = profiles.find((profile) => profile.available && profile.id === previous)?.id ||
+      profiles.find((profile) => profile.available)?.id || "";
+    imageProfileSelectEl.dataset.signature = signature;
+    imageProfileSelectEl.dataset.cameraId = camera?.cameraId || "";
+  }
+  const disabled = cameraOperationInFlight || liveApplyInFlight || pendingCameraSettings.has(camera?.cameraId) ||
+    !camera?.mqtt?.connected || !profiles.some((profile) => profile.available);
+  imageProfileSelectEl.disabled = disabled;
+  imageProfileApplyEl.disabled = disabled;
+  describeImageProfile(camera);
+}
+
 function syncActionButtons(camera) {
+  syncImageProfiles(camera);
   const isP4 = camera?.kind === "esp32-p4";
   if (matchPiBtnEl) {
     matchPiBtnEl.hidden = !isP4;
@@ -1177,6 +1211,27 @@ document.querySelectorAll("[data-camera-action]").forEach((button) => {
       setStatusLine(commandStatusEl, `Befehl fehlgeschlagen: ${error.message}`, true);
     }
   });
+});
+
+imageProfileSelectEl?.addEventListener("change", () => describeImageProfile(getActiveCamera()));
+
+bindCameraAction(imageProfileApplyEl, "click", async () => {
+  const camera = getActiveCamera();
+  if (!camera || camera.kind !== "esp32-p4" || liveApplyInFlight || pendingCameraSettings.has(camera.cameraId)) return;
+  const profile = camera.imageProfiles?.find((entry) => entry.id === imageProfileSelectEl?.value && entry.available);
+  if (!profile) return;
+  clearTimeout(liveApplyTimer);
+  try {
+    const result = await sendCommand(camera.cameraId, "image_profile", { profileId: profile.id });
+    resetSettingsDraft(camera.cameraId);
+    setPendingCameraSettings(camera.cameraId, result.settings, result.requestId);
+    setOverviewState(result.overview);
+    setSettingsFeedback(camera.cameraId, `Profil „${profile.label}“ gesendet. Warte auf Kamera-Bestätigung.`, false, 15000);
+    renderActiveCamera({ forceSettings: true });
+  } catch (error) {
+    setSettingsFeedback(camera.cameraId, `Profil konnte nicht angewendet werden: ${error.message}`, true, 10000);
+    syncSettingsStatus(getActiveCamera());
+  }
 });
 
 bindCameraAction(matchPiBtnEl, "click", async () => {

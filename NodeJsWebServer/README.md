@@ -180,3 +180,9 @@ Wartungsfenster. Die bisherigen Datenbankindizes werden beim ersten Start eines
 alten Schemas ebenfalls synchron angelegt. Last, Temperatur, Unterspannung,
 freier Speicher und SD-/FFmpeg-Durchsatz müssen am tatsächlichen Pi geprüft
 werden; lokale Tests sind kein Pi-Dauertest.
+
+## ESP32-P4 Bildprofile
+
+Die Kameraseite bietet sieben Vergleichsprofile unter **Testprofil**.
+Werte, MQTT-Vertrag und Hinweise zum Testen stehen in
+[ESP32-P4 Bildprofile](docs/camera-p4-image-profiles.md).

@@ -58,6 +58,76 @@ function p4Camera() {
   return cameraConfig.getCameraConfigs("localhost").find((camera) => camera.kind === "esp32-p4");
 }
 
+function imageProfileReport() {
+  const ranges = {
+    preset: [0, 4], brightness: [-128, 127], contrast: [0, 255], saturation: [0, 255],
+    hue: [0, 360], gamma: [40, 100], sharpness: [0, 100], denoise: [0, 20],
+    exposure_target: [2, 235], awb: [0, 1], red_balance: [250, 3500],
+    blue_balance: [250, 3500], adaptive_image: [0, 1], gain_limit: [1000, 15500, 500],
+  };
+  return {
+    image: { hflip: 0, vflip: 1 }, fps: 20, gop: 14, bitrate_bps: 5000000,
+    server_capture_enabled: false,
+    image_controls: Object.fromEntries(Object.entries(ranges).map(([key, [min, max, step = 1]]) =>
+      [key, { min, max, step, default: min, value: min }])),
+  };
+}
+
+test("P4 comparison profiles publish complete validated image settings and preserve stream/mount/capture", async () => {
+  const { controller, published, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  topics.set(`${camera.mqttTopicBase}/status/config`, { lastMessage: JSON.stringify(imageProfileReport()), timestamp: Date.now() });
+  const overview = response();
+  controller.getOverview({ hostname: "localhost" }, overview);
+  const profiles = overview.body.cameras.find((entry) => entry.cameraId === camera.cameraId).imageProfiles;
+  assert.equal(profiles.length, 7);
+  assert.equal(new Set(profiles.map((profile) => profile.id)).size, profiles.length);
+  for (const profile of profiles) {
+    assert.equal(profile.available, true);
+    assert.ok(profile.label && profile.description);
+    const res = response();
+    await controller.sendCommand({ hostname: "localhost", body: { cameraId: camera.cameraId,
+      action: "image_profile", profileId: profile.id } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.profileId, profile.id);
+    const sent = published.at(-1);
+    assert.equal(sent.topic, `${camera.mqttTopicBase}/cmd/set`);
+    assert.equal(sent.options.qos, 1);
+    assert.equal(Boolean(sent.options.retain), false);
+    assert.deepEqual(sent.payload, { ...profile.settings, _request_id: res.body.requestId });
+    for (const key of ["fps", "gop", "bitrate_bps", "resolution", "hflip", "vflip", "server_capture_enabled", "server_capture_interval_seconds"]) {
+      assert.equal(Object.hasOwn(sent.payload, key), false);
+    }
+  }
+  const fixed = profiles.find((profile) => profile.id === "indoor-fixed");
+  assert.equal(fixed.settings.awb, false);
+  assert.equal(profiles.find((profile) => profile.id === "neutral").settings.awb, true);
+  const other = overview.body.cameras.filter((entry) => entry.kind !== "esp32-p4");
+  assert.ok(other.every((entry) => entry.imageProfiles.length === 0));
+});
+
+test("image profile API rejects unknown IDs, overrides, wrong camera kinds and incompatible firmware before publish", async () => {
+  const { controller, published, topics } = controllerWithBroker();
+  const camera = p4Camera();
+  const report = imageProfileReport();
+  topics.set(`${camera.mqttTopicBase}/status/config`, { lastMessage: JSON.stringify(report), timestamp: Date.now() });
+  for (const change of [{ profileId: "__proto__" }, { profileId: 0 }, { profileId: "neutral", settings: { fps: 1 } },
+    { profileId: "neutral", payload: 1 }, { cameraId: dfrCamera().cameraId, profileId: "neutral" }]) {
+    const res = response();
+    await controller.sendCommand({ hostname: "localhost", body: { cameraId: camera.cameraId,
+      action: "image_profile", ...change } }, res);
+    assert.equal(res.statusCode, 400);
+  }
+  delete report.image_controls.adaptive_image;
+  topics.set(`${camera.mqttTopicBase}/status/config`, { lastMessage: JSON.stringify(report), timestamp: Date.now() });
+  const res = response();
+  await controller.sendCommand({ hostname: "localhost", body: { cameraId: camera.cameraId,
+    action: "image_profile", profileId: "neutral" } }, res);
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.error, "image_profile_unavailable");
+  assert.equal(published.length, 0);
+});
+
 test("Pi reference maps platform units, preserves mounting/capture and reports offline retained values", async () => {
   const { controller, published, topics } = controllerWithBroker();
   const p4 = p4Camera();

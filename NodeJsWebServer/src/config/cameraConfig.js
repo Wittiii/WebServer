@@ -1,3 +1,5 @@
+const { getCameraImageProfiles } = require("./cameraImageProfiles");
+
 function toNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -399,6 +401,7 @@ function getCameraConfigById(cameraId, hostname = "localhost") {
 }
 
 module.exports = {
+  getCameraImageProfiles,
   getCameraConfigs,
   getCameraConfigById,
 };
