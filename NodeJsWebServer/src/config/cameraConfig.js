@@ -335,6 +335,7 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
         { key: "sharpness", label: "Kantenschaerfe (ISP)", type: "number", integer: true, slider: true, group: "Bild & Farbabstimmung" },
         { key: "denoise", label: "Entrauschung (Bayer-Filter)", type: "number", integer: true, slider: true, group: "Bild & Farbabstimmung" },
         { key: "exposure_target", label: "Belichtungsziel (Automatik)", type: "number", integer: true, slider: true, group: "Bild & Farbabstimmung" },
+        { key: "gain_limit", label: "Maximale Sensorverstaerkung (1000 = 1x)", type: "number", integer: true, slider: true, group: "Bild & Farbabstimmung" },
         { key: "awb", label: "Auto-Weissabgleich (AWB)", type: "checkbox", group: "Weissabgleich & Ausrichtung" },
         { key: "red_balance", label: "Rot-Balance (1000 = 1.0x)", type: "number", integer: true, slider: true, group: "Weissabgleich & Ausrichtung" },
         { key: "blue_balance", label: "Blau-Balance (1000 = 1.0x)", type: "number", integer: true, slider: true, group: "Weissabgleich & Ausrichtung" },

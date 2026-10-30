@@ -324,6 +324,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         gamma: 65,
         sharpness: 55,
         denoise: 1,
+        gain_limit: 15500,
         awb: true,
         red_balance: 1000,
         blue_balance: 1000,
@@ -335,6 +336,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
         gamma: { min: 40, max: 100, step: 1, default: 65, value: 65 },
         sharpness: { min: 0, max: 100, step: 1, default: 55, value: 55 },
         denoise: { min: 0, max: 20, step: 1, default: 1, value: 1 },
+        gain_limit: { min: 1000, max: 15500, step: 500, default: 15500, value: 15500 },
         awb: { min: 0, max: 1, step: 1, default: 1, value: 1 },
         red_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
         blue_balance: { min: 250, max: 3500, step: 1, default: 1000, value: 1000 },
@@ -360,6 +362,8 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
   assert.equal(fieldsByKey.get("gamma").default, 65);
   assert.equal(fieldsByKey.get("sharpness").default, 55);
   assert.equal(fieldsByKey.get("denoise").default, 1);
+  assert.equal(fieldsByKey.get("gain_limit").max, 15500);
+  assert.equal(fieldsByKey.get("gain_limit").step, 500);
   assert.equal(fieldsByKey.get("awb").section, "Weissabgleich & Ausrichtung");
   assert.equal(fieldsByKey.get("red_balance").section, undefined);
   assert.equal(fieldsByKey.get("fps").section, "Livestream");
@@ -370,6 +374,7 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
     gamma: 58,
     sharpness: 52,
     denoise: 3,
+    gain_limit: 8000,
     awb: false,
     red_balance: 1120,
     blue_balance: 940,
@@ -393,6 +398,8 @@ test("ESP32-P4 ISP tuning controls, presets, defaults and section groups resolve
     { gamma: 39 },
     { sharpness: 101 },
     { denoise: -1 },
+    { gain_limit: 16000 },
+    { gain_limit: 8250 },
     { awb: 2 },
     { red_balance: 200 },
     { blue_balance: 4000 },
