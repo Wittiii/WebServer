@@ -16,7 +16,7 @@ nichts; das gilt auch bei eingeschalteter Live-Uebernahme.
 | low-light | Wenig Licht | gamma64, AE78, Helligkeit2, Kontrast120, Saettigung112, Schaerfe32, Denoise6 |
 | highlights | Helle Lichtquellen | AE55, gamma68, Kontrast120, Saettigung116, Schaerfe40 |
 | reference | OV5647 Referenz | AE80, Saettigung128; gleiche neue Firmware-Farbmatrix |
-| indoor-fixed | Innenlicht fest | AWB aus, Rot1.15x, Blau2.50x; Versuch fuer aktuelles Innenlicht |
+| indoor-fixed | Innenlicht fest | AWB aus, Rot1.15x, Blau3.40x; Versuch fuer aktuelles Innenlicht |
 
 Alle Profile setzen `preset=0`, `hue=0`, `adaptive_image=true` und
 `gain_limit=15500`. Ausser Innenlicht fest verwenden sie AWB. Manuelle
@@ -51,7 +51,11 @@ Statistiken und Sensorwerte werden unveraendert weitergegeben. Laufzeit-Updates
 der IPA fuer Gamma, Kontrast, Saettigung, Farbton, Helligkeit, Bayer-Filter und
 Nachschaerfung werden dabei unterdrueckt: Diese Regler gehoeren der Anwendung,
 damit IPA-Standardwerte ein ausgewaehltes Testprofil nicht ueberschreiben.
-Initialisierungswerte sowie automatische CCM/WB/LSC bleiben erhalten. Ohne frische
+Initialisierungswerte sowie automatische CCM/LSC bleiben erhalten.
+Bei ausgeschaltetem AWB werden auch interne AWB-/Rot-/Blau-Updates
+unterdrueckt. Die 500-ms-Kontrolle vergleicht die tatsaechlichen manuellen
+WB-Gains und korrigiert einen noch nachgelaufenen alten Automatik-Schreibzugriff.
+Beim Rueckwechsel auf AWB werden dessen Updates wieder freigegeben. Ohne frische
 Messung fuer 2 s greift wieder der native Wert. Vendorteile bleiben unveraendert.
 
 `status/config.color_tuning_revision` kennzeichnet den Stand. Unter
@@ -94,3 +98,28 @@ Geaenderte Server-Dateien:
 Die neuen Profile verwenden die vorhandenen Kamera-Topics. Sie funktionieren
 auch mit vorheriger Firmware, sofern diese alle benoetigten Regler meldet;
 die neue Farbmatrix benoetigt den aktualisierten Firmware-Build.
+
+
+## Verifizierter Abschluss am 30.10.2026
+
+Firmware erfolgreich gebaut und ueber COM3 installiert, Flash-Hashes geprueft.
+Aktuelles App-Image: 1502016 Bytes, SHA256 `beac260d25d41106d977d822c6ef9d99f88de0ad8837108bc5641cf5c422a186`.
+Die Kamera meldet `ov5647-ccm-gain-v1`; bei 15.5x gemessenem Gain wurde die
+70-Prozent-Mischung der CCM am laufenden ISP nachgerechnet und bestaetigt.
+
+Neutral und Innenlicht fest wurden per korreliertem MQTT-Auftrag am P4
+angewendet und als RTSP-Einzelbilder dekodiert. Der feste Weissabgleich
+wurde mit tatsaechlich ausgelesenen Rot1.15x/Blau3.40x bestaetigt. Die
+zuvor moegliche Ueberschreibung durch interne AWB-Updates ist abgesichert.
+Anschliessend wurden die zuvor vom Nutzer eingestellten Bildwerte wiederhergestellt.
+Stream- und Montagewerte sowie Capture wurden beim Profiltest nicht veraendert.
+
+17 Kameratests bestehen mit den finalen Profilwerten. Der vollstaendige
+Webserver-Testlauf bestand mit 138 Tests und einem unter Windows
+uebersprungenen Symlink-Test. Native Gain-Adapter-Tests und zwei
+CCM-Konfigurationstests bestanden ebenfalls.
+
+Ein Remote-Deployment des Node-Webservers wurde in dieser Sitzung nicht
+vorgenommen. Fuer die Profilauswahl muss dessen laufender Prozess den
+aktualisierten lokalen Quellstand verwenden; anschliessend die Kameraseite
+neu laden. Die Testprofile sind Ausgangspunkte, keine Farbchart-Kalibrierung.

@@ -15,7 +15,7 @@ const profiles = [
   ["low-light", "Wenig Licht", "Hellere Schatten bei wenig Licht; helle Lichtquellen können stärker überstrahlen.", { brightness: 2, contrast: 120, saturation: 112, gamma: 64, sharpness: 32, denoise: 6, exposure_target: 78 }],
   ["highlights", "Helle Lichtquellen", "Niedrigeres Belichtungsziel für Szenen mit Lampen oder Fenstern; dunkle Bereiche können dunkler werden.", { contrast: 120, saturation: 116, gamma: 68, sharpness: 40, exposure_target: 55 }],
   ["reference", "OV5647 Referenz", "Bisherige Standard-Bildwerte zum Vergleich; verwendet ebenfalls die Farbmatrix der installierten Firmware.", { saturation: 128, exposure_target: 80 }],
-  ["indoor-fixed", "Innenlicht fest", "Fester Weißabgleich als Versuch gegen den Gelbstich unter dem aktuellen Innenlicht. Bei anderem Licht wieder Neutral wählen.", { awb: false, red_balance: 1150, blue_balance: 2500 }],
+  ["indoor-fixed", "Innenlicht fest", "Fester Weißabgleich als Versuch gegen den Gelbstich unter dem aktuellen Innenlicht. Bei anderem Licht wieder Neutral wählen.", { awb: false, red_balance: 1150, blue_balance: 3400 }],
 ].map(([id, label, description, changes]) => Object.freeze({
   id, label, description, settings: Object.freeze({ ...base, ...changes }),
 }));
