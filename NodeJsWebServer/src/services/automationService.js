@@ -42,6 +42,17 @@ const activeRulesWithActions = db.prepare(`
   ORDER BY r.id ASC, a.position ASC, a.id ASC
 `);
 const maximumRuleId = db.prepare('SELECT MAX(id) AS id FROM object_automation_rules');
+const activeValueRulesForObjectKey = db.prepare(`
+  SELECT r.id, r.object_id, r.enabled, r.trigger_type, r.value_key, r.operator,
+         r.compare_value, r.schedule_time, r.weekdays_json, r.window_start,
+         r.window_end, r.cooldown_seconds, r.hysteresis_value,
+         r.last_fired_at, r.last_condition_state,
+         a.position, a.action_type, a.action_label, a.action_topic, a.action_payload
+  FROM object_automation_rules r
+  LEFT JOIN object_automation_rule_actions a ON a.rule_id = r.id
+  WHERE r.enabled = 1 AND r.trigger_type = 'value' AND r.object_id = ? AND r.value_key = ?
+  ORDER BY r.id ASC, a.position ASC, a.id ASC
+`);
 const activeRuleIds = db.prepare(`
   SELECT id FROM object_automation_rules
   WHERE enabled = 1 AND id > ? AND id <= ?
@@ -288,9 +299,11 @@ async function evaluateTimeRule(rule, now) {
   updateRuleFiredAt.run(nowIso, nowIso, rule.id);
 }
 
-function loadActiveRules(afterId, throughId) {
+const inFlightRuleIds = new Set();
+
+function groupRulesWithActions(rows) {
   const rulesById = new Map();
-  for (const row of activeRulesWithActions.all(afterId, throughId)) {
+  for (const row of rows) {
     let rule = rulesById.get(row.id);
     if (!rule) {
       rule = { ...row, actions: [] };
@@ -314,6 +327,38 @@ function loadActiveRules(afterId, throughId) {
   return [...rulesById.values()];
 }
 
+function loadActiveRules(afterId, throughId) {
+  return groupRulesWithActions(activeRulesWithActions.all(afterId, throughId));
+}
+
+function loadActiveValueRulesForObjectKey(objectId, valueKey) {
+  return groupRulesWithActions(activeValueRulesForObjectKey.all(objectId, valueKey));
+}
+
+async function evaluateRulesForValueKey(objectId, valueKey, now = new Date()) {
+  const rules = loadActiveValueRulesForObjectKey(objectId, valueKey);
+  for (const rule of rules) {
+    if (!rule.actions.length) continue;
+    if (inFlightRuleIds.has(rule.id)) continue;
+    inFlightRuleIds.add(rule.id);
+    try {
+      if (rule.trigger_type === "value") {
+        await evaluateValueRule(rule, now);
+      }
+    } catch (error) {
+      console.error("[automation] event-driven rule failed", rule.id, error);
+    } finally {
+      inFlightRuleIds.delete(rule.id);
+    }
+  }
+}
+
+function triggerAutomationForValue(objectId, valueKey) {
+  evaluateRulesForValueKey(objectId, valueKey).catch((error) => {
+    console.error("[automation] trigger failed", objectId, valueKey, error);
+  });
+}
+
 function processRules(now = new Date()) {
   if (runningTask) return runningTask;
   runningTask = (async () => {
@@ -333,6 +378,8 @@ function processRules(now = new Date()) {
           await yieldToServer();
           nextYieldAt = performance.now() + WORK_SLICE_MS;
         }
+        if (inFlightRuleIds.has(rule.id)) continue;
+        inFlightRuleIds.add(rule.id);
         try {
           if (!rule.actions.length) continue;
           if (rule.trigger_type === "value") {
@@ -342,6 +389,8 @@ function processRules(now = new Date()) {
           }
         } catch (error) {
           console.error("[automation] rule failed", rule.id, error);
+        } finally {
+          inFlightRuleIds.delete(rule.id);
         }
       }
       if (afterId < throughId) {
@@ -373,4 +422,11 @@ async function stopAutomationEngine() {
   await runningTask;
 }
 
-module.exports = { startAutomationEngine, stopAutomationEngine, processRules, publishAutomationActions };
+module.exports = {
+  startAutomationEngine,
+  stopAutomationEngine,
+  processRules,
+  publishAutomationActions,
+  evaluateRulesForValueKey,
+  triggerAutomationForValue,
+};

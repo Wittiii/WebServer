@@ -8,6 +8,9 @@ const db = require('./database/db');
 const { ingestPowerMeterMessage } = require('./services/powerMeterService');
 const { ingestVictronMessage } = require('./services/victronMpptService');
 const { createValueExtractor } = require('./services/mqttPayloadService');
+const { createRetentionCleanup } = require('./services/retentionCleanupService');
+const { configuredNumber } = require('./services/sensorReadingUtils');
+const { triggerAutomationForValue } = require('./services/automationService');
 
 const TCP_PORT = process.env.MQTT_TCP_PORT || 1883;
 const WS_PORT  = process.env.MQTT_WS_PORT  || 8883;
@@ -193,15 +196,30 @@ function getKeysForObject(objectId, topic, fallbackKey) {
   return [];
 }
 
+const objectRetentionDays = configuredNumber(process.env.OBJECT_READINGS_RETENTION_DAYS, 365, 0);
+const deleteOldObjectReadings = db.prepare(`DELETE FROM object_readings WHERE id IN (
+  SELECT id FROM object_readings WHERE created_at < ? ORDER BY id LIMIT ?
+)`);
+const cleanupObjectReadingsBatch = createRetentionCleanup(deleteOldObjectReadings);
+
+function cleanupOldObjectReadings(now = Date.now(), retentionDays = objectRetentionDays) {
+  if (retentionDays <= 0) return;
+  const cutoff = new Date(now - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  cleanupObjectReadingsBatch(now, cutoff);
+}
+
 const storeObjectReadings = db.transaction((rows, topic, raw, now, extractValue) => {
+  const stored = [];
   for (const obj of rows) {
     const keys = getKeysForObject(obj.id, topic, obj.value_key);
     for (const key of keys) {
       const valueText = extractValue(key);
       if (!valueText) continue;
       insertObjectReading.run(obj.id, topic, key, valueText, raw, now);
+      stored.push({ objectId: obj.id, key });
     }
   }
+  return stored;
 });
 
 function storeReading(topic, payload) {
@@ -212,7 +230,11 @@ function storeReading(topic, payload) {
   const now = new Date().toISOString();
   const extractValue = createValueExtractor(raw);
 
-  storeObjectReadings(rows, topic, raw, now, extractValue);
+  const stored = storeObjectReadings(rows, topic, raw, now, extractValue);
+  cleanupOldObjectReadings(Date.now());
+  for (const item of stored) {
+    triggerAutomationForValue(item.objectId, item.key);
+  }
 }
 
 
@@ -362,4 +384,4 @@ function publish(topic, payload, opts = {}) {
   });
 }
 
-module.exports = { clients, publish, topics, getClientSnapshot, listClientSnapshots, isClientConnected, startMqttBroker, stopMqttBroker };
+module.exports = { clients, publish, topics, getClientSnapshot, listClientSnapshots, isClientConnected, startMqttBroker, stopMqttBroker, cleanupOldObjectReadings };

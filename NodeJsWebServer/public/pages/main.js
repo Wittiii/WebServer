@@ -54,19 +54,8 @@ function markActiveNav(navLinks) {
   const host = document.getElementById("navbar");
   if (!host) return;
 
-  try {
-    const html = await fetch("/pages/navbar.html").then((res) => {
-      if (!res.ok) throw new Error("navbar");
-      return res.text();
-    });
+  function renderNavbar(html, loggedIn) {
     host.innerHTML = html;
-
-    let loggedIn = false;
-    try {
-      const status = await fetch("/login/status").then((res) => res.json());
-      loggedIn = !!status.loggedIn;
-    } catch {}
-
     const navbar = host.querySelector(".navbar");
     const navLinks = host.querySelector(".nav-links");
     if (!navbar || !navLinks) return;
@@ -75,43 +64,84 @@ function markActiveNav(navLinks) {
     navLinks.id = "primary-navigation";
     markActiveNav(navLinks);
 
-    const toggle = document.createElement("button");
-    toggle.className = "navbar-toggle";
-    toggle.type = "button";
-    toggle.innerHTML = '<span class="nav-toggle-icon" aria-hidden="true"></span><span>Menü</span>';
-    toggle.setAttribute("aria-controls", navLinks.id);
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.setAttribute("aria-label", "Navigation öffnen");
-    navbar.insertBefore(toggle, navLinks);
-
-    const setMenuOpen = (open) => {
-      navLinks.classList.toggle("open", open);
-      toggle.setAttribute("aria-expanded", String(open));
-      toggle.setAttribute("aria-label", open ? "Navigation schließen" : "Navigation öffnen");
-    };
-
-    toggle.addEventListener("click", () => {
-      setMenuOpen(!navLinks.classList.contains("open"));
+    navLinks.querySelector(".logout form")?.addEventListener("submit", () => {
+      try { sessionStorage.removeItem("cached_auth_logged_in"); } catch {}
     });
 
-    navLinks.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => setMenuOpen(false));
-    });
+    if (!navbar.querySelector(".navbar-toggle")) {
+      const toggle = document.createElement("button");
+      toggle.className = "navbar-toggle";
+      toggle.type = "button";
+      toggle.innerHTML = '<span class="nav-toggle-icon" aria-hidden="true"></span><span>Menü</span>';
+      toggle.setAttribute("aria-controls", navLinks.id);
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", "Navigation öffnen");
+      navbar.insertBefore(toggle, navLinks);
 
-    window.addEventListener("click", (event) => {
-      if (!navbar.contains(event.target)) {
-        setMenuOpen(false);
-      }
-    });
-    navbar.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && navLinks.classList.contains("open")) {
-        setMenuOpen(false);
-        toggle.focus();
-      }
-    });
-    window.matchMedia("(max-width: 960px)").addEventListener("change", () => setMenuOpen(false));
+      const setMenuOpen = (open) => {
+        navLinks.classList.toggle("open", open);
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.setAttribute("aria-label", open ? "Navigation schließen" : "Navigation öffnen");
+      };
+
+      toggle.addEventListener("click", () => {
+        setMenuOpen(!navLinks.classList.contains("open"));
+      });
+
+      navLinks.querySelectorAll("a").forEach((link) => {
+        link.addEventListener("click", () => setMenuOpen(false));
+      });
+
+      window.addEventListener("click", (event) => {
+        if (!navbar.contains(event.target)) {
+          setMenuOpen(false);
+        }
+      });
+      navbar.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && navLinks.classList.contains("open")) {
+          setMenuOpen(false);
+          toggle.focus();
+        }
+      });
+      window.matchMedia("(max-width: 960px)").addEventListener("change", () => setMenuOpen(false));
+    }
+  }
+
+  // 1. Instant synchronous render from session cache if available to prevent flicker
+  let cachedHtml = null;
+  let cachedLoggedIn = null;
+  try {
+    cachedHtml = sessionStorage.getItem("cached_navbar_html");
+    const storedStatus = sessionStorage.getItem("cached_auth_logged_in");
+    if (storedStatus !== null) cachedLoggedIn = storedStatus === "true";
+  } catch {}
+
+  if (cachedHtml && cachedLoggedIn !== null) {
+    renderNavbar(cachedHtml, cachedLoggedIn);
+  }
+
+  // 2. Fetch or revalidate in background
+  try {
+    let html = cachedHtml;
+    if (!html) {
+      const res = await fetch("/pages/navbar.html");
+      if (!res.ok) throw new Error("navbar");
+      html = await res.text();
+      try { sessionStorage.setItem("cached_navbar_html", html); } catch {}
+    }
+
+    let loggedIn = cachedLoggedIn ?? false;
+    try {
+      const status = await fetch("/login/status").then((res) => res.json());
+      loggedIn = !!status.loggedIn;
+      try { sessionStorage.setItem("cached_auth_logged_in", String(loggedIn)); } catch {}
+    } catch {}
+
+    renderNavbar(html, loggedIn);
   } catch {
-    host.innerHTML = '<nav class="navbar" aria-label="Hauptnavigation"><a class="nav-brand" href="/">Smart IoT Ops</a><a href="/login">Anmelden</a></nav>';
+    if (!host.querySelector(".navbar")) {
+      host.innerHTML = '<nav class="navbar" aria-label="Hauptnavigation"><a class="nav-brand" href="/">Smart IoT Ops</a><a href="/login">Anmelden</a></nav>';
+    }
   }
 
   await initBrokerOverview();

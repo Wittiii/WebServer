@@ -1,4 +1,4 @@
-﻿const path = require('path');
+const path = require('path');
 const Database = require('better-sqlite3');
 
 const databasePath = process.env.DATABASE_PATH
@@ -48,6 +48,8 @@ db.exec(`
     ON object_readings(object_id, value_key, created_at, id);
   CREATE INDEX IF NOT EXISTS idx_object_readings_object_time
     ON object_readings(object_id, created_at, id);
+  CREATE INDEX IF NOT EXISTS idx_object_readings_created_at
+    ON object_readings(created_at);
 `)
 
 const haveValueKeys = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='object_value_keys'").get();
@@ -258,6 +260,7 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_object_automation_rules_object ON object_automation_rules(object_id);
   CREATE INDEX IF NOT EXISTS idx_object_automation_rules_enabled ON object_automation_rules(enabled);
+  CREATE INDEX IF NOT EXISTS idx_object_automation_rules_object_key ON object_automation_rules(object_id, value_key);
 `);
 
 db.exec(`

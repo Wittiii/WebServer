@@ -40,3 +40,26 @@ test('a failed cleanup can be retried immediately after a transient database err
   cleanup(1000, 100);
   assert.equal(attempts, 2);
 });
+
+test('object readings retention deletes expired ISO timestamps in batches', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`CREATE TABLE object_readings (id INTEGER PRIMARY KEY, created_at TEXT);
+      CREATE INDEX idx_object_readings_created_at ON object_readings(created_at);`);
+    const insert = db.prepare('INSERT INTO object_readings (created_at) VALUES (?)');
+    db.transaction(() => {
+      for (let i = 0; i < 600; i++) insert.run('2026-01-01T00:00:00.000Z');
+      insert.run('2026-11-11T00:00:00.000Z');
+    })();
+    const deleteBatch = db.prepare(`DELETE FROM object_readings WHERE id IN (
+      SELECT id FROM object_readings WHERE created_at < ? ORDER BY id LIMIT ?
+    )`);
+    const cleanup = createRetentionCleanup(deleteBatch);
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM object_readings').get().n;
+    cleanup(1000, '2026-06-01T00:00:00.000Z');
+    assert.equal(count(), 101);
+    cleanup(2000, '2026-06-01T00:00:00.000Z');
+    assert.equal(count(), 1);
+    assert.equal(db.prepare('SELECT created_at FROM object_readings').get().created_at, '2026-11-11T00:00:00.000Z');
+  } finally { db.close(); }
+});

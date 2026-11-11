@@ -17,7 +17,7 @@ require.cache[brokerPath] = {
   loaded: true,
   exports: { publish: (...args) => publishImplementation(...args) },
 };
-const { processRules, startAutomationEngine, stopAutomationEngine } = require('../src/services/automationService');
+const { processRules, startAutomationEngine, stopAutomationEngine, evaluateRulesForValueKey } = require('../src/services/automationService');
 const controller = require('../src/controllers/objectsController');
 const now = new Date('2026-09-06T12:00:00Z');
 const timestamp = now.toISOString();
@@ -213,4 +213,19 @@ test('large automation polls yield between rule pages without locks and defer ru
   assert.equal(published.length, 96, 'new rules are processed by the next poll');
   await processRules(now);
   assert.equal(published.length, 97);
+});
+
+test('event-driven evaluation fires value rules immediately for specific object and key', async () => {
+  const ruleId = createRule({ valueKey: 'moisture', operator: '<', compareValue: '30' });
+  db.prepare(`INSERT INTO object_readings
+    (object_id, topic, value_key, value_text, raw_payload, created_at)
+    VALUES (1, 'sensor/moisture', 'moisture', '25', '{}', ?)`)
+    .run(timestamp);
+  assert.equal(published.length, 0);
+  await evaluateRulesForValueKey(1, 'moisture', now);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].topic, 'test/relay');
+  assert.equal(db.prepare('SELECT last_condition_state FROM object_automation_rules WHERE id = ?').get(ruleId).last_condition_state, 1);
+  await evaluateRulesForValueKey(1, 'moisture', now);
+  assert.equal(published.length, 1);
 });

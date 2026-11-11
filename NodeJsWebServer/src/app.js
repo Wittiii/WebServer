@@ -41,7 +41,7 @@ function createApp({ sessionStore = new BoundedMemorySessionStore(), health, dia
   app.use('/camera', authGuard, require('./routes/camera/camera'));
   app.use('/console', authGuard, require('./routes/console/console'));
   app.use('/energy', authGuard, require('./routes/energy/energy'));
-  app.use('/hydroponic', authGuard, require('./routes/Hydroponic/hydroponic'));
+  app.use('/hydroponic', authGuard, require('./routes/hydroponic/hydroponic'));
   app.use('/login', require('./routes/auth/auth'));
   app.use('/api/objects', apiAuth, require('./routes/database/database'));
   app.use('/api/mqtt', require('./routes/mqtt/mqtt'));

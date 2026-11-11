@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "checkJs": false,
+    "resolveJsonModule": true
+  },
+  "exclude": ["node_modules", "data", "logs"]
+}

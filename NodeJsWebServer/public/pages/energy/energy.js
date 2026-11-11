@@ -1,3 +1,17 @@
+import {
+  fallbackVictronBatteryProfiles,
+  chargerStateLabels,
+  victronStatusLabels,
+  victronMqttLabels,
+  number,
+  dateTime,
+  setText,
+  formatTopicAge,
+  getVictronBatteryProfile as getBatteryProfileUtil,
+  detectVictronSystemFactor as detectBatterySystemFactor,
+} from "./energy-utils.js";
+import { drawPowerChart } from "./energy-charts.js";
+
 const elements = {
   livePower: document.getElementById("energy-live-power"),
   onlineBadge: document.getElementById("energy-online-badge"),
@@ -119,57 +133,7 @@ let energyLayout = defaultEnergyLayout.map((entry) => ({ ...entry }));
 const numberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 const currencyFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
 
-const fallbackVictronBatteryProfiles = [
-  {
-    id: "lifepo4",
-    label: "LiFePO4",
-    description: "Lithium-Eisenphosphat, 4S / 8S / 12S / 16S",
-    nominalBaseVoltageV: 12.8,
-    emptyBaseVoltageV: 11.2,
-    fullBaseVoltageV: 13.5,
-  },
-  {
-    id: "agm",
-    label: "AGM / Blei",
-    description: "Geschlossene 12-V-Bleibatterie",
-    nominalBaseVoltageV: 12,
-    emptyBaseVoltageV: 11.8,
-    fullBaseVoltageV: 12.8,
-  },
-  {
-    id: "gel",
-    label: "Gel",
-    description: "12-V-Gelbatterie",
-    nominalBaseVoltageV: 12,
-    emptyBaseVoltageV: 11.8,
-    fullBaseVoltageV: 12.85,
-  },
-  {
-    id: "custom",
-    label: "Frei konfiguriert",
-    description: "Eigene absolute Leer- und Vollspannung",
-    nominalBaseVoltageV: 12,
-    emptyBaseVoltageV: 11,
-    fullBaseVoltageV: 14,
-  },
-];
 let victronBatteryProfiles = fallbackVictronBatteryProfiles;
-
-function number(value, digits = 2) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "--";
-  return numeric.toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: digits });
-}
-
-function dateTime(value) {
-  if (!value) return "--";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("de-DE");
-}
-
-function setText(element, value) {
-  if (element) element.textContent = value;
-}
 
 function getLayoutSection(id) {
   return elements.layoutGrid?.querySelector(`[data-layout-id="${id}"]`) || null;
@@ -325,105 +289,6 @@ function updateLayoutFromCustomizerDom() {
   saveEnergyLayout();
 }
 
-function formatAxisTime(timestamp, period) {
-  const date = new Date(timestamp);
-  if (period === "1h" || period === "24h") {
-    return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-  }
-  return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
-}
-
-function roundedRect(context, x, y, width, height, radius) {
-  context.beginPath();
-  context.roundRect(x, y, width, height, radius);
-  context.fill();
-}
-
-function drawPowerChart(canvas, emptyElement, entries, averageKey, peakKey, color, fillColor, period) {
-  if (!canvas) return;
-  const points = entries.filter((entry) => Number.isFinite(Number(entry[averageKey])));
-  emptyElement.hidden = points.length > 1;
-
-  const width = Math.max(320, canvas.clientWidth);
-  const height = Math.max(260, canvas.clientHeight);
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.round(width * ratio);
-  canvas.height = Math.round(height * ratio);
-  const context = canvas.getContext("2d");
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, width, height);
-  if (points.length < 2) return;
-
-  const padding = { top: 25, right: 22, bottom: 45, left: 58 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const maxPower = Math.max(10, ...points.map((entry) => Number(entry[peakKey] || entry[averageKey])));
-  const chartMax = Math.ceil(maxPower / 10) * 10;
-
-  context.font = "12px IBM Plex Sans, sans-serif";
-  context.textBaseline = "middle";
-  for (let index = 0; index <= 4; index += 1) {
-    const y = padding.top + (plotHeight / 4) * index;
-    const value = chartMax - (chartMax / 4) * index;
-    context.strokeStyle = "rgba(145, 167, 197, 0.14)";
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(padding.left, y);
-    context.lineTo(width - padding.right, y);
-    context.stroke();
-    context.fillStyle = "#91a7c5";
-    context.textAlign = "right";
-    context.fillText(`${number(value, 0)} W`, padding.left - 10, y);
-  }
-
-  const xFor = (index) => padding.left + (index / (points.length - 1)) * plotWidth;
-  const yFor = (value) => padding.top + plotHeight - (Number(value) / chartMax) * plotHeight;
-  const gradient = context.createLinearGradient(0, padding.top, 0, padding.top + plotHeight);
-  gradient.addColorStop(0, fillColor);
-  gradient.addColorStop(1, "rgba(4, 10, 19, 0.01)");
-
-  context.beginPath();
-  points.forEach((entry, index) => {
-    const x = xFor(index);
-    const y = yFor(entry[averageKey]);
-    if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-  });
-  context.lineTo(xFor(points.length - 1), padding.top + plotHeight);
-  context.lineTo(xFor(0), padding.top + plotHeight);
-  context.closePath();
-  context.fillStyle = gradient;
-  context.fill();
-
-  context.beginPath();
-  points.forEach((entry, index) => {
-    const x = xFor(index);
-    const y = yFor(entry[averageKey]);
-    if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
-  });
-  context.strokeStyle = color;
-  context.lineWidth = 3;
-  context.lineJoin = "round";
-  context.stroke();
-
-  context.fillStyle = "#ff7f7f";
-  points.forEach((entry, index) => {
-    const average = Number(entry[averageKey]);
-    const peak = Number(entry[peakKey]);
-    if (!Number.isFinite(peak) || peak <= average) return;
-    const x = xFor(index);
-    const y = yFor(peak);
-    roundedRect(context, x - 1.5, y - 1.5, 3, Math.max(3, yFor(average) - y), 2);
-  });
-
-  const labelIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
-  context.fillStyle = "#91a7c5";
-  context.textBaseline = "top";
-  labelIndexes.forEach((pointIndex, index) => {
-    context.textAlign = index === 0 ? "left" : index === labelIndexes.length - 1 ? "right" : "center";
-    context.fillText(formatAxisTime(points[pointIndex].timestamp, period), xFor(pointIndex), height - padding.bottom + 14);
-  });
-}
-
 function drawChart() {
   drawPowerChart(
     elements.chart,
@@ -450,70 +315,17 @@ function drawVictronChart() {
   );
 }
 
-const chargerStateLabels = {
-  off: "Aus",
-  low_power: "Niedrigleistung",
-  fault: "Stoerung",
-  bulk: "Bulk",
-  absorption: "Absorption",
-  float: "Float",
-  storage: "Lagerung",
-  equalize: "Ausgleich",
-  inverting: "Wechselrichter",
-  power_supply: "Netzteil",
-  external_control: "Extern gesteuert",
-};
-
-const victronStatusLabels = {
-  ready: "BLE-Daten werden empfangen",
-  waiting: "Wartet auf Victron BLE-Daten",
-  stale: "Victron BLE-Daten sind veraltet",
-  not_configured: "Victron ist im DFR1154 nicht konfiguriert",
-  init_error: "Victron BLE konnte nicht gestartet werden",
-  disabled: "Victron BLE ist deaktiviert",
-};
-
-const victronMqttLabels = {
-  age_seconds: "Alter der BLE-Messung",
-  battery_current_a: "Batteriestrom",
-  battery_percentage: "Batterie-SOC",
-  battery_soc: "Batterie-SOC",
-  battery_soc_percent: "Batterie-SOC",
-  battery_state_of_charge: "Batterie-SOC",
-  battery_voltage_v: "Batteriespannung",
-  ble_status: "BLE-Status",
-  charger_state: "Ladephase",
-  charger_state_id: "Ladephasen-ID",
-  configured: "Konfiguriert",
-  error_code: "Fehlercode",
-  json: "Kompletter JSON-Datensatz",
-  load_current_a: "Laststrom",
-  panel_power_w: "PV-Leistung",
-  rssi: "BLE-Signalstaerke",
-  soc: "Batterie-SOC",
-  soc_percent: "Batterie-SOC",
-  state_of_charge: "Batterie-SOC",
-  yield_today_wh: "Tagesertrag",
-};
-
 function getVictronBatteryProfile(profileId) {
-  return victronBatteryProfiles.find((profile) => profile.id === profileId)
-    || fallbackVictronBatteryProfiles.find((profile) => profile.id === profileId)
-    || fallbackVictronBatteryProfiles[0];
+  return getBatteryProfileUtil(victronBatteryProfiles, profileId);
 }
 
 function detectVictronSystemFactor(profile, selectedSystem, batteryVoltageV) {
-  if (selectedSystem !== "auto") return { 12: 1, 24: 2, 36: 3, 48: 4 }[selectedSystem] || 1;
-  const voltage = Number(batteryVoltageV);
-  if (!Number.isFinite(voltage) || voltage <= 0) {
-    const detected = Number(latestVictronEstimation?.detectedSystemVoltage);
-    return { 12: 1, 24: 2, 36: 3, 48: 4 }[detected] || 1;
-  }
-  return [1, 2, 3, 4].reduce((best, factor) => {
-    const bestDistance = Math.abs(voltage - profile.nominalBaseVoltageV * best);
-    const distance = Math.abs(voltage - profile.nominalBaseVoltageV * factor);
-    return distance < bestDistance ? factor : best;
-  }, 1);
+  return detectBatterySystemFactor(
+    profile,
+    selectedSystem,
+    batteryVoltageV,
+    latestVictronEstimation?.detectedSystemVoltage
+  );
 }
 
 function readSocVoltageInput(element) {
