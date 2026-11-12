@@ -56,9 +56,9 @@ async function fetchReadings(limit, includeFilters = true, chart = false, signal
   return Array.isArray(list) ? list : [];
 }
 
-async function fetchReadingsForKey(key, limit, signal) {
-  const obj = getSelectedObject();
-  if (!obj || !key) return { readings: [] };
+async function fetchReadingsForKey(key, limit, signal, objectId = null) {
+  const targetObjId = objectId || getSelectedObject()?.id;
+  if (!targetObjId || !key) return { readings: [] };
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('view', 'chart');
@@ -69,7 +69,7 @@ async function fetchReadingsForKey(key, limit, signal) {
 
   const timeout = AbortSignal.timeout(12000);
   const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`, { signal: requestSignal });
+  const res = await fetch(`/api/objects/${targetObjId}/readings?${params.toString()}`, { signal: requestSignal });
   if (!res.ok) return { readings: [] };
   const list = await res.json().catch(() => []);
   return HydroChart.normalizeChartResponse(list, limit);
@@ -127,10 +127,11 @@ async function loadReadings() {
     chartHoverIndex = null;
 
     let secondaryOrdered = null;
-    const secKey = secondaryKeySelect?.value;
-    if (secKey && secKey !== getSelectedKey()) {
+    const secSel = getSecondarySelection();
+    const isSameAsPrimary = secSel && Number(secSel.objectId) === Number(obj.id) && secSel.key === getSelectedKey();
+    if (secSel && !isSameAsPrimary) {
       try {
-        const secRes = await fetchReadingsForKey(secKey, 2000, controller.signal);
+        const secRes = await fetchReadingsForKey(secSel.key, 2000, controller.signal, secSel.objectId);
         if (secRes?.readings?.length) {
           secondaryOrdered = secRes.readings.slice().reverse();
         }
@@ -297,6 +298,7 @@ const automationList = document.getElementById('automation-list');
 
 let objectsCache = [];
 let keysCache = [];
+let allObjectsKeysCache = [];
 let lastReadingsCache = [];
 let chartMeta = null;
 let chartTooltip = null;
@@ -443,6 +445,7 @@ function checkThresholds(readings) {
 }
 
 function updateSensorDeckForCurrentKey(readings) {
+  const currentObj = getSelectedObject();
   const currentKey = getSelectedKey();
   if (!currentKey) return;
   const list = Array.isArray(readings) ? readings : [];
@@ -471,28 +474,50 @@ function updateSensorDeckForCurrentKey(readings) {
     }
   }
 
-  latestKeyReadingsCache.set(currentKey, {
+  const entryMeta = {
     valText: latest.value_text,
     valNum: val,
     trend,
     status,
     ts: latest.created_at
-  });
+  };
+  latestKeyReadingsCache.set(currentKey, entryMeta);
+  if (currentObj?.id != null) {
+    latestKeyReadingsCache.set(`${currentObj.id}:${currentKey}`, entryMeta);
+  }
 
   renderSensorDeck();
 }
 
 function renderSensorDeck() {
   if (!sensorDeckEl) return;
-  if (!keysCache || !keysCache.length) {
+  const currentObj = getSelectedObject();
+  const currentObjId = Number(currentObj?.id);
+  const currentKey = getSelectedKey();
+  const secSel = getSecondarySelection();
+
+  const deckItems = allObjectsKeysCache.length
+    ? allObjectsKeysCache
+    : (keysCache || []).map((k) => ({
+        ...k,
+        objectId: currentObjId,
+        objectName: currentObj?.name || ''
+      }));
+
+  if (!deckItems.length) {
     sensorDeckEl.innerHTML = '';
     return;
   }
 
-  const currentKey = getSelectedKey();
-  sensorDeckEl.innerHTML = keysCache.map((k) => {
-    const meta = latestKeyReadingsCache.get(k.value_key);
-    const isSelected = k.value_key === currentKey;
+  const multiObject = objectsCache.length > 1;
+
+  sensorDeckEl.innerHTML = deckItems.map((k) => {
+    const objId = Number(k.objectId || currentObjId);
+    const objName = k.objectName || currentObj?.name || '';
+    const compositeKey = `${objId}:${k.value_key}`;
+    const meta = latestKeyReadingsCache.get(compositeKey) || (objId === currentObjId ? latestKeyReadingsCache.get(k.value_key) : null);
+    const isSelected = objId === currentObjId && k.value_key === currentKey;
+    const isSecSelected = Boolean(secSel && Number(secSel.objectId) === objId && secSel.key === k.value_key);
     const unit = k.unit ? ` ${escapeHtml(k.unit)}` : '';
     const valText = meta ? `${escapeHtml(meta.valText)}${unit}` : '--';
     const trendIcon = meta?.trend === 'up' ? '↗' : meta?.trend === 'down' ? '↘' : meta?.trend === 'stable' ? '→' : '';
@@ -503,10 +528,13 @@ function renderSensorDeck() {
     const icon = nameLow.includes('temp') ? '🌡️' : nameLow.includes('ph') ? '🧪' : (nameLow.includes('ec') || nameLow.includes('leit')) ? '⚡' : (nameLow.includes('feucht') || nameLow.includes('wasser') || nameLow.includes('hum')) ? '💧' : '🌱';
 
     return `
-      <div class="hydro-sensor-card ${isSelected ? 'is-selected' : ''}" data-sensor-key="${escapeHtml(k.value_key)}" role="button" tabindex="0" title="Verlauf für ${escapeHtml(k.label || k.value_key)} anzeigen">
+      <div class="hydro-sensor-card ${isSelected ? 'is-selected' : ''} ${isSecSelected ? 'is-secondary-selected' : ''}" data-sensor-obj="${objId}" data-sensor-key="${escapeHtml(k.value_key)}" role="button" tabindex="0" title="Primärverlauf für ${escapeHtml((objName ? objName + ' · ' : '') + (k.label || k.value_key))} anzeigen">
         <div class="hydro-sensor-top">
           <span class="hydro-sensor-icon">${icon}</span>
-          <span class="hydro-sensor-label">${escapeHtml(k.label || k.value_key)}</span>
+          <span class="hydro-sensor-label">
+            ${multiObject && objName ? `<small class="hydro-sensor-obj-badge">${escapeHtml(objName)}</small> ` : ''}${escapeHtml(k.label || k.value_key)}
+          </span>
+          ${!isSelected ? `<button type="button" class="hydro-sensor-compare-btn ${isSecSelected ? 'is-active' : ''}" data-compare-spec="${escapeHtml(compositeKey)}" title="${isSecSelected ? 'Vergleichskurve ausblenden' : 'Als 2. Kurve (Rechte Achse) zusammenlegen'}">⇄</button>` : ''}
           <span class="hydro-ampel-dot ${statusClass}" title="${statusLabel}"></span>
         </div>
         <div class="hydro-sensor-body">
@@ -517,10 +545,39 @@ function renderSensorDeck() {
     `;
   }).join('');
 
+  sensorDeckEl.querySelectorAll('.hydro-sensor-compare-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const spec = btn.dataset.compareSpec || '';
+      if (!secondaryKeySelect) return;
+      const curSec = getSecondarySelection();
+      if (curSec && curSec.raw === spec) {
+        secondaryKeySelect.value = '';
+      } else {
+        secondaryKeySelect.value = spec;
+      }
+      renderSensorDeck();
+      loadReadings();
+    });
+  });
+
   sensorDeckEl.querySelectorAll('.hydro-sensor-card').forEach((card) => {
-    const handleSelect = () => {
+    const handleSelect = async () => {
+      const targetObjId = Number(card.dataset.sensorObj);
       const key = card.dataset.sensorKey;
-      if (key && keySelect && keySelect.value !== key) {
+      if (!key) return;
+      const activeObj = getSelectedObject();
+      if (Number.isFinite(targetObjId) && Number(activeObj?.id) !== targetObjId && objectSelect) {
+        objectSelect.value = String(targetObjId);
+        renderSelectedObject();
+        await loadKeys(false, key);
+        loadAutomations();
+        populateThresholdInputs();
+        loadHydroponicBrokerSummary();
+        if (isReadingsLogOpen()) loadRealtimeReadings();
+        return;
+      }
+      if (keySelect && keySelect.value !== key) {
         keySelect.value = key;
         keySelect.dispatchEvent(new Event('change'));
       }
@@ -841,10 +898,12 @@ function drawChart(readings = chartDataCache, secondaryReadings = undefined) {
       secMin -= secRange * 0.06;
       secMax += secRange * 0.06;
       secSpan = secMax - secMin || 1;
-      const secKeyVal = secondaryKeySelect?.value || '';
-      secUnit = getUnitForKey(secKeyVal);
-      const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
-      secLabel = secKeyObj?.label || secKeyVal || 'Vergleich';
+      const secSel = getSecondarySelection();
+      secUnit = secSel?.unit || '';
+      const isCrossObject = secSel && Number(secSel.objectId) !== Number(getSelectedObject()?.id);
+      secLabel = secSel
+        ? (isCrossObject && secSel.objectName ? `${secSel.objectName} · ${secSel.label}` : secSel.label)
+        : 'Vergleich';
     }
   }
 
@@ -1062,7 +1121,12 @@ function drawChart(readings = chartDataCache, secondaryReadings = undefined) {
   }
 
   const primKeyObj = getSelectedKeyMeta();
-  const primLabel = primKeyObj?.label || getSelectedKey() || 'Primär';
+  const basePrimLabel = primKeyObj?.label || getSelectedKey() || 'Primär';
+  const secSelForLegend = hasSec ? getSecondarySelection() : null;
+  const isCrossObjectLegend = secSelForLegend && Number(secSelForLegend.objectId) !== Number(getSelectedObject()?.id);
+  const primLabel = isCrossObjectLegend && getSelectedObject()?.name
+    ? `${getSelectedObject().name} · ${basePrimLabel}`
+    : basePrimLabel;
   ctx.font = '12px system-ui, sans-serif';
 
   ctx.fillStyle = '#22d3ee';
@@ -1159,33 +1223,115 @@ function renderKeyList(list) {
   }).join('');
 }
 
+function parseSecondaryValue(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return null;
+  const colonIdx = raw.indexOf(':');
+  if (colonIdx > 0) {
+    const objId = Number(raw.slice(0, colonIdx));
+    const key = raw.slice(colonIdx + 1);
+    if (Number.isFinite(objId) && key) {
+      return { objectId: objId, key, raw: `${objId}:${key}` };
+    }
+  }
+  const currentObj = getSelectedObject();
+  return currentObj ? { objectId: Number(currentObj.id), key: raw, raw: `${currentObj.id}:${raw}` } : null;
+}
+
+function getSecondarySelection() {
+  const parsed = parseSecondaryValue(secondaryKeySelect?.value);
+  if (!parsed) return null;
+  const match = allObjectsKeysCache.find(
+    (entry) => Number(entry.objectId) === Number(parsed.objectId) && entry.value_key === parsed.key
+  );
+  if (match) {
+    return {
+      raw: `${match.objectId}:${match.value_key}`,
+      objectId: Number(match.objectId),
+      objectName: match.objectName || '',
+      key: match.value_key,
+      label: match.label || match.value_key,
+      unit: match.unit || ''
+    };
+  }
+  const obj = objectsCache.find((o) => Number(o.id) === Number(parsed.objectId)) || getSelectedObject();
+  const fallbackKey = keysCache.find((k) => k.value_key === parsed.key);
+  return {
+    raw: `${parsed.objectId}:${parsed.key}`,
+    objectId: Number(parsed.objectId),
+    objectName: obj?.name || '',
+    key: parsed.key,
+    label: fallbackKey?.label || parsed.key,
+    unit: fallbackKey?.unit || ''
+  };
+}
+
 function renderKeySelect(list, selectedKey) {
   if (!keySelect) return;
+  const currentObj = getSelectedObject();
+  const currentObjId = Number(currentObj?.id);
+
   if (!list.length) {
     keySelect.innerHTML = '';
-    if (secondaryKeySelect) secondaryKeySelect.innerHTML = '<option value="">-- Kein Vergleich (nur Primär) --</option>';
-    return;
+  } else {
+    keySelect.innerHTML = list.map((k) => {
+      const sel = k.value_key === selectedKey ? 'selected' : '';
+      const topic = k.topic ? ` [${escapeHtml(k.topic)}]` : '';
+      const label = k.label ? ` (${escapeHtml(k.label)})` : '';
+      const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
+      return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + topic + label + unit)}</option>`;
+    }).join('');
   }
-  keySelect.innerHTML = list.map((k) => {
-    const sel = k.value_key === selectedKey ? 'selected' : '';
-    const topic = k.topic ? ` [${escapeHtml(k.topic)}]` : '';
-    const label = k.label ? ` (${escapeHtml(k.label)})` : '';
-    const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
-    return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + topic + label + unit)}</option>`;
-  }).join('');
 
   if (secondaryKeySelect) {
-    const currentSec = secondaryKeySelect.value;
-    const secOptions = [
+    const prevParsed = parseSecondaryValue(secondaryKeySelect.value);
+    const prevRaw = prevParsed ? `${prevParsed.objectId}:${prevParsed.key}` : '';
+
+    const groupsMap = new Map();
+    for (const o of objectsCache) {
+      groupsMap.set(Number(o.id), { object: o, keys: [] });
+    }
+    for (const entry of allObjectsKeysCache) {
+      const oid = Number(entry.objectId);
+      if (oid === currentObjId) continue;
+      if (!groupsMap.has(oid)) {
+        groupsMap.set(oid, { object: { id: oid, name: entry.objectName || `Objekt ${oid}` }, keys: [] });
+      }
+      groupsMap.get(oid).keys.push(entry);
+    }
+    if (Number.isFinite(currentObjId)) {
+      if (!groupsMap.has(currentObjId)) {
+        groupsMap.set(currentObjId, { object: currentObj, keys: [] });
+      }
+      groupsMap.get(currentObjId).keys = list.map((k) => ({
+        ...k,
+        objectId: currentObjId,
+        objectName: currentObj?.name || ''
+      }));
+    }
+
+    const optgroupsHtml = [];
+    const multiObject = groupsMap.size > 1;
+    for (const [oid, group] of groupsMap.entries()) {
+      const availableKeys = group.keys.filter(
+        (k) => !(oid === currentObjId && k.value_key === selectedKey)
+      );
+      if (!availableKeys.length) continue;
+      const optionsHtml = availableKeys.map((k) => {
+        const val = `${oid}:${k.value_key}`;
+        const sel = val === prevRaw ? 'selected' : '';
+        const label = k.label ? ` (${k.label})` : '';
+        const unit = k.unit ? ` [${k.unit}]` : '';
+        const prefix = multiObject && group.object?.name ? `${group.object.name} – ` : '';
+        return `<option value="${escapeHtml(val)}" ${sel}>${escapeHtml(prefix + k.value_key + label + unit)}</option>`;
+      }).join('');
+      optgroupsHtml.push(`<optgroup label="${escapeHtml(group.object?.name || `Objekt ${oid}`)}">${optionsHtml}</optgroup>`);
+    }
+
+    secondaryKeySelect.innerHTML = [
       '<option value="">-- Kein Vergleich (nur Primär) --</option>',
-      ...list.filter((k) => k.value_key !== selectedKey).map((k) => {
-        const sel = k.value_key === currentSec ? 'selected' : '';
-        const label = k.label ? ` (${escapeHtml(k.label)})` : '';
-        const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
-        return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + label + unit)}</option>`;
-      })
-    ];
-    secondaryKeySelect.innerHTML = secOptions.join('');
+      ...optgroupsHtml
+    ].join('');
   }
 }
 
@@ -1237,11 +1383,66 @@ async function fetchKeys(objectId) {
   return Array.isArray(list) ? list : [];
 }
 
+async function loadAllObjectsKeys() {
+  if (!Array.isArray(objectsCache) || !objectsCache.length) {
+    allObjectsKeysCache = [];
+    return;
+  }
+  const perObject = await Promise.all(
+    objectsCache.map(async (obj) => {
+      try {
+        const [keys, recentReadings] = await Promise.all([
+          fetchKeys(obj.id).catch(() => []),
+          fetch(`/api/objects/${obj.id}/readings?limit=30`, { signal: AbortSignal.timeout(8000) })
+            .then((r) => (r.ok ? r.json() : []))
+            .catch(() => [])
+        ]);
+        if (Array.isArray(recentReadings)) {
+          const byKey = new Map();
+          for (const r of recentReadings) {
+            if (!r?.value_key) continue;
+            const arr = byKey.get(r.value_key) || [];
+            if (arr.length < 2) arr.push(r);
+            byKey.set(r.value_key, arr);
+          }
+          for (const [kName, pair] of byKey.entries()) {
+            const latest = pair[0];
+            const prev = pair[1] || null;
+            const val = parseNumber(latest.value_text);
+            const prevVal = prev ? parseNumber(prev.value_text) : null;
+            let trend = 'stable';
+            if (Number.isFinite(val) && Number.isFinite(prevVal)) {
+              const diff = val - prevVal;
+              if (diff > 0.05) trend = 'up';
+              else if (diff < -0.05) trend = 'down';
+            }
+            latestKeyReadingsCache.set(`${obj.id}:${kName}`, {
+              valText: latest.value_text,
+              valNum: val,
+              trend,
+              status: 'optimal',
+              ts: latest.created_at
+            });
+          }
+        }
+        return (Array.isArray(keys) ? keys : []).map((k) => ({
+          ...k,
+          objectId: Number(obj.id),
+          objectName: obj.name
+        }));
+      } catch {
+        return [];
+      }
+    })
+  );
+  allObjectsKeysCache = perObject.flat();
+}
+
 let keyLoadVersion = 0;
-async function loadKeys(preserveSelection = true) {
+async function loadKeys(preserveSelection = true, preferredKey = '') {
   const version = ++keyLoadVersion;
   const obj = getSelectedObject();
-  const selected = preserveSelection ? getSelectedKey() : '';
+  const selected = preferredKey || (preserveSelection ? getSelectedKey() : '');
   chartRequestController?.abort();
   lastReadingsCache = [];
   chartDataCache = [];
@@ -1250,6 +1451,7 @@ async function loadKeys(preserveSelection = true) {
   keySelect.disabled = true;
   if (!obj) {
     keysCache = [];
+    allObjectsKeysCache = [];
     renderKeyList([]);
     renderKeySelect([], '');
     renderAutomationKeyOptions('');
@@ -1261,7 +1463,10 @@ async function loadKeys(preserveSelection = true) {
 
   try {
     document.getElementById('graph-status').textContent = 'Messwerte für das gewählte Objekt werden geladen …';
-    const list = await fetchKeys(obj.id);
+    const [list] = await Promise.all([
+      fetchKeys(obj.id),
+      loadAllObjectsKeys()
+    ]);
     if (version !== keyLoadVersion) return;
     keysCache = list;
     renderKeyList(list);
@@ -1481,4 +1686,7 @@ function renderCommands(commands) {
   }).join('');
 }
 
-secondaryKeySelect?.addEventListener('change', () => loadReadings());
+secondaryKeySelect?.addEventListener('change', () => {
+  renderSensorDeck();
+  loadReadings();
+});

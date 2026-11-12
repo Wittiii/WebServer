@@ -1806,3 +1806,41 @@ label {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+/* Cross-Object Sensor Deck & Dual-Graph Comparison Styles */
+.hydro-sensor-card.is-secondary-selected {
+  border-color: rgba(245, 158, 11, 0.72) !important;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 6px 16px -6px rgba(245, 158, 11, 0.2);
+}
+.hydro-sensor-obj-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.08rem 0.38rem;
+  border-radius: 0.35rem;
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  margin-right: 0.2rem;
+  vertical-align: middle;
+}
+.hydro-sensor-compare-btn {
+  min-height: 1.45rem !important;
+  padding: 0.05rem 0.38rem !important;
+  font-size: 0.72rem !important;
+  line-height: 1;
+  border-radius: 0.38rem !important;
+  background: rgba(148, 163, 184, 0.12) !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  color: #cbd5e1 !important;
+  cursor: pointer;
+  margin-left: auto;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+.hydro-sensor-compare-btn:hover,
+.hydro-sensor-compare-btn.is-active {
+  background: rgba(245, 158, 11, 0.22) !important;
+  border-color: rgba(245, 158, 11, 0.68) !important;
+  color: #fcd34d !important;
+}

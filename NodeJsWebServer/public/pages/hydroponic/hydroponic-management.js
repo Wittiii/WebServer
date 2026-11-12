@@ -668,13 +668,18 @@ function selectChartPoint(index, pointer = null) {
     : '';
   const unit = chartMeta.unit ? ` ${chartMeta.unit}` : '';
   const meta = getSelectedKeyMeta();
-  const name = meta?.label ? `${meta.label}` : (meta?.value_key || 'Primär');
+  const secSel = chartMeta.hasSec ? getSecondarySelection() : null;
+  const isCrossObj = secSel && Number(secSel.objectId) !== Number(getSelectedObject()?.id);
+  const basePrimName = meta?.label ? `${meta.label}` : (meta?.value_key || 'Primär');
+  const name = isCrossObj && getSelectedObject()?.name
+    ? `${getSelectedObject().name} · ${basePrimName}`
+    : basePrimName;
   let detailText = `${time} | ${name}: ${value.toFixed(2)}${unit}`;
 
   if (chartMeta.hasSec && Array.isArray(chartMeta.secondaryReadings) && chartMeta.secondaryReadings.length > 0) {
-    const secKeyVal = secondaryKeySelect?.value || '';
-    const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
-    const secName = secKeyObj?.label || secKeyVal || 'Vergleich';
+    const secName = secSel
+      ? (isCrossObj && secSel.objectName ? `${secSel.objectName} · ${secSel.label}` : secSel.label)
+      : 'Vergleich';
     const secUnitStr = chartMeta.secUnit ? ` ${chartMeta.secUnit}` : '';
 
     let secNearest = -1;
@@ -756,11 +761,14 @@ chartCanvas?.addEventListener('keydown', (event) => {
 });
 
 keySelect?.addEventListener('change', () => {
-  if (secondaryKeySelect && secondaryKeySelect.value === keySelect.value) {
-    secondaryKeySelect.value = '';
+  const secSel = getSecondarySelection();
+  const activeObjId = Number(getSelectedObject()?.id);
+  if (secSel && Number(secSel.objectId) === activeObjId && secSel.key === keySelect.value) {
+    if (secondaryKeySelect) secondaryKeySelect.value = '';
     secondaryChartDataCache = null;
   }
   renderKeySelect(keysCache, keySelect.value);
+  renderSensorDeck();
   populateThresholdInputs();
   loadReadings();
 });

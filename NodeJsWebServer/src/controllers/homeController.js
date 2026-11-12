@@ -51,40 +51,51 @@ function getHomeOverview(req, res) {
       };
     } catch {}
 
-    // 3. Hydroponik
+    // 3. Hydroponik (alle Objekte zusammenfassen)
     let hydro = null;
     try {
-      const totalObjects = db.prepare('SELECT COUNT(*) AS total FROM objects').get()?.total || 0;
-      const primaryObj = db.prepare(`
+      const allObjects = db.prepare(`
         SELECT o.id, o.name,
                (SELECT COUNT(*) FROM object_automation_rules WHERE object_id = o.id AND enabled = 1) AS active_rules
-        FROM objects o ORDER BY o.id ASC LIMIT 1
-      `).get();
-      let latest = null;
-      if (primaryObj) {
-        const row = db.prepare(`
-          SELECT r.value_key, r.value_text AS value, r.created_at, k.label, k.unit
-          FROM object_readings r
-          LEFT JOIN object_value_keys k ON k.object_id = r.object_id AND k.value_key = r.value_key
-          WHERE r.object_id = ?
-          ORDER BY r.created_at DESC, r.id DESC LIMIT 1
-        `).get(primaryObj.id);
-        if (row) {
-          latest = {
-            key: row.value_key,
-            label: row.label || row.value_key,
-            value: row.value,
-            unit: row.unit || '',
-            createdAt: row.created_at,
-          };
-        }
-      }
+        FROM objects o ORDER BY o.id ASC
+      `).all();
+      const totalObjects = allObjects.length;
+      const primaryObj = allObjects[0] || null;
+      const latestReadingStmt = db.prepare(`
+        SELECT r.value_key, r.value_text AS value, r.created_at, k.label, k.unit
+        FROM object_readings r
+        LEFT JOIN object_value_keys k ON k.object_id = r.object_id AND k.value_key = r.value_key
+        WHERE r.object_id = ?
+        ORDER BY r.created_at DESC, r.id DESC LIMIT 1
+      `);
+      const objectsSummary = allObjects.map((obj) => {
+        const row = latestReadingStmt.get(obj.id);
+        return {
+          id: obj.id,
+          name: obj.name,
+          activeRules: obj.active_rules || 0,
+          latestReading: row
+            ? {
+                key: row.value_key,
+                label: row.label || row.value_key,
+                value: row.value,
+                unit: row.unit || '',
+                createdAt: row.created_at,
+              }
+            : null,
+        };
+      });
+      const firstWithReading = objectsSummary.find((o) => o.latestReading != null) || objectsSummary[0] || null;
       const totalRules = db.prepare('SELECT COUNT(*) AS total FROM object_automation_rules WHERE enabled = 1').get()?.total || 0;
+      const allObjectNames = allObjects.map((o) => o.name).join(', ');
       hydro = {
         totalObjects,
-        activeObjectName: primaryObj?.name || (totalObjects === 0 ? 'Kein Objekt' : null),
+        activeObjectName: totalObjects > 1
+          ? `${totalObjects} Objekte (${allObjectNames})`
+          : (primaryObj?.name || (totalObjects === 0 ? 'Kein Objekt' : null)),
         activeRules: totalRules,
-        latestReading: latest,
+        latestReading: firstWithReading?.latestReading || null,
+        objects: objectsSummary,
       };
     } catch {}
 
