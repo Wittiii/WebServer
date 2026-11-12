@@ -753,3 +753,253 @@ p { line-height: 1.65; }
 .hydro-trend-badge.trend-stable {
   color: #94a3b8;
 }
+
+
+/* ==========================================================================
+   Hydroponic Quick Controls
+   ========================================================================== */
+.hydro-quick-controls {
+  margin-bottom: 1.5rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+.quick-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quick-controls-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quick-controls-heading strong {
+  font-size: 1.05rem;
+  color: #f8fafc;
+}
+
+.quick-controls-hint {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.quick-controls-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-quick-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.1rem;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 0.5rem;
+  color: #f8fafc;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-quick-control:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.btn-quick-control.is-firing {
+  opacity: 0.7;
+  transform: scale(0.98);
+}
+
+.btn-quick-control:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* ==========================================================================
+   Automation History Pill
+   ========================================================================== */
+.automation-history-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  line-height: 1.2;
+}
+
+.automation-history-pill.has-fired {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.automation-history-pill.never-fired {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* ==========================================================================
+   Battery ETA & Monthly Solar Yields
+   ========================================================================== */
+.victron-battery-eta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+}
+
+.victron-battery-eta-badge strong {
+  color: #38bdf8;
+}
+
+.victron-monthly-yields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.monthly-yield-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 90px 60px;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.85rem;
+}
+
+.monthly-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.monthly-bar-track {
+  height: 8px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.monthly-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #38bdf8 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.monthly-val {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f8fafc;
+  text-align: right;
+}
+
+.monthly-days {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: right;
+}
+
+/* ==========================================================================
+   Plant Growth Timelapse Scrubber (Daumenkino)
+   ========================================================================== */
+.timelapse-scrubber-panel {
+  margin-top: 1.5rem;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.timelapse-scrubber-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.timelapse-scrubber-badge {
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+}
+
+.timelapse-scrubber-view {
+  position: relative;
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timelapse-scrubber-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.timelapse-scrubber-empty {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.timelapse-scrubber-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.timelapse-scrubber-controls input[type="range"] {
+  width: 100%;
+  height: 8px;
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.timelapse-scrubber-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}

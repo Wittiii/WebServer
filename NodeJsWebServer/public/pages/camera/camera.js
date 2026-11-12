@@ -69,6 +69,13 @@ const timelapseStatusEl = document.getElementById("camera-timelapse-status") || 
 const timelapseFileListEl = document.getElementById("timelapse-file-list");
 const timelapseVideoEl = document.getElementById("timelapse-video");
 const timelapseVideoHintEl = document.getElementById("timelapse-video-hint");
+const scrubberSliderEl = document.getElementById("timelapse-scrubber-slider");
+const scrubberImgEl = document.getElementById("timelapse-scrubber-img");
+const scrubberEmptyEl = document.getElementById("timelapse-scrubber-empty");
+const scrubberDateEl = document.getElementById("timelapse-scrubber-date");
+const scrubberCounterEl = document.getElementById("timelapse-scrubber-counter");
+const scrubberFilenameEl = document.getElementById("timelapse-scrubber-filename");
+let scrubberImages = [];
 
 let overviewState = null;
 let activeCameraId = null;
@@ -808,6 +815,23 @@ function setTimelapsePanelCollapsed(isCollapsed, { persist = true } = {}) {
   }
 }
 
+function updateScrubberView(idx) {
+  const img = scrubberImages[idx];
+  if (!img) return;
+  if (scrubberImgEl) {
+    scrubberImgEl.src = img.url;
+    scrubberImgEl.hidden = false;
+  }
+  if (scrubberEmptyEl) scrubberEmptyEl.hidden = true;
+  if (scrubberDateEl) scrubberDateEl.textContent = formatTimestamp(img.modifiedAt);
+  if (scrubberCounterEl) scrubberCounterEl.textContent = `Bild ${idx + 1} von ${scrubberImages.length}`;
+  if (scrubberFilenameEl) scrubberFilenameEl.textContent = `${img.name} (${formatBytes(img.sizeBytes)})`;
+}
+
+scrubberSliderEl?.addEventListener("input", (e) => {
+  updateScrubberView(Number(e.target.value));
+});
+
 function renderTimelapseData() {
   if (!timelapsePanelEl || timelapsePanelEl.hidden) return;
 
@@ -848,6 +872,34 @@ function renderTimelapseData() {
     timelapseVideoHintEl.textContent = latestVideo
       ? `Letztes Video: ${latestVideo.name} | ${formatBytes(latestVideo.sizeBytes)} | ${formatTimestamp(latestVideo.modifiedAt)}`
       : "Noch kein MP4 vorhanden. Erzeuge zuerst ein Video aus den JPEG-Bildern.";
+  }
+
+  const images = (currentTimelapseState.files || [])
+    .filter((f) => f.type === "image" && f.url)
+    .slice()
+    .sort((a, b) => new Date(a.modifiedAt) - new Date(b.modifiedAt));
+
+  scrubberImages = images;
+
+  if (scrubberSliderEl && scrubberImgEl && scrubberEmptyEl) {
+    if (images.length === 0) {
+      scrubberSliderEl.disabled = true;
+      scrubberSliderEl.min = "0";
+      scrubberSliderEl.max = "0";
+      scrubberSliderEl.value = "0";
+      scrubberImgEl.hidden = true;
+      scrubberEmptyEl.hidden = false;
+      if (scrubberDateEl) scrubberDateEl.textContent = "Keine Bilder";
+      if (scrubberCounterEl) scrubberCounterEl.textContent = "0 / 0";
+      if (scrubberFilenameEl) scrubberFilenameEl.textContent = "--";
+    } else {
+      scrubberSliderEl.disabled = false;
+      scrubberSliderEl.min = "0";
+      scrubberSliderEl.max = String(images.length - 1);
+      const initialIdx = images.length - 1;
+      scrubberSliderEl.value = String(initialIdx);
+      updateScrubberView(initialIdx);
+    }
   }
 
   if (!timelapseFileListEl) return;

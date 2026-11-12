@@ -63,6 +63,8 @@ const elements = {
   victronYieldTotal: document.getElementById("victron-yield-total"),
   victronYieldTotalSince: document.getElementById("victron-yield-total-since"),
   victronBatteryVoltage: document.getElementById("victron-battery-voltage"),
+  victronBatteryEta: document.getElementById("victron-battery-eta"),
+  victronMonthlyYields: document.getElementById("victron-monthly-yields"),
   victronBatteryCurrent: document.getElementById("victron-battery-current"),
   victronChargerState: document.getElementById("victron-charger-state"),
   victronErrorCode: document.getElementById("victron-error-code"),
@@ -562,6 +564,8 @@ function renderVictronBattery(data) {
   setText(elements.victronBatteryFlow, reading ? flowLabels[battery.flow] || "Unbekannt" : "Wartet");
   elements.victronBatteryFlow?.classList.toggle("is-charging", battery.flow === "charging");
   elements.victronBatteryFlow?.classList.toggle("is-discharging", battery.flow === "discharging");
+  const etaText = battery.timeRemainingFormatted || (battery.flow === "charging" ? "Wird geladen" : battery.flow === "discharging" ? "Wird entladen" : "Standby / Leerlauf");
+  setText(elements.victronBatteryEta, etaText);
   const hasBatteryPower = battery.powerW !== null
     && battery.powerW !== undefined
     && battery.powerW !== ""
@@ -582,6 +586,31 @@ function renderVictronBattery(data) {
   });
 }
 
+function renderMonthlyYields(entries) {
+  if (!elements.victronMonthlyYields) return;
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) {
+    elements.victronMonthlyYields.innerHTML = '<span class="muted-line">Noch keine historischen Monatserträge gespeichert.</span>';
+    return;
+  }
+
+  const maxYield = Math.max(...list.map((m) => Number(m.yield_wh || 0)), 1);
+  elements.victronMonthlyYields.innerHTML = list.map((m) => {
+    const kwh = (Number(m.yield_wh || 0) / 1000).toFixed(1);
+    const percent = Math.min(100, Math.max(4, Math.round((Number(m.yield_wh || 0) / maxYield) * 100)));
+    return `
+      <div class="monthly-yield-row">
+        <span class="monthly-label">${escapeHtml(m.month)}</span>
+        <div class="monthly-bar-track">
+          <div class="monthly-bar-fill" style="width: ${percent}%;"></div>
+        </div>
+        <strong class="monthly-val">${kwh} kWh</strong>
+        <small class="monthly-days">(${m.days} T.)</small>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderVictron(data) {
   if (!data) return;
   const reading = data.reading;
@@ -595,6 +624,7 @@ function renderVictron(data) {
   latestVictronHistory = data.history?.points || [];
   renderVictronBattery(data);
   renderVictronMqttTopics(data.mqttTopics);
+  renderMonthlyYields(data.monthlyYields);
 
   if (!reading) {
     drawVictronChart();

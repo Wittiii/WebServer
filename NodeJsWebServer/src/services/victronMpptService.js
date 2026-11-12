@@ -72,6 +72,16 @@ const totalYieldStatement = db.prepare(`
   FROM victron_daily_yields
   WHERE topic = ?
 `);
+const monthlyYieldStatement = db.prepare(`
+  SELECT substr(day, 1, 7) AS month,
+         SUM(yield_wh) AS yield_wh,
+         COUNT(*) AS days
+  FROM victron_daily_yields
+  WHERE topic = ?
+  GROUP BY substr(day, 1, 7)
+  ORDER BY month DESC
+  LIMIT 12
+`);
 
 function localDayKey(timestamp) {
   const date = new Date(timestamp);
@@ -273,6 +283,35 @@ function getVictronOverview(period = "24h", now = Date.now()) {
     ? "charging"
     : batteryCurrentA < -0.05 ? "discharging" : "idle";
 
+  let timeRemainingMinutes = null;
+  let timeRemainingFormatted = null;
+  if (socPercent !== null && reading?.batteryVoltageV > 5) {
+    const nominalV = estimation?.nominalVoltageV || reading.batteryVoltageV || 12.8;
+    const capacityAh = 100;
+    const totalCapacityWh = nominalV * capacityAh;
+
+    if (batteryFlow === "discharging" && batteryPowerW && Math.abs(batteryPowerW) > 3) {
+      const remainingWh = (Math.max(0, socPercent - 10) / 100) * totalCapacityWh;
+      timeRemainingMinutes = Math.round((remainingWh / Math.abs(batteryPowerW)) * 60);
+      const hours = Math.floor(timeRemainingMinutes / 60);
+      const mins = timeRemainingMinutes % 60;
+      timeRemainingFormatted = hours > 0 ? `Noch ca. ${hours} Std. ${mins} Min.` : `Noch ca. ${mins} Min.`;
+    } else if (batteryFlow === "charging" && batteryPowerW && Math.abs(batteryPowerW) > 3) {
+      const neededWh = ((Math.max(0, 100 - socPercent)) / 100) * totalCapacityWh;
+      timeRemainingMinutes = Math.round((neededWh / Math.abs(batteryPowerW)) * 60);
+      const hours = Math.floor(timeRemainingMinutes / 60);
+      const mins = timeRemainingMinutes % 60;
+      timeRemainingFormatted = hours > 0 ? `Voll in ca. ${hours} Std. ${mins} Min.` : `Voll in ca. ${mins} Min.`;
+    } else if (batteryFlow === "idle") {
+      timeRemainingFormatted = "Standby / Leerlauf";
+    }
+  }
+
+  let monthlyYields = [];
+  try {
+    monthlyYields = monthlyYieldStatement.all(sensorTopic);
+  } catch {}
+
   return {
     configuredTopic: sensorTopic,
     status,
@@ -286,7 +325,10 @@ function getVictronOverview(period = "24h", now = Date.now()) {
       estimation,
       powerW: batteryPowerW,
       flow: batteryFlow,
+      timeRemainingMinutes,
+      timeRemainingFormatted,
     },
+    monthlyYields,
     todayStats: {
       averagePanelPowerW: stats.average_panel_power_w || 0,
       peakPanelPowerW: stats.peak_panel_power_w || 0,

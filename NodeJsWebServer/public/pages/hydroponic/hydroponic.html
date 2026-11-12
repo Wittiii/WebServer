@@ -31,6 +31,20 @@
       <a class="btn btn-secondary" href="#objects-section">Objekte verwalten</a>
     </div>
 
+    <div id="hydro-quick-controls" class="panel hydro-quick-controls" aria-label="Schnellschalter">
+      <div class="quick-controls-header">
+        <div class="quick-controls-heading">
+          <span class="quick-controls-icon">⚡</span>
+          <strong>Schnellschalter</strong>
+          <small id="quick-controls-hint">Befehle für das aktive Objekt</small>
+        </div>
+        <div id="quick-controls-feedback" class="status-line quick-controls-feedback" role="status"></div>
+      </div>
+      <div id="quick-controls-buttons" class="quick-controls-buttons">
+        <span class="muted-line">Keine Schnellbefehle hinterlegt. Lege unter „Einrichtung &amp; Befehle“ welche an.</span>
+      </div>
+    </div>
+
     <nav class="workflow-links" aria-label="Hydroponik-Bereiche">
       <a href="#graph-section">Messwerte</a>
       <a href="#mapping-section">Einrichtung &amp; Befehle</a>
@@ -45,13 +59,19 @@
 
       <div class="grid-2">
         <div class="form-group">
-          <label for="key-select">Messwert auswählen</label>
+          <label for="key-select">Primärer Messwert</label>
           <select id="key-select"></select>
         </div>
-        <div class="inline-actions">
-          <button id="graph-refresh" type="button">Aktualisieren</button>
-          <button id="export-csv" type="button" class="btn btn-secondary">Angezeigte Werte als CSV</button>
+        <div class="form-group">
+          <label for="secondary-key-select">Vergleichs-Messwert (optional)</label>
+          <select id="secondary-key-select">
+            <option value="">-- Kein Vergleich (nur Primär) --</option>
+          </select>
         </div>
+      </div>
+      <div class="inline-actions">
+        <button id="graph-refresh" type="button">Aktualisieren</button>
+        <button id="export-csv" type="button" class="btn btn-secondary">Angezeigte Werte als CSV</button>
       </div>
 
       <div class="grid-2">

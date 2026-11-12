@@ -245,6 +245,10 @@
             <strong id="victron-battery-power">-- W</strong>
             <span id="victron-charge-description">Noch keine Batteriedaten</span>
           </div>
+          <div class="victron-battery-eta-badge">
+            <span class="eta-icon">⏱️</span>
+            <span>Restzeit: <strong id="victron-battery-eta">Standby / Leerlauf</strong></span>
+          </div>
           <div id="victron-charge-stages" class="victron-charge-stages" aria-label="Victron Ladephasen">
             <span data-victron-stage="bulk"><i></i><strong>Bulk</strong><small>Schnellladen</small></span>
             <span data-victron-stage="absorption"><i></i><strong>Absorption</strong><small>Vollladen</small></span>
@@ -273,6 +277,16 @@
       <div class="energy-chart-legend">
         <span><i class="legend-victron"></i> Durchschnittliche PV-Leistung</span>
         <span><i class="legend-peak"></i> Spitzenleistung</span>
+      </div>
+
+      <div class="section-header energy-section-heading">
+        <div>
+          <p class="energy-eyebrow">HISTORISCHE MONATSERTRÄGE</p>
+          <h3>Solarertrag der letzten Monate</h3>
+        </div>
+      </div>
+      <div id="victron-monthly-yields" class="victron-monthly-yields" aria-label="Monatliche Solarerträge">
+        <span class="muted-line">Noch keine historischen Monatserträge gespeichert.</span>
       </div>
 
       <div class="grid-2 energy-victron-details">

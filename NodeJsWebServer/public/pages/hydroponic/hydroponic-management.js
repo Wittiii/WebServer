@@ -170,6 +170,23 @@ function buildAutomationScheduleText(rule) {
   return parts.join(' | ');
 }
 
+function formatFriendlyHistoryTime(iso) {
+  if (!iso) return 'Noch nicht ausgelöst';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffSec = Math.floor((now - d) / 1000);
+    if (diffSec < 60) return 'Gerade eben';
+    if (diffSec < 3600) return `Vor ${Math.floor(diffSec / 60)} Min.`;
+    const isToday = d.toDateString() === now.toDateString();
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Heute um ${timeStr} Uhr`;
+    return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })}, ${timeStr} Uhr`;
+  } catch {
+    return iso;
+  }
+}
+
 function renderAutomationRules(list) {
   if (!automationList) return;
 
@@ -181,7 +198,6 @@ function renderAutomationRules(list) {
   automationList.innerHTML = list.map((rule) => {
     const stateLabel = rule.enabled ? 'Aktiv' : 'Pausiert';
     const stateClass = rule.enabled ? 'status-online' : 'status-offline';
-    const lastFired = rule.lastFiredAt ? ` | Zuletzt: ${new Date(rule.lastFiredAt).toLocaleString()}` : '';
     const extras = [];
     if (Number(rule.cooldownSeconds) > 0) extras.push(`Cooldown ${rule.cooldownSeconds}s`);
     if (rule.hysteresisValue !== '' && rule.hysteresisValue != null) extras.push(`Hysterese ${rule.hysteresisValue}`);
@@ -190,10 +206,15 @@ function renderAutomationRules(list) {
     const extraText = extras.length ? ` | ${extras.join(' | ')}` : '';
     return `
       <li data-id="${rule.id}">
-        <div class="cmd-meta" style="display:grid; gap:0.5rem; min-width:0;">
-          <span class="cmd-label">${escapeHtml(rule.name)}</span>
+        <div class="cmd-meta" style="display:grid; gap:0.4rem; min-width:0;">
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <span class="cmd-label">${escapeHtml(rule.name)}</span>
+            <span class="automation-history-pill ${rule.lastFiredAt ? 'has-fired' : 'never-fired'}">
+              ⚡ ${escapeHtml(formatFriendlyHistoryTime(rule.lastFiredAt))}
+            </span>
+          </div>
           <span class="cmd-payload">${escapeHtml(buildAutomationTriggerText(rule))}</span>
-          <span class="cmd-payload">${escapeHtml(buildAutomationActionText(rule) + extraText + lastFired)}</span>
+          <span class="cmd-payload">${escapeHtml(buildAutomationActionText(rule) + extraText)}</span>
         </div>
         <button class="cmd-send ${stateClass}" type="button" data-action="toggle">${stateLabel}</button>
         <div class="cmd-action-group" style="display:flex; gap:0.5rem; min-width:0; justify-content:flex-end;">

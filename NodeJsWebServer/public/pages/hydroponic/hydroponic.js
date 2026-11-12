@@ -56,6 +56,25 @@ async function fetchReadings(limit, includeFilters = true, chart = false, signal
   return Array.isArray(list) ? list : [];
 }
 
+async function fetchReadingsForKey(key, limit, signal) {
+  const obj = getSelectedObject();
+  if (!obj || !key) return { readings: [] };
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('view', 'chart');
+  params.set('key', key);
+  const range = getDateRange();
+  if (range.from) params.set('from', range.from);
+  if (range.to) params.set('to', range.to);
+
+  const timeout = AbortSignal.timeout(12000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const res = await fetch(`/api/objects/${obj.id}/readings?${params.toString()}`, { signal: requestSignal });
+  if (!res.ok) return { readings: [] };
+  const list = await res.json().catch(() => []);
+  return HydroChart.normalizeChartResponse(list, limit);
+}
+
 let chartRequestController = null;
 async function loadReadings() {
   chartRequestController?.abort();
@@ -106,7 +125,19 @@ async function loadReadings() {
     const ordered = list.slice().reverse();
     chartDataCache = ordered;
     chartHoverIndex = null;
-    drawChart(ordered);
+
+    let secondaryOrdered = null;
+    const secKey = secondaryKeySelect?.value;
+    if (secKey && secKey !== getSelectedKey()) {
+      try {
+        const secRes = await fetchReadingsForKey(secKey, 2000, controller.signal);
+        if (secRes?.readings?.length) {
+          secondaryOrdered = secRes.readings.slice().reverse();
+        }
+      } catch {}
+    }
+
+    drawChart(ordered, secondaryOrdered);
     lastReadingsCache = list;
     if (exportCsvBtn) exportCsvBtn.disabled = false;
     checkThresholds(list);
@@ -215,6 +246,7 @@ const keySave = document.getElementById('key-save');
 const keyCancel = document.getElementById('key-cancel');
 const keyList = document.getElementById('key-list');
 const keySelect = document.getElementById('key-select');
+const secondaryKeySelect = document.getElementById('secondary-key-select');
 const sensorDeckEl = document.getElementById('hydro-sensor-deck');
 const latestKeyReadingsCache = new Map();
 const graphRefresh = document.getElementById('graph-refresh');
@@ -752,7 +784,7 @@ function prepareCanvas() {
   return { ctx, w: cssWidth, h: cssHeight };
 }
 
-function drawChart(readings) {
+function drawChart(readings, secondaryReadings = null) {
   const canvas = prepareCanvas();
   if (!canvas) return;
   const { ctx, w, h } = canvas;
@@ -933,6 +965,78 @@ ${date}` : time;
     ctx.fillText('Trend', w - pad - 60, pad + 12);
   }
 
+  // Secondary curve (Comparison)
+  if (Array.isArray(secondaryReadings) && secondaryReadings.length > 0) {
+    const secValues = secondaryReadings.map((r) => parseNumber(r.value_text)).filter((v) => Number.isFinite(v));
+    if (secValues.length > 0) {
+      let secMin = Math.min(...secValues);
+      let secMax = Math.max(...secValues);
+      const secRange = secMax - secMin || 1;
+      secMin -= secRange * 0.05;
+      secMax += secRange * 0.05;
+      const secSpan = secMax - secMin || 1;
+      const secXSpan = secondaryReadings.length - 1 || 1;
+      const secKeyVal = secondaryKeySelect?.value || '';
+      const secUnit = getUnitForKey(secKeyVal);
+      const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
+      const secLabel = secKeyObj?.label || secKeyVal || 'Vergleich';
+
+      // Right axis line & ticks
+      ctx.strokeStyle = 'rgba(245,158,11,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(w - pad, pad);
+      ctx.lineTo(w - pad, h - pad);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '11px system-ui, sans-serif';
+      const ticks = 5;
+      for (let i = 0; i < ticks; i++) {
+        const t = i / (ticks - 1);
+        const v = secMax - t * secSpan;
+        const y = pad + t * (h - pad * 2);
+        const label = secUnit ? `${v.toFixed(1)} ${secUnit}` : v.toFixed(1);
+        ctx.textAlign = 'right';
+        ctx.fillText(label, w - 4, y + 4);
+      }
+      ctx.textAlign = 'left';
+
+      // Secondary Line
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      secondaryReadings.forEach((r, idx) => {
+        const v = parseNumber(r.value_text);
+        if (!Number.isFinite(v)) {
+          started = false;
+          return;
+        }
+        const x = pad + (idx / secXSpan) * (w - pad * 2);
+        const y = h - pad - ((v - secMin) / secSpan) * (h - pad * 2);
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+
+      // Top Comparison Legend
+      const primKeyObj = getSelectedKeyMeta();
+      const primLabel = primKeyObj?.label || getSelectedKey();
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(pad + 10, 10, 12, 4);
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.fillText(`${primLabel} (${unit || '-'})`, pad + 26, 15);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(pad + 180, 10, 12, 4);
+      ctx.fillText(`${secLabel} (${secUnit || '-'})`, pad + 196, 15);
+    }
+  }
+
   if (chartHoverIndex !== null) {
     const idx = findNearestIndex(chartHoverIndex, valuesByIndex);
     if (idx >= 0 && Number.isFinite(valuesByIndex[idx])) {
@@ -977,6 +1081,7 @@ function renderKeySelect(list, selectedKey) {
   if (!keySelect) return;
   if (!list.length) {
     keySelect.innerHTML = '';
+    if (secondaryKeySelect) secondaryKeySelect.innerHTML = '<option value="">-- Kein Vergleich (nur Primär) --</option>';
     return;
   }
   keySelect.innerHTML = list.map((k) => {
@@ -986,6 +1091,20 @@ function renderKeySelect(list, selectedKey) {
     const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
     return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + topic + label + unit)}</option>`;
   }).join('');
+
+  if (secondaryKeySelect) {
+    const currentSec = secondaryKeySelect.value;
+    const secOptions = [
+      '<option value="">-- Kein Vergleich (nur Primär) --</option>',
+      ...list.filter((k) => k.value_key !== selectedKey).map((k) => {
+        const sel = k.value_key === currentSec ? 'selected' : '';
+        const label = k.label ? ` (${escapeHtml(k.label)})` : '';
+        const unit = k.unit ? ` [${escapeHtml(k.unit)}]` : '';
+        return `<option value="${escapeHtml(k.value_key)}" ${sel}>${escapeHtml(k.value_key + label + unit)}</option>`;
+      })
+    ];
+    secondaryKeySelect.innerHTML = secOptions.join('');
+  }
 }
 
 function getSelectedKey() {
@@ -1143,7 +1262,61 @@ function getSelectedObject() {
   return objectsCache.find((o) => Number(o.id) === id) || null;
 }
 
+function renderQuickControls(commands) {
+  const container = document.getElementById('quick-controls-buttons');
+  const feedbackEl = document.getElementById('quick-controls-feedback');
+  if (!container) return;
+
+  const validCmds = Array.isArray(commands) ? commands.filter((c) => (c.label || '').trim() && (c.topic || '').trim()) : [];
+  if (!validCmds.length) {
+    container.innerHTML = '<span class="muted-line">Keine Schnellbefehle hinterlegt. Lege unter „Einrichtung &amp; Befehle“ welche an.</span>';
+    return;
+  }
+
+  container.innerHTML = validCmds.map((c, idx) => {
+    const l = (c.label || '').toLowerCase();
+    const icon = l.includes('pumpe') ? '🔄' : l.includes('licht') || l.includes('led') ? '💡' : l.includes('lüft') || l.includes('fan') ? '💨' : l.includes('mess') ? '📊' : '⚡';
+    return `
+      <button type="button" class="btn-quick-control" data-cmd-idx="${idx}" title="${escapeHtml(c.topic)}: ${escapeHtml(c.payload || '')}">
+        <span class="quick-cmd-icon">${icon}</span>
+        <span class="quick-cmd-label">${escapeHtml(c.label)}</span>
+      </button>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.btn-quick-control').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const idx = Number(btn.dataset.cmdIdx);
+      const cmd = validCmds[idx];
+      if (!cmd) return;
+      btn.disabled = true;
+      btn.classList.add('is-firing');
+      if (feedbackEl) {
+        feedbackEl.textContent = `Sende ${cmd.label} …`;
+        feedbackEl.style.color = '#38bdf8';
+      }
+      try {
+        await publishMqtt(cmd.topic, cmd.payload || '');
+        if (feedbackEl) {
+          feedbackEl.textContent = `✓ ${cmd.label} gesendet!`;
+          feedbackEl.style.color = '#10b981';
+          setTimeout(() => { if (feedbackEl) feedbackEl.textContent = ''; }, 3500);
+        }
+      } catch (err) {
+        if (feedbackEl) {
+          feedbackEl.textContent = `Fehler: ${err.message}`;
+          feedbackEl.style.color = '#ef4444';
+        }
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('is-firing');
+      }
+    });
+  });
+}
+
 function renderCommands(commands) {
+  renderQuickControls(commands);
   if (!commandList) return;
 
   if (!Array.isArray(commands) || commands.length === 0) {
@@ -1168,3 +1341,5 @@ function renderCommands(commands) {
     `;
   }).join('');
 }
+
+secondaryKeySelect?.addEventListener('change', () => loadReadings());

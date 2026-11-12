@@ -191,6 +191,29 @@
           </section>
         </div>
 
+        <section class="subpanel timelapse-scrubber-panel" data-collapsible="false">
+          <div class="timelapse-scrubber-header">
+            <div>
+              <h3>🌿 Wachstums-Zeitraffer (Daumenkino)</h3>
+              <p class="camera-muted-line">Bewege den Schieberegler, um das Pflanzenwachstum Tag für Tag oder Stunde für Stunde durchzublättern.</p>
+            </div>
+            <span id="timelapse-scrubber-date" class="timelapse-scrubber-badge">Kein Bild geladen</span>
+          </div>
+          <div class="timelapse-scrubber-view">
+            <img id="timelapse-scrubber-img" alt="Wachstums-Vorschau" class="timelapse-scrubber-img" hidden>
+            <div id="timelapse-scrubber-empty" class="timelapse-scrubber-empty">
+              <span>Keine Einzelbilder im Archiv vorhanden.</span>
+            </div>
+          </div>
+          <div class="timelapse-scrubber-controls">
+            <input type="range" id="timelapse-scrubber-slider" min="0" max="0" value="0" step="1" disabled>
+            <div class="timelapse-scrubber-info">
+              <span id="timelapse-scrubber-counter">0 / 0</span>
+              <span id="timelapse-scrubber-filename">--</span>
+            </div>
+          </div>
+        </section>
+
         <section class="subpanel" data-collapsible="false">
           <h3>Dateien</h3>
           <ul id="timelapse-file-list" class="readings-list"></ul>
