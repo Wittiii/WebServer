@@ -452,6 +452,15 @@ function renderSummaryCards() {
         .map((badge) => `<span class="camera-capability-badge">${escapeHtml(badge)}</span>`)
         .join("");
 
+      const brokerInfo = camera.mqtt?.connected
+        ? "Broker: Verbunden"
+        : camera.status?.online
+          ? "Broker: Topic aktiv"
+          : "Broker: Getrennt";
+      const streamInfo = isJpegCamera(camera)
+        ? `Bridge: ${camera.bridge?.state || "idle"}`
+        : "Stream: Direkt H.264";
+
       return `
         <article class="stats-card camera-source-card ${isActive ? "camera-source-active" : ""}" data-camera-select="${escapeHtml(camera.cameraId)}" role="button" tabindex="0" style="cursor:pointer;" title="${escapeHtml(camera.label)} auswählen">
           <div class="camera-source-top">
@@ -463,7 +472,7 @@ function renderSummaryCards() {
               ${camera.status.online ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
-          <p style="margin:0.2rem 0 0; font-size:0.8rem;">ID: ${escapeHtml(camera.cameraId)} · Topic: <code>${escapeHtml(camera.mqtt.topicBase)}</code></p>
+          <p style="margin:0.2rem 0 0; font-size:0.8rem;">${escapeHtml(brokerInfo)} · ${escapeHtml(streamInfo)} · <code>${escapeHtml(camera.mqtt.topicBase)}</code></p>
           <div class="camera-capability-row">${badges || '<span class="camera-capability-badge">Standard</span>'}</div>
         </article>
       `;
@@ -574,7 +583,7 @@ function renderState(camera) {
   stateCardEl.innerHTML = `
     <div class="camera-state-row">
       <span class="status-badge ${stateBadge}">${escapeHtml(camera.status.state || "unknown")}</span>
-      <span class="obj-date">Online Topic: ${String(camera.status.online)}</span>
+      <span class="obj-date">MQTT-Broker Client: ${camera.mqtt?.connected ? "Verbunden" : "Getrennt"} · Online-Topic: ${String(camera.status.online)}</span>
     </div>
     <div class="camera-state-grid">
       ${primaryConfigRows}
@@ -771,7 +780,9 @@ function renderMultiview() {
   cameras.forEach((cam) => {
     let card = multiviewGridEl.querySelector(`[data-multiview-card="${cam.cameraId}"]`);
     const isOnline = Boolean(cam.status?.online || cam.connected);
-    const isStreaming = Boolean(cam.status?.streaming);
+    const isStreaming = Boolean(
+      cam.status?.streaming ?? (isOnline && ["streaming", "running"].includes(cam.status?.state))
+    );
     const isCurrent = cam.cameraId === activeCameraId;
     const targetSrc = cam.stream?.urls?.webrtcPage || "about:blank";
 

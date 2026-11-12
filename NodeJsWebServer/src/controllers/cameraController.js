@@ -304,7 +304,14 @@ function buildCameraOverview(config) {
                 ? "error"
                 : "idle"
       )
-    : stateValue || "unknown";
+    : (
+        online === false
+          ? "offline"
+          : stateValue || (online === true && bridge?.state === "running" ? "streaming" : "unknown")
+      );
+  const streaming = Boolean(
+    online === true && (cameraState === "streaming" || cameraState === "running" || bridge?.state === "running")
+  );
 
   return {
     cameraId: config.cameraId,
@@ -353,6 +360,7 @@ function buildCameraOverview(config) {
     bridge,
     status: {
       online,
+      streaming,
       state: cameraState,
       error: errorValue || "",
       pong: pongValue || "",
@@ -411,7 +419,7 @@ function buildOverview(req) {
       total: cameras.length,
       online: cameras.filter((camera) => camera.status.online === true).length,
       mqttConnected: cameras.filter((camera) => camera.mqtt.connected).length,
-      streaming: cameras.filter((camera) => getStateValue(camera) === "streaming" || getStateValue(camera) === "running").length,
+      streaming: cameras.filter((camera) => camera.status.streaming === true).length,
     },
   };
 }

@@ -4,7 +4,7 @@ const db = require('../database/db');
 const { getPowerMeterOverview } = require('../services/powerMeterService');
 const { getVictronOverview } = require('../services/victronMpptService');
 const { getCameraConfigs } = require('../config/cameraConfig');
-const { clients, topics } = require('../mqttBroker');
+const { clients, topics, getClientSnapshot, isClientConnected } = require('../mqttBroker');
 
 function getHome(req, res) {
   const filePath = path.join(__dirname, '..', '..', 'public', 'pages', 'home.html');
@@ -94,13 +94,18 @@ function getHomeOverview(req, res) {
       const configs = getCameraConfigs();
       let onlineCameras = 0;
       for (const config of configs) {
-        const client = clients.get(config.mqttClientId);
-        const statusTopic = `${config.mqttTopicBase || `camera/${config.cameraId}/`}status/online`;
-        const topicVal = topics.get(statusTopic)?.lastMessage;
-        if (client?.connected || topicVal === 'true') onlineCameras += 1;
+        const mqttClient = getClientSnapshot(config.mqttClientId);
+        const topicBase = String(config.mqttTopicBase || `camera/${config.cameraId}`).replace(/\/+$/, '');
+        const statusTopic = `${topicBase}/status/online`;
+        const rawOnline = String(topics.get(statusTopic)?.lastMessage ?? '').trim().toLowerCase();
+        const reportedOnline = rawOnline === 'true' ? true : rawOnline === 'false' ? false : null;
+        const isOnline = mqttClient
+          ? Boolean(mqttClient.connected && reportedOnline !== false)
+          : reportedOnline === true;
+        if (isOnline) onlineCameras += 1;
       }
 
-      const connectedMqttClients = [...clients.values()].filter((c) => c.connected).length;
+      const connectedMqttClients = [...clients.values()].filter((c) => isClientConnected(c, now)).length;
       const totalMem = os.totalmem();
       const freeMem = os.freemem();
       const ramPercent = totalMem > 0 ? Math.round(((totalMem - freeMem) / totalMem) * 100) : null;
