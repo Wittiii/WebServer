@@ -463,16 +463,6 @@ function closeVictronSocDialog() {
   }
 }
 
-function formatTopicAge(seconds) {
-  const value = Number(seconds);
-  if (!Number.isFinite(value)) return "Zeit unbekannt";
-  if (value < 2) return "gerade eben";
-  if (value < 60) return `vor ${value} s`;
-  if (value < 3600) return `vor ${Math.floor(value / 60)} min`;
-  if (value < 86400) return `vor ${Math.floor(value / 3600)} h`;
-  return `vor ${Math.floor(value / 86400)} d`;
-}
-
 function renderVictronMqttTopics(entries) {
   const topics = Array.isArray(entries) ? entries : [];
   setText(elements.victronMqttCount, `${topics.length} ${topics.length === 1 ? "Topic" : "Topics"}`);
