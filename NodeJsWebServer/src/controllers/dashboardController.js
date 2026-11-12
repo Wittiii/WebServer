@@ -82,9 +82,8 @@ async function getStorageStats(targetPath) {
   };
 }
 
-const getDashboard = (req, res) => {
-  const filePath = path.join(__dirname, '..', '..', 'public','pages','dashboard','dashboard.html');
-  res.sendFile(filePath);
+const getDashboard = (_req, res) => {
+  res.redirect('/');
 };
 
 function sanitizeWidgets(input) {

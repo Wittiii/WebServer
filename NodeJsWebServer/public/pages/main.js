@@ -26,7 +26,6 @@ function buildNavItems(loggedIn) {
       '<li><a href="/energy"><span class="nav-item-icon" aria-hidden="true">⚡</span><span>Strom &amp; Solar</span></a></li>',
       '<li><a href="/hydroponic"><span class="nav-item-icon" aria-hidden="true">♧</span><span>Hydroponik</span></a></li>',
       '<li><a href="/camera"><span class="nav-item-icon" aria-hidden="true">◉</span><span>Kamera</span></a></li>',
-      '<li><a href="/dashboard"><span class="nav-item-icon" aria-hidden="true">▦</span><span>Dashboard</span></a></li>',
       '<li><a href="/console"><span class="nav-item-icon" aria-hidden="true">&gt;_</span><span>Konsole</span></a></li>',
       '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Abmelden</button></form></li>',
     ].join("");
@@ -52,11 +51,11 @@ function renderMobileBottomNav(loggedIn) {
     document.body.appendChild(bottomNav);
   }
   bottomNav.innerHTML = [
-    '<a href="/"><span class="mobile-nav-icon" aria-hidden="true">⌂</span><span>Start</span></a>',
+    '<a href="/"><span class="mobile-nav-icon" aria-hidden="true">⌂</span><span>Übersicht</span></a>',
     '<a href="/energy"><span class="mobile-nav-icon" aria-hidden="true">⚡</span><span>Strom</span></a>',
     '<a href="/hydroponic"><span class="mobile-nav-icon" aria-hidden="true">♧</span><span>Hydro</span></a>',
     '<a href="/camera"><span class="mobile-nav-icon" aria-hidden="true">◉</span><span>Kamera</span></a>',
-    '<a href="/dashboard"><span class="mobile-nav-icon" aria-hidden="true">▦</span><span>System</span></a>',
+    '<a href="/console"><span class="mobile-nav-icon" aria-hidden="true">&gt;_</span><span>Konsole</span></a>',
   ].join("");
   markActiveNav(bottomNav);
 }
@@ -65,7 +64,7 @@ function markActiveNav(navLinks) {
   const current = window.location.pathname.replace(/\/$/, "") || "/";
   navLinks.querySelectorAll("a").forEach((link) => {
     const href = (link.getAttribute("href") || "").replace(/\/$/, "") || "/";
-    const active = href === "/" ? current === "/" : current.startsWith(href);
+    const active = href === "/" ? (current === "/" || current.startsWith("/dashboard")) : current.startsWith(href);
     if (active) {
       link.classList.add("is-active");
       link.setAttribute("aria-current", "page");

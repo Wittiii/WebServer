@@ -14,6 +14,8 @@ const widgetListEl = document.getElementById("quick-widget-list");
 const widgetManageListEl = document.getElementById("quick-widget-manage-list");
 const quickBoardSection = document.getElementById("dashboard-quick-board");
 const quickBuilderSection = document.getElementById("dashboard-quick-builder");
+const toggleQuickBuilderBtn = document.getElementById("toggle-quick-builder-btn");
+const authDeckEl = document.getElementById("dashboard-authenticated-deck");
 
 let widgets = [];
 let objectsCache = [];
@@ -60,15 +62,32 @@ async function loadStoredWidgets() {
   return Array.isArray(data?.widgets) ? data.widgets : [];
 }
 
+function setQuickBuilderOpen(open) {
+  if (!quickBuilderSection) return;
+  if (toggleQuickBuilderBtn) {
+    quickBuilderSection.hidden = !open;
+    toggleQuickBuilderBtn.setAttribute("aria-expanded", String(open));
+    toggleQuickBuilderBtn.textContent = open ? "Konfigurator schließen" : "+ Karte anlegen / verwalten";
+    return;
+  }
+  if (open && quickBuilderSection.classList.contains("collapsed")) {
+    quickBuilderSection.querySelector(".section-toggle")?.click();
+  }
+}
+
 function openQuickBoard() {
   if (!quickBoardSection?.classList.contains("collapsed")) return;
   quickBoardSection.querySelector(".section-toggle")?.click();
 }
 
 function openQuickBuilder() {
-  if (!quickBuilderSection?.classList.contains("collapsed")) return;
-  quickBuilderSection.querySelector(".section-toggle")?.click();
+  setQuickBuilderOpen(true);
+  quickBuilderSection?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
+
+toggleQuickBuilderBtn?.addEventListener("click", () => {
+  setQuickBuilderOpen(Boolean(quickBuilderSection?.hidden));
+});
 
 async function fetchObjects() {
   const list = await fetchDashboardJson("/api/objects");
@@ -573,10 +592,28 @@ async function initQuickBoard() {
   }
 }
 
-initDashboardOverview();
-initQuickBoard();
+let dashboardInitialized = false;
+function bootDashboard() {
+  if (dashboardInitialized) return;
+  dashboardInitialized = true;
+  if (authDeckEl) authDeckEl.hidden = false;
+  initDashboardOverview();
+  initQuickBoard();
 
-setInterval(() => {
-  if (document.hidden || !quickBoardReady) return;
-  refreshWidgetStates().catch(() => {});
-}, 15000);
+  setInterval(() => {
+    if (document.hidden || !quickBoardReady) return;
+    refreshWidgetStates().catch(() => {});
+  }, 15000);
+}
+
+if (!authDeckEl || window.__iotAuthenticated) {
+  bootDashboard();
+} else {
+  window.addEventListener("iot:authenticated", bootDashboard, { once: true });
+  fetch("/login/status", { credentials: "same-origin" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (data?.loggedIn) bootDashboard();
+    })
+    .catch(() => {});
+}

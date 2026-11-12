@@ -1,5 +1,5 @@
 // Smart IoT Deck - Lightweight Service Worker for PWA
-const CACHE_NAME = 'smart-iot-deck-v1';
+const CACHE_NAME = 'smart-iot-deck-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
@@ -41,6 +41,7 @@ self.addEventListener('fetch', (event) => {
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/dashboard/') ||
     url.pathname.startsWith('/login') ||
     url.pathname.startsWith('/auth') ||
     url.pathname.includes('/stream') ||

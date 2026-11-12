@@ -1,6 +1,7 @@
 (function () {
   const vitalsContainer = document.getElementById("home-vitals-container");
   const loginBanner = document.getElementById("home-login-banner");
+  const authDeck = document.getElementById("dashboard-authenticated-deck");
   if (!vitalsContainer) return;
 
   const numFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 });
@@ -21,11 +22,12 @@
   }
 
   function renderLoggedOut() {
+    if (authDeck) authDeck.hidden = true;
     if (loginBanner) {
       loginBanner.hidden = false;
       loginBanner.innerHTML = `
         <div class="helper-box home-login-hint" style="margin-bottom: 1rem;">
-          <p>Melde dich an, um deine Live-Messwerte direkt auf den Bereichskarten zu sehen.</p>
+          <p>Melde dich an, um deine Live-Messwerte, den Schnellzugriff sowie das Server- &amp; MQTT-Dashboard zu sehen.</p>
           <a class="btn btn-secondary summary-login" href="/login">Jetzt anmelden <span aria-hidden="true">→</span></a>
         </div>
       `;
@@ -36,6 +38,13 @@
     if (loginBanner) {
       loginBanner.hidden = true;
       loginBanner.innerHTML = "";
+    }
+    if (authDeck && authDeck.hidden) {
+      authDeck.hidden = false;
+    }
+    if (!window.__iotAuthenticated) {
+      window.__iotAuthenticated = true;
+      window.dispatchEvent(new CustomEvent("iot:authenticated"));
     }
 
     const { power, solar, hydro, system } = data;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard - Operations Deck</title>
+  <title>Übersicht &amp; Dashboard – Smart IoT</title>
   <link rel="stylesheet" href="/pages/style.css">
   <link rel="stylesheet" href="/pages/experience.css">
   <meta name="theme-color" content="#0f172a">
@@ -16,41 +16,185 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
 </head>
-<body class="theme-operations page-dashboard">
+<body class="theme-operations page-home page-dashboard">
   <div id="navbar"></div>
-
-  <header class="hero">
-    <div class="container hero-inner">
+  <header class="hero home-hero">
+    <div class="container hero-inner home-hero-compact">
       <div class="hero-copy">
-        <p class="eyebrow">Smart IoT / Dashboard</p><h1>IoT Dashboard</h1><p class="hero-text">Geräte, Messwerte und Serverstatus auf einen Blick.</p>
+        <div class="home-hero-badge-row">
+          <p class="eyebrow" style="margin:0;">Smart IoT · Übersicht &amp; Dashboard</p>
+          <span class="vitals-live-label"><span class="live-dot" aria-hidden="true"></span>Live-Telemetrie aktiv</span>
+        </div>
+        <h1>Alles im Blick. <span>Direkt steuerbar.</span></h1>
+        <p class="hero-text">Bereiche, Schnellzugriff-Karten, Server-Auslastung und MQTT-Broker vereint auf einer zentralen Leitstand-Seite.</p>
+      </div>
+      <div class="home-context">
+        <div class="home-clock">
+          <span>Systemzeit</span>
+          <strong id="clock">--:--:--</strong>
+        </div>
+        <div id="home-quick-system-pill" class="home-system-pill">System bereit</div>
       </div>
     </div>
   </header>
 
-  <main class="container page-shell dashboard-shell">
-    <div class="dashboard-main">
-      <div class="dashboard-refresh-bar">
-        <p id="dashboard-refresh-status" role="status">Daten werden geladen …</p>
-        <button id="dashboard-refresh" type="button" class="btn-secondary">Jetzt aktualisieren</button>
+  <main class="container page-shell">
+    <section class="home-vitals-section" data-collapsible="false" aria-labelledby="vitals-title">
+      <div class="workspace-heading">
+        <div>
+          <p class="eyebrow">Live-Status &amp; Direktwahl</p>
+          <h2 id="vitals-title">Hauptbereiche</h2>
+        </div>
+        <span>Karte antippen zum Öffnen</span>
       </div>
 
-      <div class="grid-3">
-        <div class="stats-card">
-          <h3>Datenabruf</h3>
-          <div class="stats-val" id="dashboard-connection">LÄDT</div>
-        </div>
-        <div class="stats-card">
-          <h3>Aktive Clients</h3>
-          <div class="stats-val" id="stats-clients-count">–</div>
-        </div>
-        <div class="stats-card">
-          <h3>Erfasste Topics</h3>
-          <div class="stats-val" id="stats-topics-count">–</div>
+      <div id="home-login-banner" hidden></div>
+
+      <div id="home-vitals-container" class="home-vitals-container" aria-live="polite">
+        <div class="home-vitals-grid">
+          <a class="vitals-card vitals-card-energy workspace-unified-card" href="/energy">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">⚡</span> Stromnetz</span>
+              <span id="home-power-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-power-primary" class="vitals-primary">-- <small>W</small></div>
+            <div class="vitals-details">
+              <p><span>Heute:</span> <strong id="home-power-today">-- kWh</strong></p>
+              <p><span>Zählerstand:</span> <span id="home-power-total">-- kWh</span></p>
+            </div>
+            <span class="vitals-action">Strom &amp; Verbrauch öffnen <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-solar workspace-unified-card" href="/energy">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">☀️</span> Solar &amp; Akku</span>
+              <span id="home-solar-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-solar-primary" class="vitals-primary">-- <small>W PV</small></div>
+            <div class="vitals-details">
+              <p><span>Akku-SoC:</span> <strong id="home-solar-soc">-- %</strong></p>
+              <p><span>Ertrag heute:</span> <span id="home-solar-yield">-- Wh</span></p>
+            </div>
+            <span class="vitals-action">Solar &amp; Batterie öffnen <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-hydro workspace-unified-card" href="/hydroponic">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">♧</span> Hydroponik</span>
+              <span id="home-hydro-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-hydro-primary" class="vitals-primary">--</div>
+            <div class="vitals-details">
+              <p><span>Aktives Objekt:</span> <strong id="home-hydro-obj">--</strong></p>
+              <p><span>Automationen:</span> <span id="home-hydro-rules">--</span></p>
+            </div>
+            <span class="vitals-action">Zur Pflanzensteuerung <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-system workspace-unified-card" href="/camera">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">◉</span> Kameras</span>
+              <span id="home-cam-badge" class="status-badge status-online">BEREIT</span>
+            </div>
+            <div id="home-cam-primary" class="vitals-primary">-- / -- <small>Online</small></div>
+            <div class="vitals-details">
+              <p><span>Livestream:</span> <strong id="home-cam-stream">WebRTC / Multiview</strong></p>
+              <p><span>Archiv:</span> <span>Schnappschuss &amp; Zeitraffer</span></p>
+            </div>
+            <span class="vitals-action">Kamera-Leitstand öffnen <span aria-hidden="true">→</span></span>
+          </a>
         </div>
       </div>
+    </section>
 
-      <section id="dashboard-server-health" class="panel">
-        <h2>Server Status</h2>
+    <div id="dashboard-authenticated-deck" class="unified-dashboard-deck" hidden>
+      <!-- 1. Schnellzugriff & Eigene Karten -->
+      <section id="dashboard-quick-board" class="panel unified-quick-panel" data-collapsible="false">
+        <div class="unified-section-header">
+          <div>
+            <p class="eyebrow" style="margin:0 0 0.2rem;">Direktsteuerung &amp; Favoriten</p>
+            <h2 style="margin:0;">Schnellzugriff</h2>
+          </div>
+          <div class="inline-actions">
+            <button id="toggle-quick-builder-btn" type="button" class="btn-secondary" aria-expanded="false" aria-controls="dashboard-quick-builder">+ Karte anlegen / verwalten</button>
+          </div>
+        </div>
+
+        <ul id="quick-widget-list" class="quick-widget-list unified-widget-grid" aria-live="polite"></ul>
+
+        <div id="dashboard-quick-builder" class="unified-quick-builder-drawer" data-collapsible="false" hidden>
+          <div class="unified-builder-grid">
+            <div>
+              <h3>Bestehende Karten sortieren / bearbeiten</h3>
+              <ul id="quick-widget-manage-list" class="quick-manage-list"></ul>
+            </div>
+            <div>
+              <h3>Karte anlegen oder bearbeiten</h3>
+              <form id="quick-widget-form" class="quick-builder-form">
+                <div class="grid-2" style="gap:0.75rem;">
+                  <div class="form-group">
+                    <label for="quick-widget-type">Typ</label>
+                    <select id="quick-widget-type">
+                      <option value="value">Letzten Wert anzeigen</option>
+                      <option value="command">Befehl senden</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="quick-widget-object">Objekt</label>
+                    <select id="quick-widget-object"></select>
+                  </div>
+                </div>
+
+                <div class="grid-2" style="gap:0.75rem;">
+                  <div class="form-group">
+                    <label for="quick-widget-detail" id="quick-widget-detail-label">Messwert</label>
+                    <select id="quick-widget-detail"></select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="quick-widget-title">Eigener Titel</label>
+                    <input id="quick-widget-title" type="text" placeholder="Optional">
+                  </div>
+                </div>
+
+                <div class="inline-actions">
+                  <button id="quick-widget-save" type="submit">Speichern</button>
+                  <button id="quick-widget-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
+                </div>
+              </form>
+              <p id="quick-widget-status" class="status-line"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Server-Status & System-Vitalwerte -->
+      <section id="dashboard-server-health" class="panel" data-collapsible="false">
+        <div class="unified-section-header">
+          <div>
+            <p class="eyebrow" style="margin:0 0 0.2rem;">Host &amp; Broker Telemetrie</p>
+            <h2 style="margin:0;">Server &amp; Systemstatus</h2>
+          </div>
+          <div class="unified-broker-pills">
+            <span class="stats-card unified-micro-stat">
+              <span class="unified-micro-label">Abruf:</span>
+              <strong class="stats-val" id="dashboard-connection">LÄDT</strong>
+            </span>
+            <span class="stats-card unified-micro-stat">
+              <span class="unified-micro-label">Aktive Clients:</span>
+              <strong class="stats-val" id="stats-clients-count">–</strong>
+            </span>
+            <span class="stats-card unified-micro-stat">
+              <span class="unified-micro-label">Topics:</span>
+              <strong class="stats-val" id="stats-topics-count">–</strong>
+            </span>
+            <button id="dashboard-refresh" type="button" class="btn-secondary">Jetzt aktualisieren</button>
+            <a href="/console" class="btn btn-secondary">&gt;_ Live-Konsole</a>
+          </div>
+        </div>
+        <p id="dashboard-refresh-status" class="unified-refresh-status" role="status">Daten werden geladen …</p>
+
         <div class="grid-2 server-health-grid">
           <div class="stats-card">
             <h3>CPU</h3>
@@ -75,6 +219,7 @@
         </div>
       </section>
 
+      <!-- 3. MQTT Broker: Clients & Topics -->
       <div class="grid-2 dashboard-columns">
         <section id="mqtt-clients" class="panel">
           <h2>MQTT Clients</h2>
@@ -86,7 +231,11 @@
               </div>
               <div>
                 <label for="client-status-filter">Status</label>
-                <select id="client-status-filter" aria-controls="client-list"><option value="all">Alle</option><option value="online">Online</option><option value="offline">Offline</option></select>
+                <select id="client-status-filter" aria-controls="client-list">
+                  <option value="all">Alle</option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
               </div>
             </div>
             <p id="client-result-count" role="status"></p>
@@ -99,7 +248,10 @@
           <div class="dashboard-filters">
             <label for="topic-search">Topic oder Nachrichteninhalt suchen</label>
             <input id="topic-search" type="search" placeholder="Pfad oder Messwert …" aria-controls="topic-list">
-            <div class="inline-actions"><button id="topics-expand" type="button" class="btn-secondary">Alle öffnen</button><button id="topics-collapse" type="button" class="btn-secondary">Alle schließen</button></div>
+            <div class="inline-actions">
+              <button id="topics-expand" type="button" class="btn-secondary">Alle öffnen</button>
+              <button id="topics-collapse" type="button" class="btn-secondary">Alle schließen</button>
+            </div>
             <p id="topic-result-count" role="status"></p>
           </div>
           <ul id="topic-list" class="mqtt-topic-tree"></ul>
@@ -107,52 +259,13 @@
       </div>
     </div>
 
-    <aside class="dashboard-rail">
-      <section id="dashboard-quick-board" class="panel">
-        <h2>Schnellzugriff</h2>
-        <ul id="quick-widget-list" class="quick-widget-list" aria-live="polite"></ul>
-      </section>
-
-      <section id="dashboard-quick-builder" class="panel" data-collapsed="true">
-        <h2>Karten verwalten</h2>
-        <ul id="quick-widget-manage-list" class="quick-manage-list"></ul>
-        <h3>Karte anlegen oder bearbeiten</h3>
-        <form id="quick-widget-form" class="quick-builder-form">
-          <div class="form-group">
-            <label for="quick-widget-type">Typ</label>
-            <select id="quick-widget-type">
-              <option value="value">Letzten Wert anzeigen</option>
-              <option value="command">Befehl senden</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="quick-widget-object">Objekt</label>
-            <select id="quick-widget-object"></select>
-          </div>
-
-          <div class="form-group">
-            <label for="quick-widget-detail" id="quick-widget-detail-label">Messwert</label>
-            <select id="quick-widget-detail"></select>
-          </div>
-
-          <div class="form-group">
-            <label for="quick-widget-title">Eigener Titel</label>
-            <input id="quick-widget-title" type="text" placeholder="Optional">
-          </div>
-
-          <div class="inline-actions">
-            <button id="quick-widget-save" type="submit">Speichern</button>
-            <button id="quick-widget-cancel" type="button" class="btn btn-secondary">Abbrechen</button>
-          </div>
-        </form>
-
-        <p id="quick-widget-status" class="status-line"></p>
-      </section>
-    </aside>
+    <footer class="page-footer">
+      <span>Smart IoT Ops</span>
+      <span>Kompakt · Echtzeit · PWA-ready</span>
+    </footer>
   </main>
-
   <script src="/pages/main.js"></script>
+  <script src="/pages/home.js"></script>
   <script type="module" src="/pages/dashboard/dashboard.js"></script>
 </body>
 </html>
