@@ -1,4 +1,6 @@
 const db = require('../database/db');
+const { topics } = require('../mqttBroker');
+const { extractValue } = require('../services/mqttPayloadService');
 const {
   listAutomationRules,
   createAutomationRule,
@@ -198,6 +200,25 @@ const createValueKey = (req, res) => {
     const info = db
       .prepare('INSERT INTO object_value_keys (object_id, topic, value_key, label, unit, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, topic || null, valueKey, label || null, unit || null, createdAt);
+
+    if (topic && topics.has(topic)) {
+      try {
+        const cached = topics.get(topic);
+        const raw = String(cached?.lastMessage ?? '');
+        const extracted = extractValue(raw, valueKey);
+        if (extracted) {
+          const existingReading = db
+            .prepare('SELECT 1 FROM object_readings WHERE object_id = ? AND value_key = ? LIMIT 1')
+            .get(id, valueKey);
+          if (!existingReading) {
+            const ts = cached?.timestamp ? new Date(cached.timestamp).toISOString() : createdAt;
+            db.prepare(
+              'INSERT INTO object_readings (object_id, topic, value_key, value_text, raw_payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+            ).run(id, topic, valueKey, extracted, raw, ts);
+          }
+        }
+      } catch {}
+    }
 
     res.status(201).json({
       id: info.lastInsertRowid,

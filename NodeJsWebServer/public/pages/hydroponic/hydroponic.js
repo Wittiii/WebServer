@@ -241,6 +241,11 @@ const commandList = document.getElementById('command-list');
 const commandCancel = document.getElementById('command-cancel');
 const configStatus = document.getElementById('object-config-status');
 const keyForm = document.getElementById('key-form');
+const keyEditorDetails = document.getElementById('key-editor');
+const keyIncomingTopicSelect = document.getElementById('key-incoming-topic-select');
+const keyIncomingTopicRefresh = document.getElementById('key-incoming-topic-refresh');
+const keyIncomingDetected = document.getElementById('key-incoming-detected');
+const keyTopicSuggestions = document.getElementById('key-topic-suggestions');
 const keyIdInput = document.getElementById('key-id');
 const keyInput = document.getElementById('key-input');
 const keyTopic = document.getElementById('key-topic');
@@ -608,7 +613,9 @@ async function loadHydroponicBrokerSummary() {
       fetch('/api/mqtt/topics').then((res) => res.json())
     ]);
     const online = Array.isArray(clients) ? clients.filter((c) => c.connected).length : 0;
-    const topicCount = Array.isArray(topics) ? topics.length : 0;
+    topicsCache = Array.isArray(topics) ? topics : [];
+    const topicCount = topicsCache.length;
+    renderIncomingTopicsForKeyForm();
     brokerSummary.innerHTML = `
       <div class="stats-card">
         <h3>MQTT Broker</h3>
@@ -627,6 +634,249 @@ async function loadHydroponicBrokerSummary() {
     }
   }
 }
+
+function guessLabelAndUnitForKey(rawKey) {
+  const leaf = String(rawKey || '').split('.').pop() || '';
+  const low = leaf.toLowerCase();
+  if (low.includes('temp')) return { label: 'Temperatur', unit: '°C' };
+  if (low.includes('hum') || low.includes('feucht')) return { label: 'Luftfeuchtigkeit', unit: '%' };
+  if (low === 'ph' || low.startsWith('ph_') || low.endsWith('_ph')) return { label: 'pH-Wert', unit: 'pH' };
+  if (low === 'ec' || low.startsWith('ec_') || low.includes('leit')) return { label: 'Leitwert (EC)', unit: 'mS/cm' };
+  if (low.includes('tds') || low.includes('ppm')) return { label: 'TDS', unit: 'ppm' };
+  if (low.includes('co2')) return { label: 'CO₂', unit: 'ppm' };
+  if (low.includes('lux') || low.includes('light') || low.includes('licht')) return { label: 'Beleuchtung', unit: 'lx' };
+  if (low.includes('power') || low.includes('watt') || low.includes('leistung')) return { label: 'Leistung', unit: 'W' };
+  if (low.includes('volt') || low.includes('spannung')) return { label: 'Spannung', unit: 'V' };
+  if (low.includes('curr') || low.includes('amp') || low.includes('strom')) return { label: 'Strom', unit: 'A' };
+  if (low.includes('level') || low.includes('pegel') || low.includes('water') || low.includes('wasser')) return { label: 'Wasserstand', unit: '%' };
+  const pretty = leaf.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return { label: pretty || rawKey, unit: '' };
+}
+
+function extractCandidateKeysFromPayload(topic, rawPayload) {
+  const text = String(rawPayload ?? '').trim();
+  const candidates = [];
+
+  if (text) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const walk = (obj, prefix = '', depth = 0) => {
+          if (!obj || typeof obj !== 'object' || depth > 4) return;
+          for (const [k, v] of Object.entries(obj)) {
+            const path = prefix ? `${prefix}.${k}` : k;
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+              walk(v, path, depth + 1);
+            } else if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') {
+              candidates.push({ key: path, sample: String(v), format: 'json' });
+            }
+          }
+        };
+        walk(parsed);
+        if (candidates.length) return candidates;
+      }
+    } catch {
+      // Not a JSON object, check key=value or scalar below
+    }
+
+    if (text.includes('=')) {
+      const regex = /([A-Za-z0-9_.-]+)\s*=\s*([^,;]+)/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        candidates.push({
+          key: match[1].trim(),
+          sample: match[2].trim(),
+          format: 'kv'
+        });
+      }
+      if (candidates.length) return candidates;
+    }
+  }
+
+  const segments = String(topic || '').split('/').filter(Boolean);
+  const lastSeg = (segments[segments.length - 1] || 'value').replace(/[^A-Za-z0-9_.-]/g, '_');
+  candidates.push({
+    key: lastSeg || 'value',
+    sample: text.length > 48 ? `${text.slice(0, 48)}…` : (text || '–'),
+    format: 'scalar'
+  });
+  return candidates;
+}
+
+function applyDetectedKeyCandidate(topic, candidate) {
+  if (keyTopic && topic) keyTopic.value = topic;
+  if (keyInput && candidate?.key) keyInput.value = candidate.key;
+  const guessed = guessLabelAndUnitForKey(candidate?.key || '');
+  if (keyLabel) keyLabel.value = guessed.label;
+  if (keyUnit) keyUnit.value = guessed.unit;
+}
+
+function renderDetectedKeysForTopic(topicStr, autoFillFirst = true) {
+  if (!keyIncomingDetected) return;
+  const cleanTopic = String(topicStr || '').trim();
+  if (!cleanTopic) {
+    keyIncomingDetected.hidden = true;
+    keyIncomingDetected.innerHTML = '';
+    return;
+  }
+
+  const entry = topicsCache.find((t) => t.topic === cleanTopic);
+  if (!entry) {
+    keyIncomingDetected.hidden = true;
+    keyIncomingDetected.innerHTML = '';
+    return;
+  }
+
+  const candidates = extractCandidateKeysFromPayload(cleanTopic, entry.lastMessage);
+  if (autoFillFirst && candidates.length > 0 && !(Number(keyIdInput?.value) > 0)) {
+    applyDetectedKeyCandidate(cleanTopic, candidates[0]);
+  }
+
+  const rawPreview = String(entry.lastMessage ?? '').trim();
+  const shortPreview = rawPreview.length > 90 ? `${rawPreview.slice(0, 90)}…` : (rawPreview || '(leer)');
+
+  const chipsHtml = candidates.map((c, idx) => {
+    const active = keyInput?.value === c.key ? 'is-active' : '';
+    return `<button type="button" class="incoming-key-chip ${active}" data-cand-idx="${idx}" title="Key '${escapeHtml(c.key)}' übernehmen">
+      <strong>${escapeHtml(c.key)}</strong>
+      <span>= ${escapeHtml(c.sample)}</span>
+    </button>`;
+  }).join('');
+
+  const bulkBtnHtml = candidates.length > 1
+    ? `<button type="button" id="key-incoming-bulk-add" class="btn btn-secondary incoming-bulk-add-btn">
+        + Alle ${candidates.length} erkannten Messwerte für dieses Objekt anlegen
+       </button>`
+    : '';
+
+  keyIncomingDetected.hidden = false;
+  keyIncomingDetected.innerHTML = `
+    <div class="incoming-detected-meta">
+      <span>Letzte Nachricht: <code>${escapeHtml(shortPreview)}</code></span>
+      <small>${candidates[0]?.format === 'scalar' ? 'Einzelwert-Topic erkannt' : `${candidates.length} Wert(e) im Topic erkannt – antippen zum Übernehmen:`}</small>
+    </div>
+    <div class="incoming-key-chip-list">${chipsHtml}</div>
+    ${bulkBtnHtml}
+  `;
+
+  keyIncomingDetected.querySelectorAll('.incoming-key-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.candIdx);
+      const cand = candidates[idx];
+      if (!cand) return;
+      applyDetectedKeyCandidate(cleanTopic, cand);
+      keyIncomingDetected.querySelectorAll('.incoming-key-chip').forEach((b) => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+    });
+  });
+
+  const bulkBtn = keyIncomingDetected.querySelector('#key-incoming-bulk-add');
+  if (bulkBtn) {
+    bulkBtn.addEventListener('click', async () => {
+      const obj = getSelectedObject();
+      if (!obj) return;
+      bulkBtn.disabled = true;
+      setKeyStatus(`Lege ${candidates.length} Messwerte an …`);
+      let added = 0;
+      try {
+        const existingSet = new Set((keysCache || []).map((k) => `${k.topic || ''}::${k.value_key}`));
+        for (const cand of candidates) {
+          if (existingSet.has(`${cleanTopic}::${cand.key}`)) continue;
+          const guessed = guessLabelAndUnitForKey(cand.key);
+          await createValueKeyForObject(obj.id, cand.key, cleanTopic, guessed.label, guessed.unit);
+          added++;
+        }
+        setKeyStatus(added > 0 ? `${added} Messwert(e) erfolgreich angelegt.` : 'Alle erkannten Keys sind bereits vorhanden.');
+        setKeyFormMode(false);
+        await loadKeys(false);
+        await loadAutomations();
+      } catch (err) {
+        setKeyStatus(`Fehler: ${err.message || err}`, true);
+      } finally {
+        bulkBtn.disabled = false;
+      }
+    });
+  }
+}
+
+function renderIncomingTopicsForKeyForm() {
+  const list = Array.isArray(topicsCache) ? topicsCache : [];
+  if (keyTopicSuggestions) {
+    keyTopicSuggestions.innerHTML = list
+      .map((t) => `<option value="${escapeHtml(t.topic)}"></option>`)
+      .join('');
+  }
+  if (!keyIncomingTopicSelect) return;
+
+  const prev = keyIncomingTopicSelect.value;
+  if (!list.length) {
+    keyIncomingTopicSelect.innerHTML = '<option value="">-- Noch keine MQTT-Topics empfangen --</option>';
+    return;
+  }
+
+  const options = [
+    `<option value="">-- Empfangenes Topic wählen (${list.length} verfügbar) --</option>`,
+    ...list.map((t) => {
+      const sel = t.topic === prev ? 'selected' : '';
+      const raw = String(t.lastMessage ?? '').replace(/\s+/g, ' ').trim();
+      const preview = raw.length > 42 ? `${raw.slice(0, 42)}…` : raw;
+      const suffix = preview ? `  [Letzter Wert: ${preview}]` : '';
+      return `<option value="${escapeHtml(t.topic)}" ${sel}>${escapeHtml(t.topic + suffix)}</option>`;
+    })
+  ];
+  keyIncomingTopicSelect.innerHTML = options.join('');
+}
+
+async function refreshIncomingTopicsForKeyForm() {
+  if (keyIncomingTopicRefresh) keyIncomingTopicRefresh.disabled = true;
+  try {
+    const res = await fetch('/api/mqtt/topics');
+    if (res.ok) {
+      const data = await res.json().catch(() => []);
+      topicsCache = Array.isArray(data) ? data : [];
+      renderIncomingTopicsForKeyForm();
+      if (keyIncomingTopicSelect?.value) {
+        renderDetectedKeysForTopic(keyIncomingTopicSelect.value, false);
+      }
+    }
+  } catch {
+    // Keep cached topics on transient errors
+  } finally {
+    if (keyIncomingTopicRefresh) keyIncomingTopicRefresh.disabled = false;
+  }
+}
+
+keyIncomingTopicRefresh?.addEventListener('click', () => {
+  refreshIncomingTopicsForKeyForm();
+});
+
+keyIncomingTopicSelect?.addEventListener('change', () => {
+  const chosenTopic = keyIncomingTopicSelect.value;
+  if (!chosenTopic) {
+    if (keyIncomingDetected) {
+      keyIncomingDetected.hidden = true;
+      keyIncomingDetected.innerHTML = '';
+    }
+    return;
+  }
+  if (keyTopic) keyTopic.value = chosenTopic;
+  renderDetectedKeysForTopic(chosenTopic, true);
+});
+
+keyTopic?.addEventListener('input', () => {
+  const typed = (keyTopic.value || '').trim();
+  const match = topicsCache.find((t) => t.topic === typed);
+  if (match) {
+    if (keyIncomingTopicSelect) keyIncomingTopicSelect.value = typed;
+    renderDetectedKeysForTopic(typed, !keyInput?.value);
+  }
+});
+
+keyEditorDetails?.addEventListener('toggle', () => {
+  if (keyEditorDetails.open) {
+    refreshIncomingTopicsForKeyForm();
+  }
+});
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -1373,6 +1623,11 @@ function setKeyFormMode(editing, keyObj) {
     if (keyTopic) keyTopic.value = '';
     if (keyLabel) keyLabel.value = '';
     if (keyUnit) keyUnit.value = '';
+    if (keyIncomingTopicSelect) keyIncomingTopicSelect.value = '';
+    if (keyIncomingDetected) {
+      keyIncomingDetected.hidden = true;
+      keyIncomingDetected.innerHTML = '';
+    }
     return;
   }
   if (keyObj) {
@@ -1381,6 +1636,12 @@ function setKeyFormMode(editing, keyObj) {
     if (keyTopic) keyTopic.value = keyObj.topic || '';
     if (keyLabel) keyLabel.value = keyObj.label || '';
     if (keyUnit) keyUnit.value = keyObj.unit || '';
+    if (keyIncomingTopicSelect) {
+      keyIncomingTopicSelect.value = keyObj.topic || '';
+    }
+    if (keyObj.topic) {
+      renderDetectedKeysForTopic(keyObj.topic, false);
+    }
   }
 }
 

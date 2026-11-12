@@ -209,6 +209,21 @@
             <summary>Messwert hinzufügen oder bearbeiten</summary>
           <form id="key-form">
             <input id="key-id" type="hidden">
+            <div class="form-group incoming-topic-picker-box">
+              <div class="incoming-topic-picker-header">
+                <label for="key-incoming-topic-select">📡 Empfangenes Live-Topic direkt übernehmen</label>
+                <button id="key-incoming-topic-refresh" type="button" class="btn btn-secondary incoming-topic-refresh-btn" title="Empfangene Broker-Topics aktualisieren">↻ Topics aktualisieren</button>
+              </div>
+              <select id="key-incoming-topic-select">
+                <option value="">-- Empfangenes MQTT-Topic auswählen --</option>
+              </select>
+              <div id="key-incoming-detected" class="incoming-detected-keys" hidden></div>
+            </div>
+            <div class="form-group">
+              <label for="key-topic">Topic</label>
+              <input id="key-topic" type="text" list="key-topic-suggestions" placeholder="z. B. hydroponic/sensorbox/state (oder oben auswählen)">
+              <datalist id="key-topic-suggestions"></datalist>
+            </div>
             <div class="form-group">
               <label for="key-input">Key Name</label>
               <input id="key-input" type="text" placeholder="z. B. EC_comp, ENERGY.Power oder temperature_c" required>
@@ -216,10 +231,6 @@
                 Bei einem Topic mit nur einem Wert kannst du einen eigenen Key wie <code>temperature_c</code> vergeben.
                 Fuer JSON nutze einen Pfad wie <code>ENERGY.Power</code>. Das Format <code>EC=1.23</code> nutzt den Key <code>EC</code>.
               </small>
-            </div>
-            <div class="form-group">
-              <label for="key-topic">Topic</label>
-              <input id="key-topic" type="text" placeholder="Optionales Echtzeit Topic">
             </div>
             <div class="grid-2">
               <div class="form-group">

@@ -1845,6 +1845,94 @@ label {
   color: #fcd34d !important;
 }
 
+/* Incoming MQTT Topic & Key Auto-Discovery Box in Hydroponic Key Form */
+.incoming-topic-picker-box {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.8rem;
+  margin-bottom: 0.75rem;
+}
+.incoming-topic-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+.incoming-topic-picker-header label {
+  margin-bottom: 0;
+  color: #7dd3fc;
+  font-weight: 600;
+}
+.incoming-topic-refresh-btn {
+  min-height: 1.75rem !important;
+  padding: 0.18rem 0.55rem !important;
+  font-size: 0.72rem !important;
+  width: auto !important;
+}
+.incoming-detected-keys {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.incoming-detected-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.incoming-detected-meta code {
+  color: #38bdf8;
+  font-size: 0.74rem;
+  word-break: break-all;
+}
+.incoming-key-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.incoming-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.8rem !important;
+  padding: 0.22rem 0.55rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 999px !important;
+  background: rgba(30, 41, 59, 0.85) !important;
+  border: 1px solid rgba(56, 189, 248, 0.32) !important;
+  color: #e2e8f0 !important;
+  width: auto !important;
+  cursor: pointer;
+}
+.incoming-key-chip span {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.incoming-key-chip:hover,
+.incoming-key-chip.is-active {
+  background: rgba(56, 189, 248, 0.2) !important;
+  border-color: #38bdf8 !important;
+  color: #fff !important;
+}
+.incoming-bulk-add-btn {
+  width: 100% !important;
+  min-height: 1.95rem !important;
+  font-size: 0.76rem !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #6ee7b7 !important;
+}
+.incoming-bulk-add-btn:hover {
+  background: rgba(16, 185, 129, 0.22) !important;
+}
+
 /* ==========================================================================
    9. Smartphone High-Density & Alignment Optimization (Mobile-Only <= 760px)
    Desktop (> 760px) remains 100% unchanged!
