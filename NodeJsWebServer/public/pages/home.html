@@ -28,27 +28,55 @@
     </div>
   </header>
   <main class="container page-shell">
-    <div id="broker-summary" class="grid-2 summary-grid" aria-live="polite">
-      <p class="helper-box">Verbindungsstatus wird geladen …</p>
-    </div>
+    <section class="home-vitals-section" aria-labelledby="vitals-title">
+      <div class="workspace-heading">
+        <div>
+          <p class="eyebrow">Live-Telemetrie</p>
+          <h2 id="vitals-title">System-Vitalwerte</h2>
+        </div>
+        <span class="vitals-live-label"><span class="live-dot" aria-hidden="true"></span>Echtzeit-Aktualisierung</span>
+      </div>
+      <div id="home-vitals-container" class="home-vitals-container" aria-live="polite">
+        <p class="helper-box">Vitalwerte werden geladen …</p>
+      </div>
+    </section>
+
     <section class="home-workspaces" data-collapsible="false" aria-labelledby="workspace-title">
-      <div class="workspace-heading"><div><p class="eyebrow">Direkt zum Wesentlichen</p><h2 id="workspace-title">Deine Bereiche</h2></div><span>Ein Klick. Direkt drin.</span></div>
+      <div class="workspace-heading">
+        <div>
+          <p class="eyebrow">Direkt zum Wesentlichen</p>
+          <h2 id="workspace-title">Deine Bereiche</h2>
+        </div>
+        <span>Ein Klick. Direkt drin.</span>
+      </div>
       <div class="workspace-grid">
         <a class="workspace-card" href="/dashboard">
           <span class="workspace-icon" aria-hidden="true">▦</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Dashboard</h3><p>Verbindungen, Topics und Serverstatus im Überblick.</p><span class="workspace-link">Übersicht öffnen <span aria-hidden="true">→</span></span>
+          <h3>Dashboard</h3>
+          <p>Verbindungen, Topics und Serverstatus im Überblick.</p>
+          <span id="badge-dash" class="workspace-mini-badge">System aktiv</span>
+          <span class="workspace-link">Übersicht öffnen <span aria-hidden="true">→</span></span>
         </a>
         <a class="workspace-card workspace-camera" href="/camera">
           <span class="workspace-icon" aria-hidden="true">◉</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Kameras</h3><p>Live dabei sein. Kameras steuern und Aufnahmen ansehen.</p><span class="workspace-link">Zum Livestream <span aria-hidden="true">→</span></span>
+          <h3>Kameras</h3>
+          <p>Live dabei sein. Kameras steuern und Aufnahmen ansehen.</p>
+          <span id="badge-cam" class="workspace-mini-badge">Kameras bereit</span>
+          <span class="workspace-link">Zum Livestream <span aria-hidden="true">→</span></span>
         </a>
         <a class="workspace-card workspace-energy" href="/energy">
           <span class="workspace-icon" aria-hidden="true">ϟ</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Energie</h3><p>Verbrauch, Solarerzeugung und Batterie im Blick behalten.</p><span class="workspace-link">Messwerte ansehen <span aria-hidden="true">→</span></span>
+          <h3>Energie</h3>
+          <p>Verbrauch, Solarerzeugung und Batterie im Blick behalten.</p>
+          <span id="badge-energy" class="workspace-mini-badge">Messung läuft</span>
+          <span class="workspace-link">Messwerte ansehen <span aria-hidden="true">→</span></span>
         </a>
         <a class="workspace-card workspace-hydro" href="/hydroponic">
           <span class="workspace-icon" aria-hidden="true">♧</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Hydroponik</h3><p>Deine Anlage steuern und automatische Abläufe einrichten.</p><span class="workspace-link">Zur Steuerung <span aria-hidden="true">→</span></span>
+          <h3>Hydroponik</h3>
+          <p>Deine Anlage steuern und automatische Abläufe einrichten.</p>
+          <span id="badge-hydro" class="workspace-mini-badge">Automatik aktiv</span>
+          <span class="workspace-link">Zur Steuerung <span aria-hidden="true">→</span></span>
         </a>
       </div>
     </section>
@@ -56,5 +84,6 @@
     <footer class="page-footer"><span>Smart IoT Ops</span><span>Dein System. Dein Überblick.</span></footer>
   </main>
   <script src="/pages/main.js"></script>
+  <script src="/pages/home.js"></script>
 </body>
 </html>

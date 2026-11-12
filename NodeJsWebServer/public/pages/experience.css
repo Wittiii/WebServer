@@ -222,3 +222,158 @@ p { line-height: 1.65; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+
+/* --- Home Live Vitals --- */
+.home-vitals-section {
+  padding: 1.5rem 0 0.5rem;
+}
+.vitals-live-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.live-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  animation: live-pulse 2s infinite ease-in-out;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.home-vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+.vitals-card {
+  --vital-accent: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.35rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 1.1rem;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.vitals-card:hover {
+  border-color: var(--vital-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.vitals-card-energy { --vital-accent: #ffbe5c; }
+.vitals-card-solar  { --vital-accent: #83d9d0; }
+.vitals-card-hydro  { --vital-accent: #8ae49f; }
+.vitals-card-system { --vital-accent: #b9b0ff; }
+
+.vitals-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+.vitals-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.vitals-icon {
+  font-size: 1rem;
+}
+.vitals-primary {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.8rem, 2.3vw, 2.4rem);
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--vital-accent);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 0.75rem;
+}
+.vitals-primary small {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
+.vitals-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  flex-grow: 1;
+  margin-bottom: 1rem;
+}
+.vitals-details p {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.vitals-details strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.vitals-action {
+  align-self: flex-start;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--vital-accent);
+  text-decoration: none;
+  border-bottom: 1px dashed transparent;
+  transition: border-color 140ms ease, opacity 140ms ease;
+}
+.vitals-action:hover {
+  border-bottom-color: var(--vital-accent);
+  opacity: 0.9;
+}
+.workspace-mini-badge {
+  display: inline-block;
+  font-size: 0.73rem;
+  color: var(--card-accent);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.4rem;
+  margin-bottom: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.home-login-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 1.5rem;
+  border-radius: 1rem;
+}
+.home-login-hint p {
+  margin: 0;
+}
+
+@media (max-width: 1080px) {
+  .home-vitals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .home-vitals-grid {
+    grid-template-columns: 1fr;
+  }
+}
