@@ -43,6 +43,54 @@
 
   <main class="container page-shell energy-shell">
     <div id="energy-layout-grid" class="energy-layout-grid">
+    <section class="panel energy-autarky-panel" data-layout-id="autarky-flow" data-layout-title="Autarkie &amp; Energieverteilung" data-collapsible="false">
+      <div class="section-header energy-section-heading">
+        <div>
+          <p class="energy-eyebrow">ENERGIEBILANZ &amp; AUTARKIE</p>
+          <h2>Aktuelle Energieverteilung</h2>
+        </div>
+        <div class="autarky-badge-group">
+          <span id="autarky-status-badge" class="status-badge energy-status-badge">WARTET</span>
+        </div>
+      </div>
+
+      <div class="autarky-summary-row">
+        <div class="autarky-score-card">
+          <span class="autarky-score-label">Solar-Deckungsgrad</span>
+          <div class="autarky-score-val-wrap">
+            <strong id="autarky-percent">-- %</strong>
+            <small id="autarky-summary-text">Wartet auf Messdaten</small>
+          </div>
+          <div class="autarky-bar-track" aria-hidden="true">
+            <div id="autarky-bar-solar" class="autarky-bar-fill bar-solar" style="width: 0%" title="Solar"></div>
+            <div id="autarky-bar-grid" class="autarky-bar-fill bar-grid" style="width: 0%" title="Netzbezug"></div>
+          </div>
+        </div>
+
+        <div class="autarky-flow-grid">
+          <div class="autarky-node node-solar">
+            <span class="node-icon">☀️</span>
+            <span class="node-title">Solar (PV)</span>
+            <strong id="autarky-solar-power">-- W</strong>
+            <small id="autarky-solar-sub">Ertrag heute: --</small>
+          </div>
+          <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
+          <div class="autarky-node node-battery">
+            <span class="node-icon">🔋</span>
+            <span class="node-title">Batterie</span>
+            <strong id="autarky-battery-soc">-- %</strong>
+            <small id="autarky-battery-sub">Standby</small>
+          </div>
+          <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
+          <div class="autarky-node node-grid">
+            <span class="node-icon">⚡</span>
+            <span class="node-title">Haus / Netz</span>
+            <strong id="autarky-grid-power">-- W</strong>
+            <small id="autarky-grid-sub">Verbrauch heute: --</small>
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="energy-metric-grid" data-layout-id="live-values" data-layout-title="Live-Messwerte" data-collapsible="false" aria-label="Aktuelle Messwerte">
       <article class="energy-metric-card energy-metric-primary">
         <span class="energy-metric-label">Wirkleistung</span>

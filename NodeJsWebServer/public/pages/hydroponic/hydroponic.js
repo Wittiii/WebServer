@@ -110,6 +110,7 @@ async function loadReadings() {
     lastReadingsCache = list;
     if (exportCsvBtn) exportCsvBtn.disabled = false;
     checkThresholds(list);
+    updateSensorDeckForCurrentKey(list);
   } catch (err) {
     if (controller !== chartRequestController || err.name === 'AbortError') return;
     graphStatus.textContent = err.message || 'Messwerte konnten nicht geladen werden.';
@@ -214,6 +215,8 @@ const keySave = document.getElementById('key-save');
 const keyCancel = document.getElementById('key-cancel');
 const keyList = document.getElementById('key-list');
 const keySelect = document.getElementById('key-select');
+const sensorDeckEl = document.getElementById('hydro-sensor-deck');
+const latestKeyReadingsCache = new Map();
 const graphRefresh = document.getElementById('graph-refresh');
 const exportCsvBtn = document.getElementById('export-csv');
 const chartCanvas = document.getElementById('readings-chart');
@@ -401,6 +404,99 @@ function checkThresholds(readings) {
   thresholdStatus.textContent = `Alarm: ${violations.length} Abweichung(en), zuletzt ${first.value} ${getSelectedKeyUnit()} um ${new Date(first.ts).toLocaleString()}`;
   thresholdStatus.style.color = 'var(--danger)';
   thresholdStatus.style.background = 'rgba(239, 68, 68, 0.12)';
+}
+
+function updateSensorDeckForCurrentKey(readings) {
+  const currentKey = getSelectedKey();
+  if (!currentKey) return;
+  const list = Array.isArray(readings) ? readings : [];
+  if (!list.length) {
+    renderSensorDeck();
+    return;
+  }
+
+  const latest = list[0];
+  const previous = list[1] || null;
+  const val = parseNumber(latest.value_text);
+  const prevVal = previous ? parseNumber(previous.value_text) : null;
+
+  let trend = 'stable';
+  if (Number.isFinite(val) && Number.isFinite(prevVal)) {
+    const diff = val - prevVal;
+    if (diff > 0.05) trend = 'up';
+    else if (diff < -0.05) trend = 'down';
+  }
+
+  const { min, max } = loadThresholdSettings();
+  let status = 'optimal';
+  if (Number.isFinite(val)) {
+    if ((Number.isFinite(min) && val < min) || (Number.isFinite(max) && val > max)) {
+      status = 'warning';
+    }
+  }
+
+  latestKeyReadingsCache.set(currentKey, {
+    valText: latest.value_text,
+    valNum: val,
+    trend,
+    status,
+    ts: latest.created_at
+  });
+
+  renderSensorDeck();
+}
+
+function renderSensorDeck() {
+  if (!sensorDeckEl) return;
+  if (!keysCache || !keysCache.length) {
+    sensorDeckEl.innerHTML = '';
+    return;
+  }
+
+  const currentKey = getSelectedKey();
+  sensorDeckEl.innerHTML = keysCache.map((k) => {
+    const meta = latestKeyReadingsCache.get(k.value_key);
+    const isSelected = k.value_key === currentKey;
+    const unit = k.unit ? ` ${escapeHtml(k.unit)}` : '';
+    const valText = meta ? `${escapeHtml(meta.valText)}${unit}` : '--';
+    const trendIcon = meta?.trend === 'up' ? '↗' : meta?.trend === 'down' ? '↘' : meta?.trend === 'stable' ? '→' : '';
+    const statusClass = meta?.status === 'warning' ? 'status-danger' : meta ? 'status-online' : 'status-waiting';
+    const statusLabel = meta?.status === 'warning' ? 'Außerhalb Schwellenwert' : meta ? 'Normal / Optimal' : 'Wartet auf Messung';
+
+    const nameLow = (k.label || k.value_key || '').toLowerCase();
+    const icon = nameLow.includes('temp') ? '🌡️' : nameLow.includes('ph') ? '🧪' : (nameLow.includes('ec') || nameLow.includes('leit')) ? '⚡' : (nameLow.includes('feucht') || nameLow.includes('wasser') || nameLow.includes('hum')) ? '💧' : '🌱';
+
+    return `
+      <div class="hydro-sensor-card ${isSelected ? 'is-selected' : ''}" data-sensor-key="${escapeHtml(k.value_key)}" role="button" tabindex="0" title="Verlauf für ${escapeHtml(k.label || k.value_key)} anzeigen">
+        <div class="hydro-sensor-top">
+          <span class="hydro-sensor-icon">${icon}</span>
+          <span class="hydro-sensor-label">${escapeHtml(k.label || k.value_key)}</span>
+          <span class="hydro-ampel-dot ${statusClass}" title="${statusLabel}"></span>
+        </div>
+        <div class="hydro-sensor-body">
+          <strong class="hydro-sensor-value">${valText}</strong>
+          ${trendIcon ? `<span class="hydro-trend-badge trend-${meta.trend}" title="Trend: ${meta.trend === 'up' ? 'steigend' : meta.trend === 'down' ? 'fallend' : 'stabil'}">${trendIcon}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  sensorDeckEl.querySelectorAll('.hydro-sensor-card').forEach((card) => {
+    const handleSelect = () => {
+      const key = card.dataset.sensorKey;
+      if (key && keySelect && keySelect.value !== key) {
+        keySelect.value = key;
+        keySelect.dispatchEvent(new Event('change'));
+      }
+    };
+    card.addEventListener('click', handleSelect);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleSelect();
+      }
+    });
+  });
 }
 
 function populateThresholdInputs() {
@@ -975,6 +1071,7 @@ async function loadKeys(preserveSelection = true) {
 
     renderKeySelect(list, nextKey);
     if (keySelect && nextKey) keySelect.value = nextKey;
+    renderSensorDeck();
 
     setKeyFormMode(false);
     renderAutomationKeyOptions();

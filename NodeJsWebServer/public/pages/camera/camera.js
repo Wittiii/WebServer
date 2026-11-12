@@ -37,6 +37,13 @@ const openHlsEl = document.getElementById("camera-open-hls");
 const openRtspEl = document.getElementById("camera-open-rtsp");
 const activeTitleEl = document.getElementById("camera-active-title");
 const activeSubtitleEl = document.getElementById("camera-active-subtitle");
+const viewSingleBtn = document.getElementById("camera-view-single");
+const viewMultiBtn = document.getElementById("camera-view-multi");
+const toggleFullscreenBtn = document.getElementById("camera-toggle-fullscreen");
+const streamStageEl = document.getElementById("camera-stream-stage");
+const singleShellEl = document.getElementById("camera-single-shell");
+const multiviewGridEl = document.getElementById("camera-multiview-grid");
+let isMultiviewMode = false;
 const heroCountEl = document.getElementById("camera-hero-count");
 const heroOnlineEl = document.getElementById("camera-hero-online");
 const heroStreamingEl = document.getElementById("camera-hero-streaming");
@@ -696,6 +703,98 @@ function renderStream(camera) {
   renderSnapshotCompare(camera);
 }
 
+function setCameraViewMode(mode) {
+  isMultiviewMode = mode === "multi";
+  if (viewSingleBtn) viewSingleBtn.classList.toggle("is-active", !isMultiviewMode);
+  if (viewMultiBtn) viewMultiBtn.classList.toggle("is-active", isMultiviewMode);
+  if (singleShellEl) singleShellEl.hidden = isMultiviewMode;
+  if (multiviewGridEl) multiviewGridEl.hidden = !isMultiviewMode;
+  if (activeTitleEl && isMultiviewMode) activeTitleEl.textContent = "Kamera Multiview (Alle Streams)";
+  if (activeSubtitleEl && isMultiviewMode) activeSubtitleEl.textContent = "Alle konfigurierten Kameras synchron im Überblick";
+
+  if (isMultiviewMode) {
+    renderMultiview();
+  } else {
+    const activeCamera = getActiveCamera();
+    if (activeCamera) {
+      if (activeTitleEl) activeTitleEl.textContent = `${activeCamera.label} Live Stream`;
+      if (activeSubtitleEl) {
+        activeSubtitleEl.textContent = `${activeCamera.cameraId} | ${activeCamera.mqtt.topicBase} | ${activeCamera.stream.path}`;
+      }
+    }
+  }
+}
+
+function renderMultiview() {
+  if (!multiviewGridEl || !overviewState?.cameras) return;
+  const cameras = overviewState.cameras;
+  multiviewGridEl.innerHTML = "";
+  cameras.forEach((cam) => {
+    const card = document.createElement("article");
+    card.className = "camera-multiview-card";
+    const isOnline = Boolean(cam.status?.online || cam.connected);
+    const isStreaming = Boolean(cam.status?.streaming);
+    const isCurrent = cam.cameraId === activeCameraId;
+
+    card.innerHTML = `
+      <div class="camera-multiview-header">
+        <div class="camera-multiview-title">
+          <span class="status-dot ${isOnline ? "is-online" : "is-offline"}"></span>
+          <strong>${cam.label || cam.cameraId}</strong>
+          <span class="camera-micro-pill ${isStreaming ? "is-streaming" : ""}">${isStreaming ? "Streaming" : (isOnline ? "Online" : "Offline")}</span>
+        </div>
+        <div class="camera-multiview-actions">
+          <button type="button" class="btn-sm btn-secondary camera-multiview-focus" data-cam-id="${cam.cameraId}" title="In Einzelansicht wechseln">${isCurrent ? "Aktiv" : "Fokus"}</button>
+          <a href="${cam.stream?.urls?.webrtcPage || "#"}" target="_blank" rel="noreferrer" class="btn-sm btn-secondary" title="In neuem Tab öffnen">↗</a>
+        </div>
+      </div>
+      <div class="camera-multiview-frame-shell">
+        <iframe src="${cam.stream?.urls?.webrtcPage || "about:blank"}" title="${cam.label || cam.cameraId} Stream" allow="autoplay; fullscreen" loading="lazy"></iframe>
+      </div>
+    `;
+
+    const focusBtn = card.querySelector(".camera-multiview-focus");
+    focusBtn?.addEventListener("click", () => {
+      activeCameraId = cam.cameraId;
+      setCameraViewMode("single");
+      renderActiveCamera({ forceSettings: true });
+    });
+
+    multiviewGridEl.appendChild(card);
+  });
+}
+
+function toggleStreamFullscreen() {
+  const target = streamStageEl || document.querySelector(".panel");
+  if (!target) return;
+  if (!document.fullscreenElement) {
+    if (target.requestFullscreen) {
+      target.requestFullscreen().catch(() => {});
+    } else if (target.webkitRequestFullscreen) {
+      target.webkitRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
+}
+
+viewSingleBtn?.addEventListener("click", () => setCameraViewMode("single"));
+viewMultiBtn?.addEventListener("click", () => setCameraViewMode("multi"));
+toggleFullscreenBtn?.addEventListener("click", toggleStreamFullscreen);
+
+document.addEventListener("fullscreenchange", () => {
+  const isFull = Boolean(document.fullscreenElement);
+  if (toggleFullscreenBtn) {
+    toggleFullscreenBtn.textContent = isFull ? "🗗 Beenden" : "⛶ Vollbild";
+    toggleFullscreenBtn.classList.toggle("is-active", isFull);
+  }
+  if (streamStageEl) streamStageEl.classList.toggle("is-fullscreen", isFull);
+});
+
 function setTimelapsePanelCollapsed(isCollapsed, { persist = true } = {}) {
   if (!timelapsePanelEl || !timelapseToggleEl) return;
   timelapseCollapsed = Boolean(isCollapsed);
@@ -1139,6 +1238,7 @@ function renderActiveCamera(options = {}) {
   renderTopics(activeCamera);
   renderTargets(activeCamera);
   renderStream(activeCamera);
+  if (isMultiviewMode) renderMultiview();
   renderSettingsForm(activeCamera, { force: Boolean(options.forceSettings) });
   syncSettingsStatus(activeCamera);
   renderTimelapseSection(activeCamera);

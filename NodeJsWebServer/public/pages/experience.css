@@ -377,3 +377,379 @@ p { line-height: 1.65; }
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Camera Multiview & Fullscreen Controls
+   ========================================================================== */
+.camera-stream-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.camera-view-mode-group {
+  display: inline-flex;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+  padding: 0.2rem;
+  gap: 0.2rem;
+}
+
+.btn-view-mode {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-view-mode:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-view-mode.is-active {
+  background: var(--primary, #38bdf8);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.camera-stream-stage.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #090d16;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.camera-stream-stage.is-fullscreen .camera-stream-shell,
+.camera-stream-stage.is-fullscreen .camera-multiview-grid {
+  flex: 1;
+  min-height: calc(100vh - 2rem);
+}
+
+.camera-multiview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.camera-multiview-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-multiview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  background: rgba(30, 41, 59, 0.5);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.camera-multiview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.camera-micro-pill {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.camera-micro-pill.is-streaming {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+}
+
+.camera-multiview-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.camera-multiview-frame-shell {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+}
+
+.camera-multiview-frame-shell iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+@media (max-width: 640px) {
+  .camera-multiview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Energy Autarky & Distribution Flow (Clean & Functional)
+   ========================================================================== */
+.energy-autarky-panel {
+  margin-bottom: 1.5rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.autarky-summary-row {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.5rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.autarky-score-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.autarky-score-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.autarky-score-val-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0.85rem;
+}
+
+.autarky-score-val-wrap strong {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #38bdf8;
+  line-height: 1;
+}
+
+.autarky-score-val-wrap small {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.autarky-bar-track {
+  display: flex;
+  height: 8px;
+  width: 100%;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.autarky-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.autarky-bar-fill.bar-solar {
+  background: #10b981;
+}
+
+.autarky-bar-fill.bar-battery {
+  background: #06b6d4;
+}
+
+.autarky-bar-fill.bar-grid {
+  background: #f59e0b;
+}
+
+.autarky-flow-grid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.autarky-node {
+  flex: 1;
+  min-width: 140px;
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: border-color 0.2s ease;
+}
+
+.autarky-node:hover {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.autarky-node .node-icon {
+  font-size: 1.3rem;
+  margin-bottom: 0.25rem;
+}
+
+.autarky-node .node-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.autarky-node strong {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0.2rem 0;
+}
+
+.autarky-node small {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.autarky-flow-arrow {
+  color: #64748b;
+  font-size: 1.2rem;
+  user-select: none;
+}
+
+@media (max-width: 900px) {
+  .autarky-summary-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Hydroponic Sensor Deck & Status Ampel
+   ========================================================================== */
+.hydro-sensor-deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.hydro-sensor-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.hydro-sensor-card:hover {
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(56, 189, 248, 0.4);
+  transform: translateY(-1px);
+}
+
+.hydro-sensor-card.is-selected {
+  border-color: var(--primary, #38bdf8);
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px var(--primary, #38bdf8);
+}
+
+.hydro-sensor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.hydro-sensor-icon {
+  font-size: 1.1rem;
+  margin-right: 0.35rem;
+}
+
+.hydro-sensor-label {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hydro-ampel-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.hydro-ampel-dot.status-online {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.hydro-ampel-dot.status-danger {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.hydro-ampel-dot.status-waiting {
+  background: #64748b;
+}
+
+.hydro-sensor-body {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hydro-sensor-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.hydro-trend-badge {
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.hydro-trend-badge.trend-up {
+  color: #38bdf8;
+}
+
+.hydro-trend-badge.trend-down {
+  color: #f59e0b;
+}
+
+.hydro-trend-badge.trend-stable {
+  color: #94a3b8;
+}

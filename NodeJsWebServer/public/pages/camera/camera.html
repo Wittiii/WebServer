@@ -54,14 +54,24 @@
           <h2 id="camera-active-title">Live Stream</h2>
           <p id="camera-active-subtitle" class="camera-muted-line"></p>
         </div>
-        <div class="camera-link-row">
-          <a id="camera-open-webrtc" class="btn camera-link-btn" target="_blank" rel="noreferrer">WebRTC</a>
-          <a id="camera-open-hls" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">HLS</a>
-          <a id="camera-open-rtsp" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">RTSP</a>
+        <div class="camera-stream-controls">
+          <div class="camera-view-mode-group" role="group" aria-label="Ansichtsmodus">
+            <button id="camera-view-single" type="button" class="btn-view-mode is-active" title="Einzelkamera anzeigen">▣ Einzeln</button>
+            <button id="camera-view-multi" type="button" class="btn-view-mode" title="Alle Kameras im Grid anzeigen">⊞ Multiview</button>
+            <button id="camera-toggle-fullscreen" type="button" class="btn-view-mode" title="Vollbildmodus umschalten">⛶ Vollbild</button>
+          </div>
+          <div class="camera-link-row">
+            <a id="camera-open-webrtc" class="btn camera-link-btn" target="_blank" rel="noreferrer">WebRTC</a>
+            <a id="camera-open-hls" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">HLS</a>
+            <a id="camera-open-rtsp" class="btn btn-secondary camera-link-btn" target="_blank" rel="noreferrer">RTSP</a>
+          </div>
         </div>
       </div>
-      <div class="camera-stream-shell">
-        <iframe id="camera-stream-frame" class="camera-stream-frame" title="MediaMTX Stream"></iframe>
+      <div id="camera-stream-stage" class="camera-stream-stage">
+        <div id="camera-single-shell" class="camera-stream-shell">
+          <iframe id="camera-stream-frame" class="camera-stream-frame" title="MediaMTX Stream"></iframe>
+        </div>
+        <div id="camera-multiview-grid" class="camera-multiview-grid" hidden></div>
       </div>
       <p id="camera-stream-hint" class="camera-muted-line"></p>
 

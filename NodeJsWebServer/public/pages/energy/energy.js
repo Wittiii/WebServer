@@ -18,6 +18,17 @@ const elements = {
   lastUpdate: document.getElementById("energy-last-update"),
   today: document.getElementById("energy-today"),
   costToday: document.getElementById("energy-cost-today"),
+  autarkyStatusBadge: document.getElementById("autarky-status-badge"),
+  autarkyPercent: document.getElementById("autarky-percent"),
+  autarkySummaryText: document.getElementById("autarky-summary-text"),
+  autarkyBarSolar: document.getElementById("autarky-bar-solar"),
+  autarkyBarGrid: document.getElementById("autarky-bar-grid"),
+  autarkySolarPower: document.getElementById("autarky-solar-power"),
+  autarkySolarSub: document.getElementById("autarky-solar-sub"),
+  autarkyBatterySoc: document.getElementById("autarky-battery-soc"),
+  autarkyBatterySub: document.getElementById("autarky-battery-sub"),
+  autarkyGridPower: document.getElementById("autarky-grid-power"),
+  autarkyGridSub: document.getElementById("autarky-grid-sub"),
   dial: document.getElementById("energy-dial"),
   power: document.getElementById("energy-power"),
   voltage: document.getElementById("energy-voltage"),
@@ -610,6 +621,87 @@ function renderVictron(data) {
   drawVictronChart();
 }
 
+function renderAutarky(data) {
+  const reading = data?.reading;
+  const victron = data?.victron;
+  const vicReading = victron?.reading;
+  const battery = victron?.battery || {};
+
+  const gridW = reading ? Math.max(0, Number(reading.powerW) || 0) : null;
+  const solarW = vicReading ? Math.max(0, Number(vicReading.panelPowerW) || 0) : (victron?.online ? 0 : null);
+  const batteryW = battery.powerW != null && Number.isFinite(Number(battery.powerW)) ? Math.abs(Number(battery.powerW)) : 0;
+  const rawSoc = battery.socPercent;
+  const soc = rawSoc != null && Number.isFinite(Number(rawSoc)) ? Math.round(Number(rawSoc)) : null;
+  const batteryFlow = battery.flow || "idle";
+
+  if (solarW != null) {
+    setText(elements.autarkySolarPower, `${number(solarW, 0)} W`);
+    const yieldTodayWh = vicReading?.yieldTodayWh || victron?.todayStats?.yieldTodayWh || 0;
+    setText(elements.autarkySolarSub, `Ertrag heute: ${number(yieldTodayWh, 0)} Wh`);
+  } else {
+    setText(elements.autarkySolarPower, "-- W");
+    setText(elements.autarkySolarSub, "Wartet auf Solar-Daten");
+  }
+
+  if (soc != null) {
+    setText(elements.autarkyBatterySoc, `${soc} %`);
+    const flowText = batteryFlow === "charging" ? `+${number(batteryW, 0)} W Laden` : batteryFlow === "discharging" ? `-${number(batteryW, 0)} W Entladen` : "Standby";
+    setText(elements.autarkyBatterySub, flowText);
+  } else {
+    setText(elements.autarkyBatterySoc, "-- %");
+    setText(elements.autarkyBatterySub, "Keine Batteriedaten");
+  }
+
+  if (gridW != null) {
+    setText(elements.autarkyGridPower, `${number(gridW, 0)} W`);
+    setText(elements.autarkyGridSub, `Verbrauch heute: ${number(reading.todayKwh, 3)} kWh`);
+  } else {
+    setText(elements.autarkyGridPower, "-- W");
+    setText(elements.autarkyGridSub, "Wartet auf Tasmota");
+  }
+
+  if (gridW != null && solarW != null) {
+    const totalPower = gridW + solarW;
+    let autarkyPercent = 0;
+    if (totalPower > 0) {
+      autarkyPercent = Math.min(100, Math.max(0, Math.round((solarW / totalPower) * 100)));
+    }
+    setText(elements.autarkyPercent, `${autarkyPercent} %`);
+    if (elements.autarkyBarSolar) elements.autarkyBarSolar.style.width = `${autarkyPercent}%`;
+    if (elements.autarkyBarGrid) elements.autarkyBarGrid.style.width = `${100 - autarkyPercent}%`;
+
+    if (autarkyPercent >= 95) {
+      setText(elements.autarkySummaryText, "Volle Solardeckung (nahezu autark)");
+      setText(elements.autarkyStatusBadge, "SOLAR-AUTARK");
+      elements.autarkyStatusBadge?.classList.add("status-online");
+      elements.autarkyStatusBadge?.classList.remove("status-offline");
+    } else if (autarkyPercent >= 50) {
+      setText(elements.autarkySummaryText, "Überwiegend solarbetrieben");
+      setText(elements.autarkyStatusBadge, "HYBRID");
+      elements.autarkyStatusBadge?.classList.remove("status-online", "status-offline");
+    } else if (solarW > 0) {
+      setText(elements.autarkySummaryText, "Netzbezug dominant, Solar stützt");
+      setText(elements.autarkyStatusBadge, "NETZBEZUG");
+      elements.autarkyStatusBadge?.classList.remove("status-online", "status-offline");
+    } else {
+      setText(elements.autarkySummaryText, "Reiner Netzbezug (keine Solarerzeugung)");
+      setText(elements.autarkyStatusBadge, "NETZ");
+      elements.autarkyStatusBadge?.classList.add("status-offline");
+      elements.autarkyStatusBadge?.classList.remove("status-online");
+    }
+  } else if (solarW != null && solarW > 0) {
+    setText(elements.autarkyPercent, "100 %");
+    setText(elements.autarkySummaryText, "Solarerzeugung aktiv");
+    if (elements.autarkyBarSolar) elements.autarkyBarSolar.style.width = "100%";
+    if (elements.autarkyBarGrid) elements.autarkyBarGrid.style.width = "0%";
+    setText(elements.autarkyStatusBadge, "SOLAR");
+  } else {
+    setText(elements.autarkyPercent, "-- %");
+    setText(elements.autarkySummaryText, "Wartet auf Messdaten beider Quellen");
+    setText(elements.autarkyStatusBadge, "WARTET");
+  }
+}
+
 function render(data) {
   const reading = data.reading;
   const online = Boolean(data.online);
@@ -623,6 +715,7 @@ function render(data) {
   }
   setText(elements.priceHint, `${number(data.priceEurKwh, 3)} EUR/kWh`);
   renderVictron(data.victron);
+  renderAutarky(data);
 
   if (!reading) {
     setText(elements.sourceStatus, "Wartet auf das Tasmota SENSOR Topic");
