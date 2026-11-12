@@ -720,14 +720,27 @@ function setCameraViewMode(mode) {
   if (activeSubtitleEl && isMultiviewMode) activeSubtitleEl.textContent = "Alle konfigurierten Kameras synchron im Überblick";
 
   if (isMultiviewMode) {
+    // Unload the single stream frame so it does not compete for WebRTC bandwidth in the background
+    if (streamFrame && streamFrame.dataset.src) {
+      streamFrame.src = "about:blank";
+      streamFrame.dataset.src = "";
+    }
     renderMultiview();
   } else {
+    // Unload multiview iframes so they stop consuming MediaMTX WebRTC readers
+    if (multiviewGridEl) {
+      multiviewGridEl.querySelectorAll("iframe").forEach((frame) => {
+        frame.src = "about:blank";
+        frame.dataset.src = "";
+      });
+    }
     const activeCamera = getActiveCamera();
     if (activeCamera) {
       if (activeTitleEl) activeTitleEl.textContent = `${activeCamera.label} Live Stream`;
       if (activeSubtitleEl) {
         activeSubtitleEl.textContent = `${activeCamera.cameraId} | ${activeCamera.mqtt.topicBase} | ${activeCamera.stream.path}`;
       }
+      renderStream(activeCamera);
     }
   }
 }
@@ -735,39 +748,80 @@ function setCameraViewMode(mode) {
 function renderMultiview() {
   if (!multiviewGridEl || !overviewState?.cameras) return;
   const cameras = overviewState.cameras;
-  multiviewGridEl.innerHTML = "";
+
+  // Ensure background single stream is paused
+  if (streamFrame && streamFrame.dataset.src) {
+    streamFrame.src = "about:blank";
+    streamFrame.dataset.src = "";
+  }
+
   cameras.forEach((cam) => {
-    const card = document.createElement("article");
-    card.className = "camera-multiview-card";
+    let card = multiviewGridEl.querySelector(`[data-multiview-card="${cam.cameraId}"]`);
     const isOnline = Boolean(cam.status?.online || cam.connected);
     const isStreaming = Boolean(cam.status?.streaming);
     const isCurrent = cam.cameraId === activeCameraId;
+    const targetSrc = cam.stream?.urls?.webrtcPage || "about:blank";
 
-    card.innerHTML = `
-      <div class="camera-multiview-header">
-        <div class="camera-multiview-title">
-          <span class="status-dot ${isOnline ? "is-online" : "is-offline"}"></span>
-          <strong>${cam.label || cam.cameraId}</strong>
-          <span class="camera-micro-pill ${isStreaming ? "is-streaming" : ""}">${isStreaming ? "Streaming" : (isOnline ? "Online" : "Offline")}</span>
+    if (!card) {
+      card = document.createElement("article");
+      card.className = "camera-multiview-card";
+      card.dataset.multiviewCard = cam.cameraId;
+      card.innerHTML = `
+        <div class="camera-multiview-header">
+          <div class="camera-multiview-title">
+            <span class="status-dot"></span>
+            <strong></strong>
+            <span class="camera-micro-pill"></span>
+          </div>
+          <div class="camera-multiview-actions">
+            <button type="button" class="btn-sm btn-secondary camera-multiview-focus" title="In Einzelansicht wechseln">Fokus</button>
+            <a href="#" target="_blank" rel="noreferrer" class="btn-sm btn-secondary camera-multiview-link" title="In neuem Tab öffnen">↗</a>
+          </div>
         </div>
-        <div class="camera-multiview-actions">
-          <button type="button" class="btn-sm btn-secondary camera-multiview-focus" data-cam-id="${cam.cameraId}" title="In Einzelansicht wechseln">${isCurrent ? "Aktiv" : "Fokus"}</button>
-          <a href="${cam.stream?.urls?.webrtcPage || "#"}" target="_blank" rel="noreferrer" class="btn-sm btn-secondary" title="In neuem Tab öffnen">↗</a>
+        <div class="camera-multiview-frame-shell">
+          <iframe title="${cam.label || cam.cameraId} Stream" allow="autoplay; fullscreen" loading="lazy"></iframe>
         </div>
-      </div>
-      <div class="camera-multiview-frame-shell">
-        <iframe src="${cam.stream?.urls?.webrtcPage || "about:blank"}" title="${cam.label || cam.cameraId} Stream" allow="autoplay; fullscreen" loading="lazy"></iframe>
-      </div>
-    `;
+      `;
+      const focusBtn = card.querySelector(".camera-multiview-focus");
+      focusBtn?.addEventListener("click", () => {
+        activeCameraId = cam.cameraId;
+        setCameraViewMode("single");
+        renderActiveCamera({ forceSettings: true });
+      });
+      multiviewGridEl.appendChild(card);
+    }
 
+    // Update text/classes without destroying or restarting the running WebRTC iframe!
+    const dot = card.querySelector(".status-dot");
+    if (dot) dot.className = `status-dot ${isOnline ? "is-online" : "is-offline"}`;
+    const strong = card.querySelector("strong");
+    if (strong) strong.textContent = cam.label || cam.cameraId;
+    const pill = card.querySelector(".camera-micro-pill");
+    if (pill) {
+      pill.className = `camera-micro-pill ${isStreaming ? "is-streaming" : ""}`;
+      pill.textContent = isStreaming ? "Streaming" : (isOnline ? "Online" : "Offline");
+    }
     const focusBtn = card.querySelector(".camera-multiview-focus");
-    focusBtn?.addEventListener("click", () => {
-      activeCameraId = cam.cameraId;
-      setCameraViewMode("single");
-      renderActiveCamera({ forceSettings: true });
-    });
+    if (focusBtn) focusBtn.textContent = isCurrent ? "Aktiv" : "Fokus";
+    const link = card.querySelector(".camera-multiview-link");
+    if (link) link.href = targetSrc;
 
-    multiviewGridEl.appendChild(card);
+    // Only set src if not already loaded, avoiding unnecessary stream reconnects
+    const frame = card.querySelector("iframe");
+    if (frame && frame.dataset.src !== targetSrc) {
+      frame.src = targetSrc;
+      frame.dataset.src = targetSrc;
+    }
+  });
+
+  // Remove cards for any cameras that were removed
+  multiviewGridEl.querySelectorAll("[data-multiview-card]").forEach((card) => {
+    const id = card.dataset.multiviewCard;
+    if (!cameras.some((c) => c.cameraId === id)) {
+      const frame = card.querySelector("iframe");
+      if (frame) frame.src = "about:blank";
+      card.remove();
+    }
   });
 }
 
