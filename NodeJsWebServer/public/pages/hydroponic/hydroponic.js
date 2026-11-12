@@ -1344,9 +1344,65 @@ function getSelectedObject() {
   return objectsCache.find((o) => Number(o.id) === id) || null;
 }
 
+const CMD_HISTORY_KEY = 'hydro_quick_command_history';
+
+function getCommandHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(CMD_HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function addCommandToHistory(label, topic, payload) {
+  try {
+    const list = getCommandHistory();
+    list.unshift({
+      label,
+      topic,
+      payload,
+      timestamp: new Date().toISOString()
+    });
+    const trimmed = list.slice(0, 6);
+    localStorage.setItem(CMD_HISTORY_KEY, JSON.stringify(trimmed));
+    renderCommandHistory();
+  } catch {}
+}
+
+function renderCommandHistory() {
+  const container = document.getElementById('quick-controls-history');
+  const listEl = document.getElementById('quick-history-list');
+  const clearBtn = document.getElementById('quick-history-clear');
+  if (!container || !listEl) return;
+  const history = getCommandHistory();
+  if (!history.length) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  listEl.innerHTML = history.map((item) => {
+    const d = new Date(item.timestamp);
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const payloadStr = item.payload ? ` · Payload: ${escapeHtml(item.payload)}` : '';
+    return `<li style="color:#cbd5e1; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; background:rgba(30,41,59,0.5); padding:0.25rem 0.5rem; border-radius:0.35rem;">
+      <span><strong>${escapeHtml(item.label)}</strong> <span style="color:#64748b;">(${escapeHtml(item.topic)}${payloadStr})</span></span>
+      <span style="color:#38bdf8; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:0.75rem;">${time} Uhr ✓</span>
+    </li>`;
+  }).join('');
+
+  if (clearBtn && !clearBtn.dataset.bound) {
+    clearBtn.dataset.bound = 'true';
+    clearBtn.addEventListener('click', () => {
+      try { localStorage.removeItem(CMD_HISTORY_KEY); } catch {}
+      renderCommandHistory();
+    });
+  }
+}
+
 function renderQuickControls(commands) {
   const container = document.getElementById('quick-controls-buttons');
   const feedbackEl = document.getElementById('quick-controls-feedback');
+  renderCommandHistory();
   if (!container) return;
 
   const validCmds = Array.isArray(commands) ? commands.filter((c) => (c.label || '').trim() && (c.topic || '').trim()) : [];
@@ -1379,6 +1435,7 @@ function renderQuickControls(commands) {
       }
       try {
         await publishMqtt(cmd.topic, cmd.payload || '');
+        addCommandToHistory(cmd.label, cmd.topic, cmd.payload || '');
         if (feedbackEl) {
           feedbackEl.textContent = `✓ ${cmd.label} gesendet!`;
           feedbackEl.style.color = '#10b981';

@@ -52,6 +52,13 @@
       <div id="quick-controls-buttons" class="quick-controls-buttons">
         <span class="muted-line">Keine Schnellbefehle hinterlegt. Lege unter „Einrichtung &amp; Befehle“ welche an.</span>
       </div>
+      <div id="quick-controls-history" class="quick-controls-history" style="margin-top:0.75rem; border-top:1px solid rgba(148,163,184,0.15); padding-top:0.5rem; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+          <small style="color:#94a3b8; font-weight:600;">Letzte ausgeführte Befehle (Historie):</small>
+          <button id="quick-history-clear" type="button" class="btn-link" style="font-size:0.75rem; color:#64748b; background:none; border:none; cursor:pointer;">Verlauf leeren</button>
+        </div>
+        <ul id="quick-history-list" style="list-style:none; padding:0; margin:0; font-size:0.8rem; display:flex; flex-direction:column; gap:0.25rem;"></ul>
+      </div>
     </div>
 
     <nav class="workflow-links" aria-label="Hydroponik-Bereiche">
