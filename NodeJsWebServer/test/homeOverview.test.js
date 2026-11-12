@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { getHomeOverview } = require('../src/controllers/homeController');
+const { stopMqttBroker } = require('../src/mqttBroker');
+
+test.after(async () => {
+  await stopMqttBroker();
+});
 
 test('home overview returns loggedIn false when unauthenticated', () => {
   const req = { session: {} };

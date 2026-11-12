@@ -1,0 +1,58 @@
+{
+  "name": "Smart IoT Operations Deck",
+  "short_name": "Smart IoT",
+  "description": "Smart IoT Operations Deck für Hydroponik, Solar & Kameras",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090d16",
+  "theme_color": "#0f172a",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Hydroponik",
+      "short_name": "Hydro",
+      "url": "/hydroponic",
+      "description": "Hydroponik Sensoren & Steuerung"
+    },
+    {
+      "name": "Solar & Akku",
+      "short_name": "Energie",
+      "url": "/energy",
+      "description": "Solarertrag & Batterie-Status"
+    },
+    {
+      "name": "Live Kameras",
+      "short_name": "Kameras",
+      "url": "/camera",
+      "description": "Kamera-Multiview & Streams"
+    }
+  ]
+}

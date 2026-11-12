@@ -270,3 +270,11 @@ async function initBrokerOverview() {
   link.textContent = "Zum Inhalt springen";
   document.body.prepend(link);
 })();
+
+(function registerPwaServiceWorker() {
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
+})();
