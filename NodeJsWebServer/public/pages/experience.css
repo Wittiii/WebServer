@@ -1844,3 +1844,505 @@ label {
   border-color: rgba(245, 158, 11, 0.68) !important;
   color: #fcd34d !important;
 }
+
+/* ==========================================================================
+   9. Smartphone High-Density & Alignment Optimization (Mobile-Only <= 760px)
+   Desktop (> 760px) remains 100% unchanged!
+   ========================================================================== */
+@media (max-width: 760px) {
+  .container {
+    width: calc(100% - 0.85rem) !important;
+  }
+
+  /* Prevent style.css from stretching every button to 100% width and shifting headers */
+  button,
+  .btn {
+    width: auto;
+    min-height: 1.95rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  input[type="text"],
+  input[type="password"],
+  input[type="number"],
+  input[type="datetime-local"],
+  input[type="search"],
+  select {
+    min-height: 2rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.82rem;
+  }
+
+  /* Top Navbar: keep brand and menu button cleanly aligned on one row */
+  .navbar {
+    margin: 0 !important;
+    width: 100% !important;
+    padding: 0.42rem 0.65rem !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.4rem !important;
+  }
+  .nav-brand {
+    font-size: 0.92rem !important;
+    padding: 0 !important;
+  }
+  .navbar-toggle {
+    width: auto !important;
+    margin-left: auto !important;
+    min-height: 1.85rem !important;
+    padding: 0.25rem 0.55rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* Compact Hero & Panel Paddings so much more content fits on 1 phone screen */
+  .hero {
+    padding-block: 0.45rem 0.35rem !important;
+  }
+  .hero-copy,
+  .hero-side,
+  .panel,
+  section,
+  .subpanel {
+    padding: 0.65rem 0.72rem !important;
+    border-radius: 0.75rem !important;
+  }
+  .panel {
+    margin-bottom: 0.6rem !important;
+  }
+  .hero h1,
+  .home-hero .home-hero-compact h1 {
+    font-size: 1.2rem !important;
+    line-height: 1.15 !important;
+    margin-bottom: 0.15rem !important;
+  }
+  .hero-text,
+  .home-hero .hero-text {
+    font-size: 0.76rem !important;
+    line-height: 1.35 !important;
+    margin-top: 0.15rem !important;
+  }
+  .home-hero-badge-row {
+    gap: 0.4rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  .eyebrow {
+    font-size: 0.62rem !important;
+  }
+  .home-system-pill {
+    font-size: 0.68rem !important;
+    padding: 0.16rem 0.48rem !important;
+  }
+  .home-hero .home-context {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.45rem 0.72rem !important;
+    min-width: 0 !important;
+  }
+  .home-clock strong {
+    font-size: 0.95rem !important;
+  }
+
+  /* Section Headers & Collapsible Toggles: never wrap into full-width shifted blocks */
+  .section-header,
+  .unified-section-header,
+  .camera-stream-header {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.4rem !important;
+    margin-bottom: 0.45rem !important;
+  }
+  .section-header h2,
+  .unified-section-header h2 {
+    font-size: 0.95rem !important;
+    margin: 0 !important;
+  }
+  .section-toggle {
+    width: auto !important;
+    margin-left: auto !important;
+    min-height: 1.7rem !important;
+    padding: 0.18rem 0.5rem !important;
+    font-size: 0.7rem !important;
+  }
+  .inline-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+  }
+  .inline-actions > * {
+    width: auto !important;
+    flex: 1 1 auto;
+  }
+
+  /* Page 1 (Übersicht & Dashboard): 2x2 Vitals Grid & 2-Column Quick Widgets */
+  .workspace-heading {
+    margin-bottom: 0.4rem !important;
+  }
+  .workspace-heading h2 {
+    font-size: 1rem !important;
+  }
+  .home-vitals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+  }
+  .vitals-card {
+    padding: 0.55rem 0.62rem !important;
+    border-radius: 0.68rem !important;
+  }
+  .vitals-card-header {
+    margin-bottom: 0.25rem !important;
+    gap: 0.25rem !important;
+  }
+  .vitals-card-title {
+    font-size: 0.68rem !important;
+    gap: 0.22rem !important;
+  }
+  .vitals-icon {
+    font-size: 0.82rem !important;
+  }
+  .vitals-card-header .status-badge {
+    padding: 0.1rem 0.35rem !important;
+    font-size: 0.6rem !important;
+  }
+  .vitals-primary {
+    font-size: 1.12rem !important;
+    margin-bottom: 0.22rem !important;
+  }
+  .vitals-primary small {
+    font-size: 0.68rem !important;
+  }
+  .vitals-details {
+    font-size: 0.68rem !important;
+    gap: 0.12rem !important;
+    margin-bottom: 0.3rem !important;
+  }
+  .vitals-details p {
+    gap: 0.25rem !important;
+  }
+  .vitals-details strong {
+    max-width: 62%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workspace-unified-card .vitals-action {
+    padding-top: 0.28rem !important;
+    font-size: 0.66rem !important;
+  }
+
+  .unified-dashboard-deck {
+    gap: 0.55rem !important;
+    margin-top: 0.55rem !important;
+  }
+  .unified-widget-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+  }
+  .quick-widget-card {
+    padding: 0.5rem 0.58rem !important;
+    gap: 0.3rem !important;
+    border-radius: 0.65rem !important;
+  }
+  .quick-widget-top {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 0.25rem !important;
+  }
+  .quick-widget-title strong {
+    font-size: 0.78rem !important;
+  }
+  .quick-widget-title span,
+  .quick-widget-meta {
+    font-size: 0.66rem !important;
+  }
+  .quick-widget-actions {
+    flex-direction: row !important;
+    gap: 0.2rem !important;
+    flex-shrink: 0;
+  }
+  .quick-widget-actions button {
+    width: auto !important;
+    min-height: 1.45rem !important;
+    padding: 0.12rem 0.35rem !important;
+    font-size: 0.64rem !important;
+  }
+  .quick-widget-value {
+    font-size: 1.08rem !important;
+  }
+  .quick-widget-run {
+    width: 100% !important;
+    min-height: 1.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.74rem !important;
+  }
+
+  .server-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.4rem !important;
+  }
+  .server-health-grid .stats-card {
+    padding: 0.4rem 0.52rem !important;
+  }
+  .server-health-grid .stats-card h3 {
+    font-size: 0.66rem !important;
+  }
+  .server-health-grid .stats-val {
+    font-size: 0.88rem !important;
+  }
+  .server-health-grid .stats-card p {
+    font-size: 0.64rem !important;
+  }
+
+  /* Page 2 (Strom & Solar): Fix shifted layout controls & 2x2 KPI grids */
+  .energy-hero-copy,
+  .energy-dial-card {
+    padding: 0.65rem 0.75rem !important;
+  }
+  .energy-hero .energy-live-value {
+    font-size: 1.65rem !important;
+  }
+  .energy-hero .energy-dial {
+    width: 4.5rem !important;
+    height: 4.5rem !important;
+  }
+  .energy-hero .energy-dial-core strong {
+    font-size: 0.9rem !important;
+  }
+  .energy-layout-grid {
+    gap: 0.6rem !important;
+  }
+  .energy-layout-grid > [data-layout-id] {
+    padding-top: 2.65rem !important;
+    min-height: 2.8rem !important;
+  }
+  .energy-layout-controls {
+    top: 0.35rem !important;
+    left: 0.45rem !important;
+    right: 0.45rem !important;
+    min-height: 1.95rem !important;
+    padding: 0.18rem 0.35rem !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.25rem !important;
+  }
+  .energy-layout-widget-title {
+    font-size: 0.76rem !important;
+  }
+  .energy-layout-controls button {
+    width: auto !important;
+    flex-shrink: 0 !important;
+    min-height: 1.55rem !important;
+    padding: 0.16rem 0.42rem !important;
+    font-size: 0.66rem !important;
+  }
+  .energy-metric-grid,
+  .energy-balance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.42rem !important;
+  }
+  .energy-metric-card,
+  .energy-live-panel .energy-metric-card {
+    min-height: auto !important;
+    padding: 0.55rem 0.62rem !important;
+    border-radius: 0.7rem !important;
+  }
+  .energy-metric-label {
+    font-size: 0.66rem !important;
+  }
+  .energy-metric-card strong,
+  .energy-live-panel .energy-metric-card strong {
+    margin-top: 0.2rem !important;
+    font-size: 1.1rem !important;
+  }
+  .energy-balance-item {
+    padding: 0.5rem 0.6rem !important;
+  }
+  .energy-balance-item strong {
+    font-size: 1rem !important;
+    margin: 0.15rem 0 !important;
+  }
+  .energy-period-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.28rem !important;
+    width: 100% !important;
+  }
+  .energy-period-tabs button {
+    width: 100% !important;
+    min-height: 1.75rem !important;
+    padding: 0.22rem 0.3rem !important;
+    font-size: 0.7rem !important;
+  }
+  .energy-chart-shell,
+  .energy-chart {
+    min-height: 13rem !important;
+    height: 13rem !important;
+  }
+
+  /* Page 3 (Hydroponik): 2-Column Sensor Deck, Compact Controls & Chart */
+  .hydro-top-control-deck {
+    gap: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .hydro-context {
+    padding: 0.55rem 0.68rem !important;
+    gap: 0.4rem !important;
+  }
+  .hydro-context-actions {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.4rem !important;
+  }
+  .hydro-context-actions p {
+    font-size: 0.72rem !important;
+    flex: 1 1 auto !important;
+  }
+  .hydro-context-actions .btn {
+    width: auto !important;
+    flex-shrink: 0 !important;
+    padding: 0.25rem 0.55rem !important;
+    font-size: 0.72rem !important;
+  }
+  .hydro-quick-controls {
+    padding: 0.55rem 0.68rem !important;
+  }
+  .quick-controls-header {
+    margin-bottom: 0.4rem !important;
+  }
+  .quick-controls-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.35rem !important;
+  }
+  .btn-quick-control {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.75rem !important;
+    min-height: 1.95rem !important;
+  }
+  .hydro-broker-strip {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.42rem !important;
+    margin-bottom: 0.55rem !important;
+  }
+  .hydro-broker-strip .stats-card {
+    padding: 0.42rem 0.58rem !important;
+    gap: 0.35rem !important;
+  }
+  .hydro-broker-strip .stats-card h3 {
+    font-size: 0.68rem !important;
+  }
+  .hydro-broker-strip .stats-val {
+    font-size: 0.92rem !important;
+  }
+  .hydro-broker-strip .stats-card p {
+    font-size: 0.65rem !important;
+  }
+  .hydro-sensor-deck {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.42rem !important;
+    margin-bottom: 0.6rem !important;
+  }
+  .hydro-sensor-card {
+    padding: 0.45rem 0.55rem !important;
+    border-radius: 0.58rem !important;
+  }
+  .hydro-sensor-top {
+    margin-bottom: 0.2rem !important;
+    gap: 0.2rem !important;
+  }
+  .hydro-sensor-icon {
+    font-size: 0.85rem !important;
+    margin-right: 0.1rem !important;
+  }
+  .hydro-sensor-label {
+    font-size: 0.7rem !important;
+  }
+  .hydro-sensor-obj-badge {
+    font-size: 0.58rem !important;
+    padding: 0.04rem 0.28rem !important;
+  }
+  .hydro-sensor-compare-btn {
+    width: auto !important;
+    flex-shrink: 0 !important;
+    min-height: 1.25rem !important;
+    padding: 0.04rem 0.28rem !important;
+    font-size: 0.64rem !important;
+  }
+  .hydro-sensor-value {
+    font-size: 1rem !important;
+  }
+  .hydro-trend-badge {
+    font-size: 0.75rem !important;
+    padding: 0.05rem 0.25rem !important;
+  }
+  .hydro-chart-toolbar {
+    padding: 0.55rem 0.62rem !important;
+    gap: 0.45rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  .hydro-series-selectors {
+    gap: 0.4rem !important;
+  }
+  .hydro-period-action-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.35rem !important;
+  }
+  .reading-periods {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.28rem !important;
+    width: 100% !important;
+    margin-bottom: 0 !important;
+  }
+  .reading-periods button {
+    width: 100% !important;
+    min-height: 1.75rem !important;
+    padding: 0.22rem 0.25rem !important;
+    font-size: 0.7rem !important;
+  }
+  .hydro-period-action-bar > .inline-actions:not(.reading-periods) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.35rem !important;
+    width: 100% !important;
+  }
+  .hydro-period-action-bar > .inline-actions:not(.reading-periods) button {
+    width: 100% !important;
+    min-height: 1.8rem !important;
+    font-size: 0.74rem !important;
+  }
+  .readings-chart {
+    height: 205px !important;
+  }
+  .chart-point-detail {
+    min-height: 2.1rem !important;
+    padding: 0.42rem 0.55rem !important;
+    font-size: 0.74rem !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .home-vitals-grid,
+  .unified-widget-grid,
+  .hydro-sensor-deck {
+    grid-template-columns: 1fr !important;
+  }
+}

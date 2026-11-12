@@ -914,10 +914,11 @@ function drawChart(readings = chartDataCache, secondaryReadings = undefined) {
   max += range * 0.06;
   const span = max - min || 1;
 
-  const padLeft = 52;
-  const padRight = hasSec ? 64 : 32;
-  const padTop = 34;
-  const padBottom = 38;
+  const isCompactCanvas = w < 520;
+  const padLeft = isCompactCanvas ? 40 : 52;
+  const padRight = hasSec ? (isCompactCanvas ? 44 : 64) : (isCompactCanvas ? 16 : 32);
+  const padTop = isCompactCanvas && hasSec ? 40 : 34;
+  const padBottom = isCompactCanvas ? 32 : 38;
   const plotX = padLeft;
   const plotY = padTop;
   const plotW = Math.max(10, w - padLeft - padRight);
@@ -1127,20 +1128,27 @@ function drawChart(readings = chartDataCache, secondaryReadings = undefined) {
   const primLabel = isCrossObjectLegend && getSelectedObject()?.name
     ? `${getSelectedObject().name} · ${basePrimLabel}`
     : basePrimLabel;
-  ctx.font = '12px system-ui, sans-serif';
+  ctx.font = isCompactCanvas ? '11px system-ui, sans-serif' : '12px system-ui, sans-serif';
 
-  ctx.fillStyle = '#22d3ee';
-  ctx.fillRect(plotX, 12, 14, 5);
-  ctx.fillStyle = '#e2e8f0';
   const primText = `${primLabel} (${unit || '-'})`;
-  ctx.fillText(primText, plotX + 20, 18);
+  const secText = hasSec ? `${secLabel} (${secUnit || '-'})` : '';
   const primWidth = ctx.measureText(primText).width;
+  const secWidth = hasSec ? ctx.measureText(secText).width : 0;
+  const stackLegend = Boolean(isCompactCanvas && hasSec && (plotX + 20 + primWidth + 20 + 20 + secWidth > w - 6));
+
+  const primLegendY = stackLegend ? 13 : 18;
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillRect(plotX, primLegendY - 6, 12, 4);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(primText, plotX + 16, primLegendY);
 
   if (hasSec) {
-    const secLegendX = plotX + 20 + primWidth + 24;
+    const secLegendX = stackLegend ? plotX : (plotX + 20 + primWidth + 24);
+    const secLegendY = stackLegend ? 28 : 18;
     ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(secLegendX, 12, 14, 5);
-    ctx.fillText(`${secLabel} (${secUnit || '-'})`, secLegendX + 20, 18);
+    ctx.fillRect(secLegendX, secLegendY - 6, 12, 4);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(secText, secLegendX + 16, secLegendY);
   }
 
   if (chartHoverIndex !== null) {
