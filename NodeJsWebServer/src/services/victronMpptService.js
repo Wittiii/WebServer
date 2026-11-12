@@ -287,7 +287,7 @@ function getVictronOverview(period = "24h", now = Date.now()) {
   let timeRemainingFormatted = null;
   if (socPercent !== null && reading?.batteryVoltageV > 5) {
     const nominalV = estimation?.nominalVoltageV || reading.batteryVoltageV || 12.8;
-    const capacityAh = 100;
+    const capacityAh = Number(estimation?.capacityAh) > 0 ? Number(estimation.capacityAh) : 100;
     const totalCapacityWh = nominalV * capacityAh;
 
     if (batteryFlow === "discharging" && batteryPowerW && Math.abs(batteryPowerW) > 3) {

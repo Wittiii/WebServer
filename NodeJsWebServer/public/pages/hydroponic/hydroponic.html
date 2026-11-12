@@ -19,126 +19,143 @@
 <body class="theme-operations page-hydro">
   <div id="navbar"></div>
 
-  <header class="hero">
+  <header class="hero hydro-hero-compact">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <p class="eyebrow">Smart IoT / Hydroponik</p><h1>Hydroponik Steuerung</h1><p class="hero-text">Deine Anlage im Blick. Messwerte analysieren, Geräte steuern und Abläufe verwalten.</p>
+        <div class="hydro-hero-top-row">
+          <div>
+            <p class="eyebrow" style="margin-bottom:0.25rem;">Smart IoT / Hydroponik</p>
+            <h1>Hydroponik &amp; Automatisierung</h1>
+          </div>
+          <nav class="workflow-links" aria-label="Hydroponik-Bereiche" style="margin-bottom:0;">
+            <a href="#graph-section">📈 Messwerte</a>
+            <a href="#mapping-section">⚙️ Einrichtung</a>
+            <a href="#automation-section">🤖 Regeln</a>
+            <a href="#objects-section">📦 Objekte</a>
+            <a href="#log-section">📋 Live-Log</a>
+          </nav>
+        </div>
       </div>
     </div>
   </header>
 
   <main class="container page-shell">
-    <div id="broker-summary" class="grid-2 summary-grid"></div>
-
-    <div class="hydro-context">
-      <div class="hydro-object-picker">
-        <label for="object-select">Aktives Objekt</label>
-        <select id="object-select" aria-describedby="hydro-selection-hint"><option value="">Objekte werden geladen …</option></select>
+    <div class="hydro-top-control-deck">
+      <div class="hydro-context">
+        <div class="hydro-object-picker">
+          <label for="object-select">Aktives Objekt</label>
+          <select id="object-select" aria-describedby="hydro-selection-hint"><option value="">Objekte werden geladen …</option></select>
+        </div>
+        <div class="hydro-context-actions">
+          <p id="hydro-selection-hint">Gilt für Messwerte, Schnellschalter &amp; Regeln.</p>
+          <a class="btn btn-secondary" href="#objects-section">Objekte verwalten</a>
+        </div>
+        <p id="hydro-action-status" role="status"></p>
       </div>
-      <p id="hydro-selection-hint">Die Auswahl gilt für Messwerte, Befehle und Automatisierungen.</p>
-      <p id="hydro-action-status" role="status"></p>
-      <a class="btn btn-secondary" href="#objects-section">Objekte verwalten</a>
+
+      <div id="hydro-quick-controls" class="panel hydro-quick-controls" aria-label="Schnellschalter">
+        <div class="quick-controls-header">
+          <div class="quick-controls-heading">
+            <span class="quick-controls-icon">⚡</span>
+            <strong>Schnellschalter</strong>
+            <small id="quick-controls-hint">Direktbefehle für das aktive Objekt</small>
+          </div>
+          <div id="quick-controls-feedback" class="status-line quick-controls-feedback" role="status"></div>
+        </div>
+        <div id="quick-controls-buttons" class="quick-controls-buttons">
+          <span class="muted-line">Keine Schnellbefehle hinterlegt. Lege unter „Einrichtung &amp; Befehle“ welche an.</span>
+        </div>
+        <div id="quick-controls-history" class="quick-controls-history" style="margin-top:0.75rem; border-top:1px solid rgba(148,163,184,0.15); padding-top:0.5rem; display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+            <small style="color:#94a3b8; font-weight:600;">Letzte ausgeführte Befehle (Befehlshistorie):</small>
+            <button id="quick-history-clear" type="button" class="btn-link" style="font-size:0.75rem; color:#64748b; background:none; border:none; cursor:pointer; min-height:auto; padding:0.2rem 0.4rem;">Verlauf leeren</button>
+          </div>
+          <ul id="quick-history-list" style="list-style:none; padding:0; margin:0; font-size:0.8rem; display:flex; flex-direction:column; gap:0.25rem;"></ul>
+        </div>
+      </div>
     </div>
 
-    <div id="hydro-quick-controls" class="panel hydro-quick-controls" aria-label="Schnellschalter">
-      <div class="quick-controls-header">
-        <div class="quick-controls-heading">
-          <span class="quick-controls-icon">⚡</span>
-          <strong>Schnellschalter</strong>
-          <small id="quick-controls-hint">Befehle für das aktive Objekt</small>
-        </div>
-        <div id="quick-controls-feedback" class="status-line quick-controls-feedback" role="status"></div>
-      </div>
-      <div id="quick-controls-buttons" class="quick-controls-buttons">
-        <span class="muted-line">Keine Schnellbefehle hinterlegt. Lege unter „Einrichtung &amp; Befehle“ welche an.</span>
-      </div>
-      <div id="quick-controls-history" class="quick-controls-history" style="margin-top:0.75rem; border-top:1px solid rgba(148,163,184,0.15); padding-top:0.5rem; display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
-          <small style="color:#94a3b8; font-weight:600;">Letzte ausgeführte Befehle (Historie):</small>
-          <button id="quick-history-clear" type="button" class="btn-link" style="font-size:0.75rem; color:#64748b; background:none; border:none; cursor:pointer;">Verlauf leeren</button>
-        </div>
-        <ul id="quick-history-list" style="list-style:none; padding:0; margin:0; font-size:0.8rem; display:flex; flex-direction:column; gap:0.25rem;"></ul>
-      </div>
-    </div>
-
-    <nav class="workflow-links" aria-label="Hydroponik-Bereiche">
-      <a href="#graph-section">Messwerte</a>
-      <a href="#mapping-section">Einrichtung &amp; Befehle</a>
-      <a href="#automation-section">Automatisierung</a>
-      <a href="#log-section">Live-Log</a>
-      <a href="#mqtt-section">Manuell senden</a>
-    </nav>
+    <div id="broker-summary" class="grid-2 summary-grid hydro-broker-strip"></div>
 
     <section id="graph-section" class="panel">
       <h2>Messwerte &amp; Verlauf</h2>
       <div id="hydro-sensor-deck" class="hydro-sensor-deck" aria-label="Sensor-Schnellauswahl und Live-Werte"></div>
 
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="key-select">Primärer Messwert</label>
-          <select id="key-select"></select>
+      <div class="hydro-chart-toolbar">
+        <div class="grid-2 hydro-series-selectors">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="key-select">Primärer Messwert (Linke Achse)</label>
+            <select id="key-select"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="secondary-key-select">Vergleichs-Messwert (Rechte Achse, optional)</label>
+            <select id="secondary-key-select">
+              <option value="">-- Kein Vergleich (nur Primär) --</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="secondary-key-select">Vergleichs-Messwert (optional)</label>
-          <select id="secondary-key-select">
-            <option value="">-- Kein Vergleich (nur Primär) --</option>
-          </select>
+
+        <div class="hydro-period-action-bar">
+          <div class="inline-actions reading-periods" role="group" aria-label="Zeitraum auswählen" style="margin-bottom:0;">
+            <button type="button" class="btn-secondary" data-reading-days="1" aria-pressed="false">24 Std</button>
+            <button type="button" class="btn-secondary" data-reading-days="7" aria-pressed="false">7 Tage</button>
+            <button type="button" class="btn-secondary" data-reading-days="30" aria-pressed="false">30 Tage</button>
+            <button type="button" class="btn-secondary" data-reading-days="all" aria-pressed="true">Gesamt</button>
+          </div>
+          <div class="inline-actions">
+            <button id="graph-refresh" type="button">Aktualisieren</button>
+            <button id="export-csv" type="button" class="btn btn-secondary">CSV Export</button>
+          </div>
         </div>
-      </div>
-      <div class="inline-actions">
-        <button id="graph-refresh" type="button">Aktualisieren</button>
-        <button id="export-csv" type="button" class="btn btn-secondary">Angezeigte Werte als CSV</button>
+
+        <details class="hydro-editor hydro-date-details">
+          <summary>📅 Eigenen Zeitraum wählen (Von / Bis) &amp; Auto-Refresh</summary>
+          <div class="grid-2" style="margin-bottom: 0.75rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="date-from">Von</label>
+              <input id="date-from" type="datetime-local">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="date-to">Bis</label>
+              <input id="date-to" type="datetime-local">
+            </div>
+          </div>
+          <div class="section-toolbar">
+            <label class="switch-line">
+              <input id="auto-refresh" type="checkbox">
+              <span>Automatisch aktualisieren</span>
+            </label>
+            <label class="switch-line inline-field">
+              <span>Intervall (s)</span>
+              <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
+            </label>
+          </div>
+        </details>
       </div>
 
-      <div class="grid-2">
-        <div class="form-group">
-          <label for="date-from">Von</label>
-          <input id="date-from" type="datetime-local">
-        </div>
-        <div class="form-group">
-          <label for="date-to">Bis</label>
-          <input id="date-to" type="datetime-local">
-        </div>
-      </div>
-
-      <div class="inline-actions reading-periods" role="group" aria-label="Zeitraum auswählen">
-        <button type="button" class="btn-secondary" data-reading-days="1" aria-pressed="false">24 Stunden</button>
-        <button type="button" class="btn-secondary" data-reading-days="7" aria-pressed="false">7 Tage</button>
-        <button type="button" class="btn-secondary" data-reading-days="30" aria-pressed="false">30 Tage</button>
-        <button type="button" class="btn-secondary" data-reading-days="all" aria-pressed="true">Gesamter Verlauf</button>
-      </div>
-      <p id="graph-range-hint" class="field-hint">Gesamter gespeicherter Verlauf. Alternativ einen eigenen Zeitraum über „Von“ und „Bis“ wählen.</p>
+      <p id="graph-range-hint" class="field-hint">Gesamter gespeicherter Verlauf. Tippe oben auf einen Sensor oder wähle einen Vergleichswert für den Dual-Graphen.</p>
       <p id="graph-status" class="status-line" role="status"></p>
       <button id="graph-retry" type="button" class="btn-secondary" hidden>Erneut laden</button>
       <canvas id="readings-chart" class="readings-chart" width="900" height="300" tabindex="0" aria-label="Messwertverlauf. Mit Pfeiltasten einzelne Messwerte auswählen." aria-describedby="chart-point-detail"></canvas>
-      <p id="chart-point-detail" class="chart-point-detail" aria-live="polite">Tippe auf den Graphen oder nutze die Pfeiltasten, um einen Messwert abzulesen.</p>
+      <p id="chart-point-detail" class="chart-point-detail" aria-live="polite">Tippe auf den Graphen oder bewege die Maus darüber, um Messwerte (inkl. Vergleichskurve) abzulesen.</p>
 
-      <div class="section-toolbar">
-        <label class="switch-line">
-          <input id="auto-refresh" type="checkbox">
-          <span>Automatisch aktualisieren</span>
-        </label>
-        <label class="switch-line inline-field">
-          <span>Intervall (s)</span>
-          <input id="auto-refresh-sec" type="number" min="2" max="300" value="10">
-        </label>
-      </div>
-
-      <div class="grid-2 dashboard-columns">
+      <div class="grid-2 dashboard-columns" style="margin-top: 1rem; margin-bottom: 0;">
         <div class="subpanel">
-          <h3>Alarm Schwellen</h3>
-          <div class="form-group">
-            <label for="threshold-min">Min. Schwelle</label>
-            <input id="threshold-min" type="number" step="any" placeholder="10.0">
-          </div>
-          <div class="form-group">
-            <label for="threshold-max">Max. Schwelle</label>
-            <input id="threshold-max" type="number" step="any" placeholder="25.0">
+          <h3>Alarm-Schwellenwerte</h3>
+          <div class="grid-2">
+            <div class="form-group" style="margin-bottom:0.65rem;">
+              <label for="threshold-min">Min. Schwelle</label>
+              <input id="threshold-min" type="number" step="any" placeholder="10.0">
+            </div>
+            <div class="form-group" style="margin-bottom:0.65rem;">
+              <label for="threshold-max">Max. Schwelle</label>
+              <input id="threshold-max" type="number" step="any" placeholder="25.0">
+            </div>
           </div>
           <button id="threshold-save" type="button">Schwellen speichern</button>
         </div>
         <div class="subpanel">
-          <h3>Alarmstatus</h3>
+          <h3>Aktueller Alarmstatus</h3>
           <div id="threshold-status" class="threshold-box">Noch keine Grenzwerte gesetzt.</div>
         </div>
       </div>

@@ -453,7 +453,7 @@ function renderSummaryCards() {
         .join("");
 
       return `
-        <article class="stats-card camera-source-card ${isActive ? "camera-source-active" : ""}">
+        <article class="stats-card camera-source-card ${isActive ? "camera-source-active" : ""}" data-camera-select="${escapeHtml(camera.cameraId)}" role="button" tabindex="0" style="cursor:pointer;" title="${escapeHtml(camera.label)} auswählen">
           <div class="camera-source-top">
             <div>
               <h3>${escapeHtml(camera.label)}</h3>
@@ -463,13 +463,26 @@ function renderSummaryCards() {
               ${camera.status.online ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
-          <p>ID: ${escapeHtml(camera.cameraId)}</p>
-          <p>Topic: ${escapeHtml(camera.mqtt.topicBase)}</p>
+          <p style="margin:0.2rem 0 0; font-size:0.8rem;">ID: ${escapeHtml(camera.cameraId)} · Topic: <code>${escapeHtml(camera.mqtt.topicBase)}</code></p>
           <div class="camera-capability-row">${badges || '<span class="camera-capability-badge">Standard</span>'}</div>
         </article>
       `;
     })
     .join("");
+
+  summaryEl.querySelectorAll("[data-camera-select]").forEach((card) => {
+    const activate = () => {
+      const btn = pickerEl?.querySelector(`[data-camera-id="${card.dataset.cameraSelect}"]`);
+      if (btn) btn.click();
+    };
+    card.addEventListener("click", activate);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    });
+  });
 }
 
 function renderPicker() {

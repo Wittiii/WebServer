@@ -173,9 +173,15 @@ db.exec(`
     use_custom_range INTEGER NOT NULL DEFAULT 0,
     empty_voltage_v REAL,
     full_voltage_v REAL,
+    capacity_ah REAL NOT NULL DEFAULT 100,
     updated_at TEXT NOT NULL
   );
 `);
+
+const batterySettingsColumns = db.prepare('PRAGMA table_info(victron_battery_settings)').all().map(c => c.name);
+if (!batterySettingsColumns.includes('capacity_ah')) {
+  db.exec('ALTER TABLE victron_battery_settings ADD COLUMN capacity_ah REAL NOT NULL DEFAULT 100');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS victron_mppt_readings (

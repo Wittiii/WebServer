@@ -59,11 +59,12 @@ const DEFAULT_SETTINGS = Object.freeze({
   useCustomRange: hasLegacyRange,
   emptyVoltageV: hasLegacyRange ? legacyEmptyVoltage : null,
   fullVoltageV: hasLegacyRange ? legacyFullVoltage : null,
+  capacityAh: 100,
 });
 
 const selectSettings = db.prepare(`
   SELECT estimation_enabled, profile, system_voltage, use_custom_range,
-         empty_voltage_v, full_voltage_v
+         empty_voltage_v, full_voltage_v, capacity_ah
   FROM victron_battery_settings
   WHERE id = 1
 `);
@@ -71,8 +72,8 @@ const selectSettings = db.prepare(`
 const upsertSettings = db.prepare(`
   INSERT INTO victron_battery_settings (
     id, estimation_enabled, profile, system_voltage, use_custom_range,
-    empty_voltage_v, full_voltage_v, updated_at
-  ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+    empty_voltage_v, full_voltage_v, capacity_ah, updated_at
+  ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     estimation_enabled = excluded.estimation_enabled,
     profile = excluded.profile,
@@ -80,6 +81,7 @@ const upsertSettings = db.prepare(`
     use_custom_range = excluded.use_custom_range,
     empty_voltage_v = excluded.empty_voltage_v,
     full_voltage_v = excluded.full_voltage_v,
+    capacity_ah = excluded.capacity_ah,
     updated_at = excluded.updated_at
 `);
 
@@ -98,6 +100,10 @@ function rowToSettings(row) {
   const hasValidCustomRange = emptyVoltageV !== null
     && fullVoltageV !== null
     && fullVoltageV > emptyVoltageV;
+  const rawCapacity = finite(row.capacity_ah);
+  const capacityAh = rawCapacity !== null && rawCapacity >= 1 && rawCapacity <= 10000
+    ? rawCapacity
+    : DEFAULT_SETTINGS.capacityAh;
 
   return {
     enabled: row.estimation_enabled !== 0,
@@ -106,6 +112,7 @@ function rowToSettings(row) {
     useCustomRange: (row.use_custom_range === 1 || profile === "custom") && hasValidCustomRange,
     emptyVoltageV: hasValidCustomRange ? emptyVoltageV : null,
     fullVoltageV: hasValidCustomRange ? fullVoltageV : null,
+    capacityAh,
   };
 }
 
@@ -142,6 +149,15 @@ function sanitizeBatterySettings(input) {
     }
   }
 
+  let capacityAh = DEFAULT_SETTINGS.capacityAh;
+  if (input.capacityAh !== undefined && input.capacityAh !== null && String(input.capacityAh).trim() !== "") {
+    const parsedCap = finite(input.capacityAh);
+    if (parsedCap === null || parsedCap < 1 || parsedCap > 10000) {
+      throw invalidSettings("Batteriekapazitaet muss zwischen 1 und 10000 Ah liegen");
+    }
+    capacityAh = Math.round(parsedCap * 10) / 10;
+  }
+
   return {
     enabled: input.enabled !== false,
     profile,
@@ -149,6 +165,7 @@ function sanitizeBatterySettings(input) {
     useCustomRange,
     emptyVoltageV: useCustomRange ? emptyVoltageV : null,
     fullVoltageV: useCustomRange ? fullVoltageV : null,
+    capacityAh,
   };
 }
 
@@ -161,6 +178,7 @@ function saveBatterySettings(input) {
     settings.useCustomRange ? 1 : 0,
     settings.emptyVoltageV,
     settings.fullVoltageV,
+    settings.capacityAh,
     new Date().toISOString()
   );
   return settings;
@@ -212,6 +230,7 @@ function getBatteryEstimation(batteryVoltageV, settings = getBatterySettings()) 
     useCustomRange: settings.useCustomRange,
     emptyVoltageV,
     fullVoltageV,
+    capacityAh: settings.capacityAh || DEFAULT_SETTINGS.capacityAh,
     socPercent,
     availableProfiles: Object.values(BATTERY_PROFILES).map((entry) => ({
       id: entry.id,

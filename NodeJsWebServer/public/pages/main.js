@@ -22,20 +22,43 @@ if (clockEl) setInterval(updateClock, 1000);
 function buildNavItems(loggedIn) {
   if (loggedIn) {
     return [
-      '<li><a href="/">Übersicht</a></li>',
-      '<li><a href="/dashboard">Dashboard</a></li>',
-      '<li><a href="/camera">Kamera</a></li>',
-      '<li><a href="/console">Konsole</a></li>',
-      '<li><a href="/energy">Strom</a></li>',
-      '<li><a href="/hydroponic">Hydroponik</a></li>',
+      '<li><a href="/"><span class="nav-item-icon" aria-hidden="true">⌂</span><span>Übersicht</span></a></li>',
+      '<li><a href="/energy"><span class="nav-item-icon" aria-hidden="true">⚡</span><span>Strom &amp; Solar</span></a></li>',
+      '<li><a href="/hydroponic"><span class="nav-item-icon" aria-hidden="true">♧</span><span>Hydroponik</span></a></li>',
+      '<li><a href="/camera"><span class="nav-item-icon" aria-hidden="true">◉</span><span>Kamera</span></a></li>',
+      '<li><a href="/dashboard"><span class="nav-item-icon" aria-hidden="true">▦</span><span>Dashboard</span></a></li>',
+      '<li><a href="/console"><span class="nav-item-icon" aria-hidden="true">&gt;_</span><span>Konsole</span></a></li>',
       '<li class="logout"><form method="post" action="/login/logout"><button type="submit">Abmelden</button></form></li>',
     ].join("");
   }
 
   return [
-    '<li><a href="/">Übersicht</a></li>',
-    '<li><a href="/login">Anmelden</a></li>',
+    '<li><a href="/"><span class="nav-item-icon" aria-hidden="true">⌂</span><span>Übersicht</span></a></li>',
+    '<li><a href="/login"><span class="nav-item-icon" aria-hidden="true">→</span><span>Anmelden</span></a></li>',
   ].join("");
+}
+
+function renderMobileBottomNav(loggedIn) {
+  let bottomNav = document.getElementById("mobile-bottom-nav");
+  if (!loggedIn || document.body.classList.contains("page-login")) {
+    bottomNav?.remove();
+    return;
+  }
+  if (!bottomNav) {
+    bottomNav = document.createElement("nav");
+    bottomNav.id = "mobile-bottom-nav";
+    bottomNav.className = "mobile-bottom-nav";
+    bottomNav.setAttribute("aria-label", "Mobile Schnellnavigation");
+    document.body.appendChild(bottomNav);
+  }
+  bottomNav.innerHTML = [
+    '<a href="/"><span class="mobile-nav-icon" aria-hidden="true">⌂</span><span>Start</span></a>',
+    '<a href="/energy"><span class="mobile-nav-icon" aria-hidden="true">⚡</span><span>Strom</span></a>',
+    '<a href="/hydroponic"><span class="mobile-nav-icon" aria-hidden="true">♧</span><span>Hydro</span></a>',
+    '<a href="/camera"><span class="mobile-nav-icon" aria-hidden="true">◉</span><span>Kamera</span></a>',
+    '<a href="/dashboard"><span class="mobile-nav-icon" aria-hidden="true">▦</span><span>System</span></a>',
+  ].join("");
+  markActiveNav(bottomNav);
 }
 
 function markActiveNav(navLinks) {
@@ -63,6 +86,7 @@ function markActiveNav(navLinks) {
     navLinks.innerHTML = buildNavItems(loggedIn);
     navLinks.id = "primary-navigation";
     markActiveNav(navLinks);
+    renderMobileBottomNav(loggedIn);
 
     navLinks.querySelector(".logout form")?.addEventListener("submit", () => {
       try { sessionStorage.removeItem("cached_auth_logged_in"); } catch {}

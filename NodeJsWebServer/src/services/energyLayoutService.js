@@ -1,10 +1,12 @@
 const db = require("../database/db");
 
 const DEFAULT_LAYOUT = [
-  { id: "live-values", width: "full", visible: true, collapsed: false },
-  { id: "energy-balance", width: "full", visible: true, collapsed: false },
-  { id: "consumption-chart", width: "full", visible: true, collapsed: false },
+  { id: "autarky-flow", width: "full", visible: true, collapsed: false },
+  { id: "live-values", width: "half", visible: true, collapsed: false },
+  { id: "energy-balance", width: "half", visible: true, collapsed: false },
   { id: "victron", width: "full", visible: true, collapsed: false },
+  { id: "consumption-chart", width: "half", visible: true, collapsed: false },
+  { id: "victron-chart", width: "half", visible: true, collapsed: false },
   { id: "meter-details", width: "full", visible: true, collapsed: false },
 ];
 

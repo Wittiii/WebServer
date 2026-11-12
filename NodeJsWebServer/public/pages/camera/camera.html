@@ -50,11 +50,11 @@
       <button id="camera-overview-refresh" type="button" class="btn-secondary">Jetzt aktualisieren</button>
     </div>
     <section class="panel">
-      <div class="section-header">
-        <h2>Kamera auswählen</h2>
+      <div class="section-header" style="align-items: center;">
+        <h2 style="margin:0;">Kamera auswählen</h2>
+        <div id="camera-picker" class="camera-picker" style="margin-left:auto;"></div>
       </div>
-      <div id="camera-summary" class="grid-2 camera-summary-grid"></div>
-      <div id="camera-picker" class="camera-picker"></div>
+      <div id="camera-summary" class="grid-2 camera-summary-grid" style="margin-bottom:0;"></div>
     </section>
 
     <section class="panel">
@@ -111,23 +111,21 @@
       </div>
     </section>
 
-    <div class="grid-2 dashboard-columns">
-      <section class="panel">
-        <h2>Kamera Befehle</h2>
-        <div class="camera-action-grid">
-          <button type="button" data-camera-action="start">Stream starten</button>
-          <button type="button" data-camera-action="stop">Stream stoppen</button>
-          <button type="button" data-camera-action="restart">Neu starten</button>
-          <button type="button" data-camera-action="ping">Ping senden</button>
+    <section class="panel">
+      <div class="section-header" style="align-items: center; margin-bottom: 1rem;">
+        <div>
+          <h2 style="margin:0;">Kamera-Steuerung &amp; Systemzustand</h2>
         </div>
-        <p id="camera-command-status" class="status-line"></p>
-      </section>
-
-      <section class="panel">
-        <h2>Aktueller Zustand</h2>
-        <div id="camera-state-card" class="camera-state-card"></div>
-      </section>
-    </div>
+        <div class="camera-action-grid camera-inline-actions">
+          <button type="button" data-camera-action="start">▶ Stream starten</button>
+          <button type="button" data-camera-action="stop" class="btn-secondary">⏹ Stream stoppen</button>
+          <button type="button" data-camera-action="restart" class="btn-secondary">↻ Neu starten</button>
+          <button type="button" data-camera-action="ping" class="btn-secondary">📡 Ping senden</button>
+        </div>
+      </div>
+      <p id="camera-command-status" class="status-line" style="margin-top:0; margin-bottom:0.75rem;"></p>
+      <div id="camera-state-card" class="camera-state-card"></div>
+    </section>
 
     <section class="panel">
       <div class="camera-settings-header">

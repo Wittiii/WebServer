@@ -19,78 +19,118 @@
 <body class="theme-operations page-home">
   <div id="navbar"></div>
   <header class="hero home-hero">
-    <div class="container hero-inner">
+    <div class="container hero-inner home-hero-compact">
       <div class="hero-copy">
-        <p class="eyebrow">Dein Smart IoT Arbeitsplatz</p>
-        <h1>Alles im Blick.<br><span>Alles an einem Ort.</span></h1>
-        <p class="hero-text">Von der ersten Messung bis zum Livestream: Hier laufen deine Geräte und Anlagen zusammen.</p>
-        <div class="hero-actions">
-          <a class="btn" href="/dashboard">Dashboard öffnen <span aria-hidden="true">→</span></a>
-          <a class="btn btn-secondary" href="/hydroponic">Zur Hydroponik</a>
+        <div class="home-hero-badge-row">
+          <p class="eyebrow" style="margin:0;">Smart IoT Operations Deck</p>
+          <span class="vitals-live-label"><span class="live-dot" aria-hidden="true"></span>Live-Telemetrie aktiv</span>
         </div>
+        <h1>Alles im Blick. <span>Direkt steuerbar.</span></h1>
+        <p class="hero-text">Wähle einen Bereich – alle Live-Messwerte für Strom, Solar, Hydroponik, Kameras und Server aktualisieren sich automatisch.</p>
       </div>
       <div class="home-context">
-        <span class="eyebrow">Operations Deck</span>
-        <div class="home-orbit" aria-hidden="true"><span>IoT</span></div>
-        <div class="home-clock"><span>Lokale Uhrzeit</span><strong id="clock">--:--:--</strong></div>
+        <div class="home-clock">
+          <span>Systemzeit</span>
+          <strong id="clock">--:--:--</strong>
+        </div>
+        <div id="home-quick-system-pill" class="home-system-pill">System bereit</div>
       </div>
     </div>
   </header>
+
   <main class="container page-shell">
-    <section class="home-vitals-section" aria-labelledby="vitals-title">
+    <section class="home-vitals-section" data-collapsible="false" aria-labelledby="vitals-title">
       <div class="workspace-heading">
         <div>
-          <p class="eyebrow">Live-Telemetrie</p>
-          <h2 id="vitals-title">System-Vitalwerte</h2>
+          <p class="eyebrow">Live-Status &amp; Direktwahl</p>
+          <h2 id="vitals-title">Deine Bereiche</h2>
         </div>
-        <span class="vitals-live-label"><span class="live-dot" aria-hidden="true"></span>Echtzeit-Aktualisierung</span>
+        <span>Karte antippen zum Öffnen</span>
       </div>
+
+      <div id="home-login-banner" hidden></div>
+
       <div id="home-vitals-container" class="home-vitals-container" aria-live="polite">
-        <p class="helper-box">Vitalwerte werden geladen …</p>
+        <div class="home-vitals-grid">
+          <a class="vitals-card vitals-card-energy workspace-unified-card" href="/energy">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">⚡</span> Stromnetz</span>
+              <span id="home-power-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-power-primary" class="vitals-primary">-- <small>W</small></div>
+            <div class="vitals-details">
+              <p><span>Heute:</span> <strong id="home-power-today">-- kWh</strong></p>
+              <p><span>Zählerstand:</span> <span id="home-power-total">-- kWh</span></p>
+            </div>
+            <span class="vitals-action">Strom &amp; Verbrauch öffnen <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-solar workspace-unified-card" href="/energy">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">☀️</span> Solar &amp; Akku</span>
+              <span id="home-solar-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-solar-primary" class="vitals-primary">-- <small>W PV</small></div>
+            <div class="vitals-details">
+              <p><span>Akku-SoC:</span> <strong id="home-solar-soc">-- %</strong></p>
+              <p><span>Ertrag heute:</span> <span id="home-solar-yield">-- Wh</span></p>
+            </div>
+            <span class="vitals-action">Solar &amp; Batterie öffnen <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-hydro workspace-unified-card" href="/hydroponic">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">♧</span> Hydroponik</span>
+              <span id="home-hydro-badge" class="status-badge">LÄDT</span>
+            </div>
+            <div id="home-hydro-primary" class="vitals-primary">--</div>
+            <div class="vitals-details">
+              <p><span>Aktives Objekt:</span> <strong id="home-hydro-obj">--</strong></p>
+              <p><span>Automationen:</span> <span id="home-hydro-rules">--</span></p>
+            </div>
+            <span class="vitals-action">Zur Pflanzensteuerung <span aria-hidden="true">→</span></span>
+          </a>
+
+          <a class="vitals-card vitals-card-system workspace-unified-card" href="/camera">
+            <div class="vitals-card-header">
+              <span class="vitals-card-title"><span class="vitals-icon" aria-hidden="true">◉</span> Kameras</span>
+              <span id="home-cam-badge" class="status-badge status-online">BEREIT</span>
+            </div>
+            <div id="home-cam-primary" class="vitals-primary">-- / -- <small>Online</small></div>
+            <div class="vitals-details">
+              <p><span>Livestream:</span> <strong id="home-cam-stream">WebRTC / Multiview</strong></p>
+              <p><span>Archiv:</span> <span>Schnappschuss &amp; Zeitraffer</span></p>
+            </div>
+            <span class="vitals-action">Kamera-Leitstand öffnen <span aria-hidden="true">→</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="home-secondary-grid">
+        <a class="home-console-link home-secondary-card" href="/dashboard">
+          <div>
+            <span class="home-secondary-kicker">▦ SYSTEM &amp; MQTT BROKER</span>
+            <strong>IoT Dashboard &amp; Schnellzugriff</strong>
+            <span id="badge-dash" class="home-secondary-meta">Verbindungen, Topics und Server-Auslastung im Detail</span>
+          </div>
+          <span class="home-secondary-cta">Dashboard <span aria-hidden="true">→</span></span>
+        </a>
+
+        <a class="home-console-link home-secondary-card" href="/console">
+          <div>
+            <span class="home-secondary-kicker">&gt;_ RUNTIME OBSERVABILITY</span>
+            <strong>Live-Serverkonsole</strong>
+            <span class="home-secondary-meta">Echtzeit-Logs von Node.js, MQTT, Kamerabridges und Regeln</span>
+          </div>
+          <span class="home-secondary-cta">Konsole <span aria-hidden="true">→</span></span>
+        </a>
       </div>
     </section>
 
-    <section class="home-workspaces" data-collapsible="false" aria-labelledby="workspace-title">
-      <div class="workspace-heading">
-        <div>
-          <p class="eyebrow">Direkt zum Wesentlichen</p>
-          <h2 id="workspace-title">Deine Bereiche</h2>
-        </div>
-        <span>Ein Klick. Direkt drin.</span>
-      </div>
-      <div class="workspace-grid">
-        <a class="workspace-card" href="/dashboard">
-          <span class="workspace-icon" aria-hidden="true">▦</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Dashboard</h3>
-          <p>Verbindungen, Topics und Serverstatus im Überblick.</p>
-          <span id="badge-dash" class="workspace-mini-badge">System aktiv</span>
-          <span class="workspace-link">Übersicht öffnen <span aria-hidden="true">→</span></span>
-        </a>
-        <a class="workspace-card workspace-camera" href="/camera">
-          <span class="workspace-icon" aria-hidden="true">◉</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Kameras</h3>
-          <p>Live dabei sein. Kameras steuern und Aufnahmen ansehen.</p>
-          <span id="badge-cam" class="workspace-mini-badge">Kameras bereit</span>
-          <span class="workspace-link">Zum Livestream <span aria-hidden="true">→</span></span>
-        </a>
-        <a class="workspace-card workspace-energy" href="/energy">
-          <span class="workspace-icon" aria-hidden="true">ϟ</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Energie</h3>
-          <p>Verbrauch, Solarerzeugung und Batterie im Blick behalten.</p>
-          <span id="badge-energy" class="workspace-mini-badge">Messung läuft</span>
-          <span class="workspace-link">Messwerte ansehen <span aria-hidden="true">→</span></span>
-        </a>
-        <a class="workspace-card workspace-hydro" href="/hydroponic">
-          <span class="workspace-icon" aria-hidden="true">♧</span><span class="workspace-arrow" aria-hidden="true">↗</span>
-          <h3>Hydroponik</h3>
-          <p>Deine Anlage steuern und automatische Abläufe einrichten.</p>
-          <span id="badge-hydro" class="workspace-mini-badge">Automatik aktiv</span>
-          <span class="workspace-link">Zur Steuerung <span aria-hidden="true">→</span></span>
-        </a>
-      </div>
-    </section>
-    <a class="home-console-link" href="/console"><span><strong>Ein genauerer Blick?</strong> Die Konsole zeigt dir die Systemereignisse.</span><span>Konsole öffnen <span aria-hidden="true">→</span></span></a>
-    <footer class="page-footer"><span>Smart IoT Ops</span><span>Dein System. Dein Überblick.</span></footer>
+    <footer class="page-footer">
+      <span>Smart IoT Ops</span>
+      <span>Kompakt · Echtzeit · PWA-ready</span>
+    </footer>
   </main>
   <script src="/pages/main.js"></script>
   <script src="/pages/home.js"></script>

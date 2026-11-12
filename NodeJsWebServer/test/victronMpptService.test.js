@@ -175,7 +175,7 @@ test("sanitizes Power layouts and restores omitted sections", () => {
     { id: "unknown", width: "half", visible: true },
   ]);
 
-  assert.equal(layout.length, 5);
+  assert.equal(layout.length, 7);
   assert.deepEqual(layout[0], {
     id: "victron",
     width: "half",

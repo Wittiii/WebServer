@@ -88,6 +88,8 @@ const elements = {
   victronChargeStages: document.getElementById("victron-charge-stages"),
   victronSocProfileSummary: document.getElementById("victron-soc-profile-summary"),
   victronSocSettingsOpen: document.getElementById("victron-soc-settings-open"),
+  openCustomizerTop: document.getElementById("energy-open-customizer-top"),
+  openBatteryTop: document.getElementById("energy-open-battery-top"),
   victronSocDialog: document.getElementById("victron-soc-dialog"),
   victronSocForm: document.getElementById("victron-soc-form"),
   victronSocSettingsClose: document.getElementById("victron-soc-settings-close"),
@@ -96,6 +98,7 @@ const elements = {
   victronSocEnabled: document.getElementById("victron-soc-enabled"),
   victronSocProfile: document.getElementById("victron-soc-profile"),
   victronSocSystemVoltage: document.getElementById("victron-soc-system-voltage"),
+  victronSocCapacityAh: document.getElementById("victron-soc-capacity-ah"),
   victronSocUseCustom: document.getElementById("victron-soc-use-custom"),
   victronSocCustomFields: document.getElementById("victron-soc-custom-fields"),
   victronSocEmptyVoltage: document.getElementById("victron-soc-empty-voltage"),
@@ -135,13 +138,24 @@ let refreshInFlight = false;
 let resizeFrame = null;
 
 const defaultEnergyLayout = [
-  { id: "live-values", width: "full", visible: true, collapsed: false },
-  { id: "energy-balance", width: "full", visible: true, collapsed: false },
-  { id: "consumption-chart", width: "full", visible: true, collapsed: false },
+  { id: "autarky-flow", width: "full", visible: true, collapsed: false },
+  { id: "live-values", width: "half", visible: true, collapsed: false },
+  { id: "energy-balance", width: "half", visible: true, collapsed: false },
   { id: "victron", width: "full", visible: true, collapsed: false },
+  { id: "consumption-chart", width: "half", visible: true, collapsed: false },
+  { id: "victron-chart", width: "half", visible: true, collapsed: false },
   { id: "meter-details", width: "full", visible: true, collapsed: false },
 ];
 let energyLayout = defaultEnergyLayout.map((entry) => ({ ...entry }));
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 const numberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 const currencyFormat = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
@@ -158,8 +172,10 @@ function createLayoutControls(section) {
   controls.className = "energy-layout-controls";
   const title = section.dataset.layoutTitle || section.dataset.layoutId;
   controls.innerHTML = `
-    <button class="energy-layout-edit-only energy-layout-drag" type="button" data-layout-action="drag" draggable="true" title="Widget ziehen" aria-label="${title} verschieben">Verschieben</button>
+    <button class="energy-layout-edit-only energy-layout-drag" type="button" data-layout-action="drag" draggable="true" title="Widget ziehen" aria-label="${title} verschieben">∷ Verschieben</button>
     <strong class="energy-layout-widget-title">${title}</strong>
+    <button class="energy-layout-edit-only" type="button" data-layout-action="width" title="Breite umschalten">Halbe Breite</button>
+    <button class="energy-layout-edit-only" type="button" data-layout-action="hide" title="Widget ausblenden">Ausblenden</button>
     <button class="energy-layout-collapse" type="button" data-layout-action="collapse" aria-expanded="true">Einklappen</button>
   `;
   section.prepend(controls);
@@ -396,10 +412,12 @@ function updateVictronSocFormPreview() {
   );
 
   const nominalVoltageV = profile.nominalBaseVoltageV * factor;
-  const detectionLabel = systemVoltage === "auto" ? "automatisch erkannt" : "fest ausgewaehlt";
+  const capacityAh = readSocVoltageInput(elements.victronSocCapacityAh) || 100;
+  const totalWh = Math.round(nominalVoltageV * capacityAh);
+  const detectionLabel = systemVoltage === "auto" ? "automatisch erkannt" : "fest ausgewählt";
   setText(
     elements.victronSocPreviewSystem,
-    `${profile.label} ${number(nominalVoltageV, 1)} V ${detectionLabel}${useCustomRange ? " | eigene Grenzen" : ""}`
+    `${profile.label} ${number(nominalVoltageV, 1)} V (${detectionLabel}) · ${number(capacityAh, 0)} Ah (~${number(totalWh, 0)} Wh)${useCustomRange ? " | eigene Grenzen" : ""}`
   );
   const voltage = Number(latestVictronVoltage);
   const canPreview = elements.victronSocEnabled.checked
@@ -431,6 +449,11 @@ function populateVictronSocForm(estimation) {
   elements.victronSocSystemVoltage.value = ["auto", "12", "24", "36", "48"].includes(String(estimation.systemVoltage))
     ? String(estimation.systemVoltage)
     : "auto";
+  if (elements.victronSocCapacityAh) {
+    elements.victronSocCapacityAh.value = Number.isFinite(Number(estimation.capacityAh)) && Number(estimation.capacityAh) > 0
+      ? String(Number(estimation.capacityAh))
+      : "100";
+  }
   elements.victronSocUseCustom.checked = estimation.useCustomRange === true;
   victronSocCustomRangeDirty = estimation.useCustomRange === true;
   elements.victronSocEmptyVoltage.value = Number.isFinite(Number(estimation.emptyVoltageV))
@@ -449,9 +472,10 @@ function renderVictronSocSettings(estimation) {
     victronBatteryProfiles = estimation.availableProfiles;
   }
 
+  const capAh = Number(estimation.capacityAh) > 0 ? Number(estimation.capacityAh) : 100;
   const summary = estimation.enabled
-    ? `${estimation.profileLabel} | ${number(estimation.nominalVoltageV, 1)} V | ${number(estimation.emptyVoltageV, 2)} - ${number(estimation.fullVoltageV, 2)} V`
-    : "Spannungs-Schaetzung deaktiviert";
+    ? `${estimation.profileLabel} | ${number(estimation.nominalVoltageV, 1)} V | ${number(capAh, 0)} Ah | ${number(estimation.emptyVoltageV, 2)}–${number(estimation.fullVoltageV, 2)} V`
+    : `Schätzung aus (${number(capAh, 0)} Ah)`;
   setText(elements.victronSocProfileSummary, summary);
   if (!elements.victronSocDialog?.open) populateVictronSocForm(estimation);
 }
@@ -831,6 +855,8 @@ document.querySelectorAll("[data-victron-period]").forEach((button) => {
 });
 
 elements.victronSocSettingsOpen?.addEventListener("click", openVictronSocDialog);
+elements.openBatteryTop?.addEventListener("click", openVictronSocDialog);
+elements.openCustomizerTop?.addEventListener("click", () => setCustomizerOpen(true));
 elements.victronSocSettingsClose?.addEventListener("click", closeVictronSocDialog);
 elements.victronSocSettingsCancel?.addEventListener("click", closeVictronSocDialog);
 elements.victronSocDialog?.addEventListener("click", (event) => {
@@ -839,6 +865,7 @@ elements.victronSocDialog?.addEventListener("click", (event) => {
 
 elements.victronSocProfile?.addEventListener("change", updateVictronSocFormPreview);
 elements.victronSocSystemVoltage?.addEventListener("change", updateVictronSocFormPreview);
+elements.victronSocCapacityAh?.addEventListener("input", updateVictronSocFormPreview);
 elements.victronSocEnabled?.addEventListener("change", updateVictronSocFormPreview);
 elements.victronSocUseCustom?.addEventListener("change", () => {
   if (elements.victronSocUseCustom.checked && !victronSocCustomRangeDirty) {
@@ -873,6 +900,7 @@ elements.victronSocForm?.addEventListener("submit", async (event) => {
     enabled: elements.victronSocEnabled.checked,
     profile: elements.victronSocProfile.value,
     systemVoltage: elements.victronSocSystemVoltage.value,
+    capacityAh: readSocVoltageInput(elements.victronSocCapacityAh) || 100,
     useCustomRange,
     emptyVoltageV: useCustomRange ? readSocVoltageInput(elements.victronSocEmptyVoltage) : null,
     fullVoltageV: useCustomRange ? readSocVoltageInput(elements.victronSocFullVoltage) : null,
@@ -920,6 +948,37 @@ elements.layoutReset?.addEventListener("click", () => {
   energyLayout = defaultEnergyLayout.map((entry) => ({ ...entry }));
   applyEnergyLayout();
   saveEnergyLayout();
+});
+
+document.querySelectorAll("[data-layout-preset]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const preset = btn.dataset.layoutPreset;
+    if (preset === "solar") {
+      energyLayout = [
+        { id: "autarky-flow", width: "full", visible: true, collapsed: false },
+        { id: "victron", width: "full", visible: true, collapsed: false },
+        { id: "victron-chart", width: "half", visible: true, collapsed: false },
+        { id: "consumption-chart", width: "half", visible: true, collapsed: false },
+        { id: "live-values", width: "half", visible: true, collapsed: false },
+        { id: "energy-balance", width: "half", visible: true, collapsed: false },
+        { id: "meter-details", width: "full", visible: true, collapsed: false },
+      ];
+    } else if (preset === "compact") {
+      energyLayout = [
+        { id: "autarky-flow", width: "full", visible: true, collapsed: false },
+        { id: "live-values", width: "half", visible: true, collapsed: false },
+        { id: "energy-balance", width: "half", visible: true, collapsed: false },
+        { id: "consumption-chart", width: "half", visible: true, collapsed: false },
+        { id: "victron-chart", width: "half", visible: true, collapsed: false },
+        { id: "victron", width: "full", visible: true, collapsed: false },
+        { id: "meter-details", width: "full", visible: true, collapsed: false },
+      ];
+    } else {
+      energyLayout = defaultEnergyLayout.map((entry) => ({ ...entry }));
+    }
+    applyEnergyLayout();
+    saveEnergyLayout();
+  });
 });
 
 elements.customizerList?.addEventListener("click", (event) => {
@@ -994,6 +1053,18 @@ elements.layoutGrid?.addEventListener("click", (event) => {
 
   if (button.dataset.layoutAction === "collapse") {
     entry.collapsed = !entry.collapsed;
+    applyEnergyLayout();
+    saveEnergyLayout();
+    return;
+  }
+  if (button.dataset.layoutAction === "width") {
+    entry.width = entry.width === "half" ? "full" : "half";
+    applyEnergyLayout();
+    saveEnergyLayout();
+    return;
+  }
+  if (button.dataset.layoutAction === "hide") {
+    entry.visible = false;
     applyEnergyLayout();
     saveEnergyLayout();
     return;

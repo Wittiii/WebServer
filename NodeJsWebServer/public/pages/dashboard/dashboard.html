@@ -79,10 +79,16 @@
         <section id="mqtt-clients" class="panel">
           <h2>MQTT Clients</h2>
           <div class="dashboard-filters">
-            <label for="client-search">Client oder letztes Topic suchen</label>
-            <input id="client-search" type="search" placeholder="Name oder Topic …" aria-controls="client-list">
-            <label for="client-status-filter">Verbindung</label>
-            <select id="client-status-filter" aria-controls="client-list"><option value="all">Alle Clients</option><option value="online">Nur online</option><option value="offline">Nur offline</option></select>
+            <div class="dashboard-filter-row">
+              <div>
+                <label for="client-search">Client oder Topic suchen</label>
+                <input id="client-search" type="search" placeholder="Name oder Topic …" aria-controls="client-list">
+              </div>
+              <div>
+                <label for="client-status-filter">Status</label>
+                <select id="client-status-filter" aria-controls="client-list"><option value="all">Alle</option><option value="online">Online</option><option value="offline">Offline</option></select>
+              </div>
+            </div>
             <p id="client-result-count" role="status"></p>
           </div>
           <ul id="client-list" class="readings-list"></ul>

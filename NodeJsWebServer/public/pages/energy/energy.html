@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stromverbrauch - Operations Deck</title>
+  <title>Strom &amp; Solar - Operations Deck</title>
   <link rel="stylesheet" href="/pages/style.css">
   <link rel="stylesheet" href="/pages/experience.css">
   <meta name="theme-color" content="#0f172a">
@@ -22,28 +22,41 @@
   <header class="hero energy-hero">
     <div class="container hero-inner">
       <div class="hero-copy energy-hero-copy">
-        <p class="energy-eyebrow">TASMOTA ENERGY MONITOR</p>
-        <h1>Stromverbrauch</h1>
-        <p class="hero-text">Live-Messung, Tagesbilanz und Verlauf der angeschlossenen Steckdose.</p>
-        <div class="energy-live-row">
-          <div>
-            <span id="energy-live-power" class="energy-live-value">--</span>
-            <span class="energy-live-unit">W</span>
-          </div>
+        <div class="energy-hero-top-row">
+          <p class="energy-eyebrow">ENERGIE &amp; SOLAR LEITSTAND</p>
           <span id="energy-online-badge" class="status-badge energy-status-badge">WARTET</span>
         </div>
-        <p id="energy-last-update" class="energy-freshness">Noch keine Messung empfangen.</p>
+        <h1>Strom &amp; Solar</h1>
+        <p class="hero-text">Autarkie, Solarerzeugung (Victron MPPT), Batteriespeicher und Netzverbrauch (Tasmota) frei anpassbar im Überblick.</p>
+        <div class="energy-hero-QuickActions">
+          <button id="energy-open-customizer-top" type="button" class="btn-secondary energy-top-action-btn">
+            <span aria-hidden="true">⊞</span> Ansicht &amp; Widgets anpassen
+          </button>
+          <button id="energy-open-battery-top" type="button" class="btn-secondary energy-top-action-btn">
+            <span aria-hidden="true">🔋</span> Batterieprofil &amp; Kapazität
+          </button>
+          <span id="energy-last-update" class="energy-freshness">Noch keine Messung empfangen.</span>
+        </div>
       </div>
       <div class="hero-side energy-dial-card">
-        <div class="energy-dial" id="energy-dial">
-          <div class="energy-dial-core">
-            <span>Heute</span>
-            <strong id="energy-today">--</strong>
-            <small>kWh</small>
+        <div class="energy-hero-kpi-row">
+          <div class="energy-hero-kpi-main">
+            <span class="energy-kpi-caption">Netzleistung</span>
+            <div>
+              <span id="energy-live-power" class="energy-live-value">--</span>
+              <span class="energy-live-unit">W</span>
+            </div>
+          </div>
+          <div class="energy-dial" id="energy-dial">
+            <div class="energy-dial-core">
+              <span>Heute</span>
+              <strong id="energy-today">--</strong>
+              <small>kWh</small>
+            </div>
           </div>
         </div>
         <div class="energy-cost-line">
-          <span>Geschaetzte Kosten</span>
+          <span>Geschätzte Tageskosten</span>
           <strong id="energy-cost-today">--</strong>
         </div>
       </div>
@@ -52,319 +65,320 @@
 
   <main class="container page-shell energy-shell">
     <div id="energy-layout-grid" class="energy-layout-grid">
-    <section class="panel energy-autarky-panel" data-layout-id="autarky-flow" data-layout-title="Autarkie &amp; Energieverteilung" data-collapsible="false">
-      <div class="section-header energy-section-heading">
-        <div>
-          <p class="energy-eyebrow">ENERGIEBILANZ &amp; AUTARKIE</p>
-          <h2>Aktuelle Energieverteilung</h2>
-        </div>
-        <div class="autarky-badge-group">
-          <span id="autarky-status-badge" class="status-badge energy-status-badge">WARTET</span>
-        </div>
-      </div>
-
-      <div class="autarky-summary-row">
-        <div class="autarky-score-card">
-          <span class="autarky-score-label">Solar-Deckungsgrad</span>
-          <div class="autarky-score-val-wrap">
-            <strong id="autarky-percent">-- %</strong>
-            <small id="autarky-summary-text">Wartet auf Messdaten</small>
+      <section class="panel energy-autarky-panel" data-layout-id="autarky-flow" data-layout-title="Autarkie &amp; Energieverteilung" data-collapsible="false">
+        <div class="section-header energy-section-heading">
+          <div>
+            <p class="energy-eyebrow">ENERGIEBILANZ &amp; AUTARKIE</p>
+            <h2>Aktuelle Energieverteilung</h2>
           </div>
-          <div class="autarky-bar-track" aria-hidden="true">
-            <div id="autarky-bar-solar" class="autarky-bar-fill bar-solar" style="width: 0%" title="Solar"></div>
-            <div id="autarky-bar-grid" class="autarky-bar-fill bar-grid" style="width: 0%" title="Netzbezug"></div>
+          <div class="autarky-badge-group">
+            <span id="autarky-status-badge" class="status-badge energy-status-badge">WARTET</span>
           </div>
         </div>
 
-        <div class="autarky-flow-grid">
-          <div class="autarky-node node-solar">
-            <span class="node-icon">☀️</span>
-            <span class="node-title">Solar (PV)</span>
-            <strong id="autarky-solar-power">-- W</strong>
-            <small id="autarky-solar-sub">Ertrag heute: --</small>
-          </div>
-          <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
-          <div class="autarky-node node-battery">
-            <span class="node-icon">🔋</span>
-            <span class="node-title">Batterie</span>
-            <strong id="autarky-battery-soc">-- %</strong>
-            <small id="autarky-battery-sub">Standby</small>
-          </div>
-          <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
-          <div class="autarky-node node-grid">
-            <span class="node-icon">⚡</span>
-            <span class="node-title">Haus / Netz</span>
-            <strong id="autarky-grid-power">-- W</strong>
-            <small id="autarky-grid-sub">Verbrauch heute: --</small>
-          </div>
-        </div>
-      </div>
-    </section>
-    <section class="energy-metric-grid" data-layout-id="live-values" data-layout-title="Live-Messwerte" data-collapsible="false" aria-label="Aktuelle Messwerte">
-      <article class="energy-metric-card energy-metric-primary">
-        <span class="energy-metric-label">Wirkleistung</span>
-        <strong id="energy-power">--</strong>
-        <small>Watt</small>
-      </article>
-      <article class="energy-metric-card">
-        <span class="energy-metric-label">Spannung</span>
-        <strong id="energy-voltage">--</strong>
-        <small>Volt</small>
-      </article>
-      <article class="energy-metric-card">
-        <span class="energy-metric-label">Strom</span>
-        <strong id="energy-current">--</strong>
-        <small>Ampere</small>
-      </article>
-      <article class="energy-metric-card">
-        <span class="energy-metric-label">Leistungsfaktor</span>
-        <strong id="energy-factor">--</strong>
-        <small>cos phi</small>
-      </article>
-    </section>
-
-    <section class="panel energy-balance-panel" data-layout-id="energy-balance" data-layout-title="Energiebilanz" data-collapsible="false">
-      <div class="section-header energy-section-heading">
-        <div>
-          <p class="energy-eyebrow">ENERGIEBILANZ</p>
-          <h2>Verbrauch im Vergleich</h2>
-        </div>
-        <span id="energy-price-hint" class="energy-price-chip">-- EUR/kWh</span>
-      </div>
-      <div class="energy-balance-grid">
-        <div class="energy-balance-item">
-          <span>Heute</span>
-          <strong id="energy-balance-today">--</strong>
-          <small id="energy-balance-today-cost">--</small>
-        </div>
-        <div class="energy-balance-item">
-          <span>Gestern</span>
-          <strong id="energy-yesterday">--</strong>
-          <small id="energy-yesterday-cost">--</small>
-        </div>
-        <div class="energy-balance-item">
-          <span>Gesamt</span>
-          <strong id="energy-total">--</strong>
-          <small id="energy-total-since">Seit --</small>
-        </div>
-        <div class="energy-balance-item">
-          <span>Spitze heute</span>
-          <strong id="energy-peak">--</strong>
-          <small id="energy-average">Durchschnitt --</small>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel energy-chart-panel" data-layout-id="consumption-chart" data-layout-title="Verbrauchsverlauf" data-collapsible="false">
-      <div class="section-header energy-section-heading">
-        <div>
-          <p class="energy-eyebrow">LASTPROFIL</p>
-          <h2>Leistungsverlauf</h2>
-        </div>
-        <div class="energy-period-tabs" role="group" aria-label="Zeitraum waehlen">
-          <button type="button" data-period="1h">1 Stunde</button>
-          <button type="button" data-period="24h" class="is-active">24 Stunden</button>
-          <button type="button" data-period="7d">7 Tage</button>
-          <button type="button" data-period="30d">30 Tage</button>
-        </div>
-      </div>
-      <div class="energy-chart-shell">
-        <canvas id="energy-power-chart" class="energy-chart" width="1080" height="340"></canvas>
-        <p id="energy-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Messpunkte fuer diesen Zeitraum.</p>
-      </div>
-      <div class="energy-chart-legend">
-        <span><i class="legend-power"></i> Durchschnittliche Leistung</span>
-        <span><i class="legend-peak"></i> Spitzenleistung</span>
-      </div>
-    </section>
-
-    <section class="panel energy-victron-panel" data-layout-id="victron" data-layout-title="Victron SmartSolar 150/45" data-collapsible="false">
-      <div class="section-header energy-section-heading">
-        <div>
-          <p class="energy-eyebrow">VICTRON SMARTSOLAR MPPT 150/45</p>
-          <h2>Solarerzeugung &amp; Batterie</h2>
-        </div>
-        <span id="victron-online-badge" class="status-badge energy-status-badge">WARTET</span>
-      </div>
-
-      <div class="energy-metric-grid energy-victron-grid" aria-label="Aktuelle Victron Messwerte">
-        <article class="energy-metric-card energy-victron-primary">
-          <span class="energy-metric-label">PV-Leistung</span>
-          <strong id="victron-panel-power">--</strong>
-          <small>Watt vom Solarpanel</small>
-        </article>
-        <article class="energy-metric-card">
-          <span class="energy-metric-label">Tagesertrag</span>
-          <strong id="victron-yield-today">--</strong>
-          <small>Wattstunden</small>
-        </article>
-        <article class="energy-metric-card">
-          <span class="energy-metric-label">Gesamtertrag</span>
-          <strong id="victron-yield-total">--</strong>
-          <small id="victron-yield-total-since">Seit --</small>
-        </article>
-        <article class="energy-metric-card">
-          <span class="energy-metric-label">Batterie</span>
-          <strong id="victron-battery-voltage">--</strong>
-          <small id="victron-battery-current">-- A Ladestrom</small>
-        </article>
-        <article class="energy-metric-card">
-          <span class="energy-metric-label">Ladephase</span>
-          <strong id="victron-charger-state">--</strong>
-          <small id="victron-error-code">Fehlercode --</small>
-        </article>
-      </div>
-
-      <div class="victron-battery-overview">
-        <div class="victron-battery-soc-card">
-          <div class="victron-battery-heading">
-            <div>
-              <p class="energy-eyebrow">BATTERIESTATUS</p>
-              <h3>Ladezustand</h3>
+        <div class="autarky-summary-row">
+          <div class="autarky-score-card">
+            <span class="autarky-score-label">Solar-Deckungsgrad</span>
+            <div class="autarky-score-val-wrap">
+              <strong id="autarky-percent">-- %</strong>
+              <small id="autarky-summary-text">Wartet auf Messdaten</small>
             </div>
-            <span id="victron-battery-flow" class="victron-flow-badge">Wartet</span>
-          </div>
-          <div
-            class="victron-battery-visual"
-            id="victron-battery-visual"
-            role="progressbar"
-            aria-label="Batterieladezustand"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuetext="Nicht verfuegbar"
-          >
-            <div class="victron-battery-body">
-              <div id="victron-battery-fill" class="victron-battery-fill"></div>
-              <strong id="victron-battery-soc">-- %</strong>
+            <div class="autarky-bar-track" aria-hidden="true">
+              <div id="autarky-bar-solar" class="autarky-bar-fill bar-solar" style="width: 0%" title="Solar"></div>
+              <div id="autarky-bar-grid" class="autarky-bar-fill bar-grid" style="width: 0%" title="Netzbezug"></div>
             </div>
-            <span class="victron-battery-terminal" aria-hidden="true"></span>
           </div>
-          <p id="victron-battery-soc-note" class="victron-battery-note">Der MPPT liefert keinen direkten Batterie-SOC.</p>
-          <div class="victron-soc-actions">
-            <button id="victron-soc-settings-open" class="victron-soc-settings-open" type="button" aria-haspopup="dialog">
-              SOC einstellen
-            </button>
-            <span id="victron-soc-profile-summary">LiFePO4 | Automatisch</span>
+
+          <div class="autarky-flow-grid">
+            <div class="autarky-node node-solar">
+              <span class="node-icon">☀️</span>
+              <span class="node-title">Solar (PV)</span>
+              <strong id="autarky-solar-power">-- W</strong>
+              <small id="autarky-solar-sub">Ertrag heute: --</small>
+            </div>
+            <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
+            <div class="autarky-node node-battery">
+              <span class="node-icon">🔋</span>
+              <span class="node-title">Batterie</span>
+              <strong id="autarky-battery-soc">-- %</strong>
+              <small id="autarky-battery-sub">Standby</small>
+            </div>
+            <div class="autarky-flow-arrow" aria-hidden="true">➔</div>
+            <div class="autarky-node node-grid">
+              <span class="node-icon">⚡</span>
+              <span class="node-title">Haus / Netz</span>
+              <strong id="autarky-grid-power">-- W</strong>
+              <small id="autarky-grid-sub">Verbrauch heute: --</small>
+            </div>
           </div>
-        </div>
-
-        <div class="victron-charge-card">
-          <p class="energy-eyebrow">LADEVORGANG</p>
-          <div class="victron-charge-power">
-            <strong id="victron-battery-power">-- W</strong>
-            <span id="victron-charge-description">Noch keine Batteriedaten</span>
-          </div>
-          <div class="victron-battery-eta-badge">
-            <span class="eta-icon">⏱️</span>
-            <span>Restzeit: <strong id="victron-battery-eta">Standby / Leerlauf</strong></span>
-          </div>
-          <div id="victron-charge-stages" class="victron-charge-stages" aria-label="Victron Ladephasen">
-            <span data-victron-stage="bulk"><i></i><strong>Bulk</strong><small>Schnellladen</small></span>
-            <span data-victron-stage="absorption"><i></i><strong>Absorption</strong><small>Vollladen</small></span>
-            <span data-victron-stage="float"><i></i><strong>Float</strong><small>Erhaltung</small></span>
-            <span data-victron-stage="storage"><i></i><strong>Storage</strong><small>Schonbetrieb</small></span>
-          </div>
-        </div>
-      </div>
-
-      <div class="section-header energy-section-heading energy-victron-chart-heading">
-        <div>
-          <p class="energy-eyebrow">PV-LEISTUNGSPROFIL</p>
-          <h3>Solarleistung im Verlauf</h3>
-        </div>
-        <div class="energy-period-tabs" role="group" aria-label="Victron Zeitraum waehlen">
-          <button type="button" data-victron-period="1h">1 Stunde</button>
-          <button type="button" data-victron-period="24h" class="is-active">24 Stunden</button>
-          <button type="button" data-victron-period="7d">7 Tage</button>
-          <button type="button" data-victron-period="30d">30 Tage</button>
-        </div>
-      </div>
-      <div class="energy-chart-shell energy-victron-chart-shell">
-        <canvas id="victron-power-chart" class="energy-chart" width="1080" height="340"></canvas>
-        <p id="victron-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Victron-Messpunkte fuer diesen Zeitraum.</p>
-      </div>
-      <div class="energy-chart-legend">
-        <span><i class="legend-victron"></i> Durchschnittliche PV-Leistung</span>
-        <span><i class="legend-peak"></i> Spitzenleistung</span>
-      </div>
-
-      <div class="section-header energy-section-heading">
-        <div>
-          <p class="energy-eyebrow">HISTORISCHE MONATSERTRÄGE</p>
-          <h3>Solarertrag der letzten Monate</h3>
-        </div>
-      </div>
-      <div id="victron-monthly-yields" class="victron-monthly-yields" aria-label="Monatliche Solarerträge">
-        <span class="muted-line">Noch keine historischen Monatserträge gespeichert.</span>
-      </div>
-
-      <div class="grid-2 energy-victron-details">
-        <div class="energy-quality-list">
-          <div><span>Spitze heute</span><strong id="victron-peak-today">-- W</strong></div>
-          <div><span>Durchschnitt heute</span><strong id="victron-average-today">-- W</strong></div>
-          <div><span>Batteriespannung heute</span><strong id="victron-voltage-range">-- V</strong></div>
-          <div><span>Laststrom</span><strong id="victron-load-current">-- A</strong></div>
-        </div>
-        <div class="energy-source-card">
-          <div><span>MQTT Topic</span><code id="victron-topic">--</code></div>
-          <div><span>BLE Status</span><strong id="victron-source-status">Wartet auf Daten</strong></div>
-          <div><span>Signalstaerke</span><strong id="victron-rssi">-- dBm</strong></div>
-          <div><span>Letzte Messung</span><strong id="victron-last-update">--</strong></div>
-        </div>
-      </div>
-
-      <details class="victron-mqtt-panel">
-        <summary>
-          <span>Alle MQTT-Werte der DFR1154-Bridge</span>
-          <strong id="victron-mqtt-count">0 Topics</strong>
-        </summary>
-        <p>Live-Snapshot aller momentan empfangenen Victron-Topics. Neue Bridge-Werte erscheinen hier automatisch.</p>
-        <div id="victron-mqtt-values" class="victron-mqtt-values">
-          <span class="victron-mqtt-empty">Noch keine Victron MQTT-Werte empfangen.</span>
-        </div>
-      </details>
-    </section>
-
-    <div class="grid-2 energy-lower-grid" data-layout-id="meter-details" data-layout-title="Netzqualitaet und Datenquelle">
-      <section class="panel" data-collapsible="false">
-        <p class="energy-eyebrow">NETZQUALITAET</p>
-        <h2>Elektrische Werte</h2>
-        <div class="energy-quality-list">
-          <div><span>Scheinleistung</span><strong id="energy-apparent">-- VA</strong></div>
-          <div><span>Blindleistung</span><strong id="energy-reactive">-- var</strong></div>
-          <div><span>Spannungsbereich heute</span><strong id="energy-voltage-range">-- V</strong></div>
-          <div><span>Gespeicherte Messpunkte heute</span><strong id="energy-samples">--</strong></div>
         </div>
       </section>
 
-      <section class="panel" data-collapsible="false">
-        <p class="energy-eyebrow">DATENQUELLE</p>
-        <h2>WattMeter</h2>
-        <div class="energy-source-card">
-          <div><span>MQTT Topic</span><code id="energy-topic">--</code></div>
-          <div><span>Messbeginn</span><strong id="energy-start-time">--</strong></div>
-          <div><span>Letzter Geraetezeitpunkt</span><strong id="energy-source-time">--</strong></div>
-          <div><span>Status</span><strong id="energy-source-status">Wartet auf Daten</strong></div>
+      <section class="panel energy-live-panel" data-layout-id="live-values" data-layout-title="Steckdose: Live-Messwerte" data-collapsible="false" aria-label="Aktuelle Messwerte">
+        <div class="section-header energy-section-heading">
+          <div>
+            <p class="energy-eyebrow">TASMOTA SENSOR</p>
+            <h2>Elektrische Live-Werte</h2>
+          </div>
         </div>
-        <form id="energy-topic-form" class="energy-topic-form">
-          <label for="energy-topic-input">Daten-Topic aendern</label>
-          <div class="energy-topic-controls">
-            <input
-              id="energy-topic-input"
-              type="text"
-              maxlength="512"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="tele/tasmota_605AF0/SENSOR"
-              required
+        <div class="energy-metric-grid">
+          <article class="energy-metric-card energy-metric-primary">
+            <span class="energy-metric-label">Wirkleistung</span>
+            <strong id="energy-power">--</strong>
+            <small>Watt</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Spannung</span>
+            <strong id="energy-voltage">--</strong>
+            <small>Volt</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Strom</span>
+            <strong id="energy-current">--</strong>
+            <small>Ampere</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Leistungsfaktor</span>
+            <strong id="energy-factor">--</strong>
+            <small>cos phi</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel energy-balance-panel" data-layout-id="energy-balance" data-layout-title="Steckdose: Energiebilanz" data-collapsible="false">
+        <div class="section-header energy-section-heading">
+          <div>
+            <p class="energy-eyebrow">ENERGIEBILANZ</p>
+            <h2>Verbrauch &amp; Kosten</h2>
+          </div>
+          <span id="energy-price-hint" class="energy-price-chip">-- EUR/kWh</span>
+        </div>
+        <div class="energy-balance-grid">
+          <div class="energy-balance-item">
+            <span>Heute</span>
+            <strong id="energy-balance-today">--</strong>
+            <small id="energy-balance-today-cost">--</small>
+          </div>
+          <div class="energy-balance-item">
+            <span>Gestern</span>
+            <strong id="energy-yesterday">--</strong>
+            <small id="energy-yesterday-cost">--</small>
+          </div>
+          <div class="energy-balance-item">
+            <span>Gesamt</span>
+            <strong id="energy-total">--</strong>
+            <small id="energy-total-since">Seit --</small>
+          </div>
+          <div class="energy-balance-item">
+            <span>Spitze heute</span>
+            <strong id="energy-peak">--</strong>
+            <small id="energy-average">Durchschnitt --</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel energy-victron-panel" data-layout-id="victron" data-layout-title="Solar: Erzeugung &amp; Batterie" data-collapsible="false">
+        <div class="section-header energy-section-heading">
+          <div>
+            <p class="energy-eyebrow">VICTRON SMARTSOLAR MPPT 150/45</p>
+            <h2>Solarerzeugung &amp; Batterie</h2>
+          </div>
+          <span id="victron-online-badge" class="status-badge energy-status-badge">WARTET</span>
+        </div>
+
+        <div class="energy-metric-grid energy-victron-grid" aria-label="Aktuelle Victron Messwerte">
+          <article class="energy-metric-card energy-victron-primary">
+            <span class="energy-metric-label">PV-Leistung</span>
+            <strong id="victron-panel-power">--</strong>
+            <small>Watt vom Solarpanel</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Tagesertrag</span>
+            <strong id="victron-yield-today">--</strong>
+            <small>Wattstunden</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Gesamtertrag</span>
+            <strong id="victron-yield-total">--</strong>
+            <small id="victron-yield-total-since">Seit --</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Batterie</span>
+            <strong id="victron-battery-voltage">--</strong>
+            <small id="victron-battery-current">-- A Ladestrom</small>
+          </article>
+          <article class="energy-metric-card">
+            <span class="energy-metric-label">Ladephase</span>
+            <strong id="victron-charger-state">--</strong>
+            <small id="victron-error-code">Fehlercode --</small>
+          </article>
+        </div>
+
+        <div class="victron-battery-overview">
+          <div class="victron-battery-soc-card">
+            <div class="victron-battery-heading">
+              <div>
+                <p class="energy-eyebrow">BATTERIESTATUS</p>
+                <h3>Ladezustand</h3>
+              </div>
+              <span id="victron-battery-flow" class="victron-flow-badge">Wartet</span>
+            </div>
+            <div
+              class="victron-battery-visual"
+              id="victron-battery-visual"
+              role="progressbar"
+              aria-label="Batterieladezustand"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuetext="Nicht verfuegbar"
             >
-            <button id="energy-topic-save" type="submit">Topic speichern</button>
+              <div class="victron-battery-body">
+                <div id="victron-battery-fill" class="victron-battery-fill"></div>
+                <strong id="victron-battery-soc">-- %</strong>
+              </div>
+              <span class="victron-battery-terminal" aria-hidden="true"></span>
+            </div>
+            <p id="victron-battery-soc-note" class="victron-battery-note">Der MPPT liefert keinen direkten Batterie-SOC.</p>
+            <div class="victron-soc-actions">
+              <button id="victron-soc-settings-open" class="victron-soc-settings-open" type="button" aria-haspopup="dialog">
+                Batterieprofil &amp; Ah einstellen
+              </button>
+              <span id="victron-soc-profile-summary">LiFePO4 | Automatisch</span>
+            </div>
           </div>
-          <small>Das Topic muss exakt dem Tasmota SENSOR-Topic entsprechen. MQTT-Wildcards sind nicht erlaubt.</small>
-          <p id="energy-topic-status" class="status-line"></p>
-        </form>
+
+          <div class="victron-charge-card">
+            <p class="energy-eyebrow">LADEVORGANG &amp; PROGNOSE</p>
+            <div class="victron-charge-power">
+              <strong id="victron-battery-power">-- W</strong>
+              <span id="victron-charge-description">Noch keine Batteriedaten</span>
+            </div>
+            <div class="victron-battery-eta-badge">
+              <span class="eta-icon">⏱️</span>
+              <span>Restzeit: <strong id="victron-battery-eta">Standby / Leerlauf</strong></span>
+            </div>
+            <div id="victron-charge-stages" class="victron-charge-stages" aria-label="Victron Ladephasen">
+              <span data-victron-stage="bulk"><i></i><strong>Bulk</strong><small>Schnellladen</small></span>
+              <span data-victron-stage="absorption"><i></i><strong>Absorption</strong><small>Vollladen</small></span>
+              <span data-victron-stage="float"><i></i><strong>Float</strong><small>Erhaltung</small></span>
+              <span data-victron-stage="storage"><i></i><strong>Storage</strong><small>Schonbetrieb</small></span>
+            </div>
+          </div>
+        </div>
       </section>
-    </div>
+
+      <section class="panel energy-chart-panel" data-layout-id="consumption-chart" data-layout-title="Steckdose: Leistungsverlauf" data-collapsible="false">
+        <div class="section-header energy-section-heading">
+          <div>
+            <p class="energy-eyebrow">LASTPROFIL (TASMOTA)</p>
+            <h2>Netz-Leistungsverlauf</h2>
+          </div>
+          <div class="energy-period-tabs" role="group" aria-label="Zeitraum waehlen">
+            <button type="button" data-period="1h">1 Std</button>
+            <button type="button" data-period="24h" class="is-active">24 Std</button>
+            <button type="button" data-period="7d">7 Tage</button>
+            <button type="button" data-period="30d">30 Tage</button>
+          </div>
+        </div>
+        <div class="energy-chart-shell">
+          <canvas id="energy-power-chart" class="energy-chart" width="1080" height="340"></canvas>
+          <p id="energy-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Messpunkte fuer diesen Zeitraum.</p>
+        </div>
+        <div class="energy-chart-legend">
+          <span><i class="legend-power"></i> Durchschnittliche Leistung</span>
+          <span><i class="legend-peak"></i> Spitzenleistung</span>
+        </div>
+      </section>
+
+      <section class="panel energy-victron-panel" data-layout-id="victron-chart" data-layout-title="Solar: Verlauf &amp; Monatserträge" data-collapsible="false">
+        <div class="section-header energy-section-heading energy-victron-chart-heading">
+          <div>
+            <p class="energy-eyebrow">PV-LEISTUNGSPROFIL (VICTRON)</p>
+            <h2>Solarleistung im Verlauf</h2>
+          </div>
+          <div class="energy-period-tabs" role="group" aria-label="Victron Zeitraum waehlen">
+            <button type="button" data-victron-period="1h">1 Std</button>
+            <button type="button" data-victron-period="24h" class="is-active">24 Std</button>
+            <button type="button" data-victron-period="7d">7 Tage</button>
+            <button type="button" data-victron-period="30d">30 Tage</button>
+          </div>
+        </div>
+        <div class="energy-chart-shell energy-victron-chart-shell">
+          <canvas id="victron-power-chart" class="energy-chart" width="1080" height="340"></canvas>
+          <p id="victron-chart-empty" class="energy-chart-empty" hidden>Noch nicht genug Victron-Messpunkte fuer diesen Zeitraum.</p>
+        </div>
+        <div class="energy-chart-legend">
+          <span><i class="legend-victron"></i> Durchschnittliche PV-Leistung</span>
+          <span><i class="legend-peak"></i> Spitzenleistung</span>
+        </div>
+
+        <div class="section-header energy-section-heading" style="margin-top: 1.35rem;">
+          <div>
+            <p class="energy-eyebrow">HISTORISCHE MONATSERTRÄGE</p>
+            <h3>Solarertrag der letzten Monate</h3>
+          </div>
+        </div>
+        <div id="victron-monthly-yields" class="victron-monthly-yields" aria-label="Monatliche Solarerträge">
+          <span class="muted-line">Noch keine historischen Monatserträge gespeichert.</span>
+        </div>
+      </section>
+
+      <div class="grid-2 energy-lower-grid" data-layout-id="meter-details" data-layout-title="System: Netzqualität &amp; Quellen">
+        <section class="panel" data-collapsible="false">
+          <p class="energy-eyebrow">NETZQUALITÄT &amp; SOLAR-DIAGNOSE</p>
+          <h2>Technische Kennwerte</h2>
+          <div class="energy-quality-list">
+            <div><span>Scheinleistung (Netz)</span><strong id="energy-apparent">-- VA</strong></div>
+            <div><span>Blindleistung (Netz)</span><strong id="energy-reactive">-- var</strong></div>
+            <div><span>Netzspannung heute</span><strong id="energy-voltage-range">-- V</strong></div>
+            <div><span>Netz-Messpunkte heute</span><strong id="energy-samples">--</strong></div>
+            <div><span>Solar Spitze / Schnitt heute</span><span><strong id="victron-peak-today">-- W</strong> / <strong id="victron-average-today">-- W</strong></span></div>
+            <div><span>Batteriespannung heute</span><strong id="victron-voltage-range">-- V</strong></div>
+            <div><span>MPPT Laststrom / RSSI</span><span><strong id="victron-load-current">-- A</strong> / <strong id="victron-rssi">-- dBm</strong></span></div>
+          </div>
+
+          <details class="victron-mqtt-panel">
+            <summary>
+              <span>Alle MQTT-Werte der DFR1154-Bridge</span>
+              <strong id="victron-mqtt-count">0 Topics</strong>
+            </summary>
+            <p>Live-Snapshot aller momentan empfangenen Victron-Topics. Neue Bridge-Werte erscheinen hier automatisch.</p>
+            <div id="victron-mqtt-values" class="victron-mqtt-values">
+              <span class="victron-mqtt-empty">Noch keine Victron MQTT-Werte empfangen.</span>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel" data-collapsible="false">
+          <p class="energy-eyebrow">DATENQUELLEN</p>
+          <h2>Tasmota &amp; Victron</h2>
+          <div class="energy-source-card">
+            <div><span>Tasmota Topic</span><code id="energy-topic">--</code></div>
+            <div><span>Tasmota Status</span><strong id="energy-source-status">Wartet auf Daten</strong></div>
+            <div><span>Messbeginn / Letztes Paket</span><span><strong id="energy-start-time">--</strong> · <strong id="energy-source-time">--</strong></span></div>
+            <div><span>Victron Topic</span><code id="victron-topic">--</code></div>
+            <div><span>Victron BLE Status</span><strong id="victron-source-status">Wartet auf Daten</strong></div>
+            <div><span>Victron Letzte Messung</span><strong id="victron-last-update">--</strong></div>
+          </div>
+          <form id="energy-topic-form" class="energy-topic-form">
+            <label for="energy-topic-input">Tasmota SENSOR-Topic anpassen</label>
+            <div class="energy-topic-controls">
+              <input
+                id="energy-topic-input"
+                type="text"
+                maxlength="512"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="tele/tasmota_605AF0/SENSOR"
+                required
+              >
+              <button id="energy-topic-save" type="submit">Topic speichern</button>
+            </div>
+            <small>Das Topic muss exakt dem Tasmota SENSOR-Topic entsprechen. MQTT-Wildcards sind nicht erlaubt.</small>
+            <p id="energy-topic-status" class="status-line"></p>
+          </form>
+        </section>
+      </div>
     </div>
 
     <p id="energy-error" class="status-line energy-error-line"></p>
@@ -374,8 +388,8 @@
     <form id="victron-soc-form" class="victron-soc-form">
       <header class="victron-soc-dialog-header">
         <div>
-          <p class="energy-eyebrow">BATTERIEPROFIL</p>
-          <h2 id="victron-soc-dialog-title">SOC aus Spannung schaetzen</h2>
+          <p class="energy-eyebrow">BATTERIEPROFIL &amp; KAPAZITÄT</p>
+          <h2 id="victron-soc-dialog-title">Batterie &amp; SOC konfigurieren</h2>
         </div>
         <button id="victron-soc-settings-close" class="victron-soc-dialog-close" type="button" aria-label="Dialog schliessen">Schliessen</button>
       </header>
@@ -384,8 +398,8 @@
         <label class="victron-soc-enable-card">
           <input id="victron-soc-enabled" type="checkbox" checked>
           <span>
-            <strong>Spannungs-Schaetzung aktiv</strong>
-            <small>Ein echter MQTT-SOC hat weiterhin automatisch Vorrang.</small>
+            <strong>Spannungs-Schätzung aktiv</strong>
+            <small>Ein echter MQTT-SOC (z. B. SmartShunt) hat weiterhin automatisch Vorrang.</small>
           </span>
         </label>
 
@@ -408,6 +422,13 @@
               <option value="36">36 V / LiFePO4 38,4 V</option>
               <option value="48">48 V / LiFePO4 51,2 V</option>
             </select>
+          </label>
+          <label style="grid-column: 1 / -1;">
+            <span>Batteriekapazität (für Restzeit-Prognose)</span>
+            <div class="victron-soc-voltage-input">
+              <input id="victron-soc-capacity-ah" type="number" min="1" max="10000" step="1" value="100" inputmode="numeric" required>
+              <strong>Ah</strong>
+            </div>
           </label>
         </div>
 
@@ -446,14 +467,14 @@
           </div>
           <p id="victron-soc-preview-system">LiFePO4 12,8 V automatisch erkannt</p>
           <div class="victron-soc-preview-live">
-            <span>AKTUELLER SCHAETZWERT</span>
+            <span>AKTUELLER SCHÄTZWERT</span>
             <strong id="victron-soc-preview-result">Noch keine Batteriespannung</strong>
           </div>
           <div class="victron-soc-preview-track" aria-hidden="true"><i></i></div>
         </div>
 
         <p class="victron-soc-warning">
-          Die Prozentzahl bleibt eine Naeherung. Beim Laden in Bulk oder Absorption kann die Batteriespannung den SOC zu hoch erscheinen lassen.
+          Die Prozentzahl bleibt eine Näherung. Beim Laden in Bulk oder Absorption kann die Batteriespannung den SOC zu hoch erscheinen lassen.
         </p>
         <p id="victron-soc-settings-status" class="status-line victron-soc-settings-status" aria-live="polite"></p>
       </div>
@@ -479,18 +500,23 @@
   <aside id="energy-customizer" class="energy-customizer" aria-hidden="true" aria-label="Stromansicht anpassen">
     <header class="energy-customizer-header">
       <div>
-        <p class="energy-eyebrow">STROM-TAB</p>
+        <p class="energy-eyebrow">STROM &amp; SOLAR</p>
         <h2>Ansicht anpassen</h2>
       </div>
       <button id="energy-customizer-close" class="energy-customizer-close" type="button" aria-label="Menue schliessen">Schliessen</button>
     </header>
-    <p class="energy-customizer-intro">Ziehe die Karten in die gewuenschte Reihenfolge oder passe sie direkt an.</p>
+    <p class="energy-customizer-intro">Wähle ein Schnell-Layout oder ordne alle Strom- und Solar-Widgets frei nach deinen Wünschen an.</p>
+    <div class="energy-customizer-presets" role="group" aria-label="Schnell-Layouts">
+      <button type="button" class="btn-secondary" data-layout-preset="default">Standard-Mix</button>
+      <button type="button" class="btn-secondary" data-layout-preset="solar">☀️ Solar zuerst</button>
+      <button type="button" class="btn-secondary" data-layout-preset="compact">⊞ 2-Spalten Kompakt</button>
+    </div>
     <div class="energy-customizer-save-state" aria-live="polite">
       <span></span>
       <p id="energy-layout-status">Automatische Speicherung aktiv</p>
     </div>
     <div id="energy-customizer-list" class="energy-customizer-list" aria-label="Widgets sortieren"></div>
-    <p class="energy-customizer-hint">Tipp: Bei geoeffnetem Menue kannst du Widgets auch direkt auf der Seite am Griff verschieben.</p>
+    <p class="energy-customizer-hint">Tipp: Bei geöffnetem Menü kannst du Widgets auch direkt auf der Seite verbreitern, einklappen oder verschieben.</p>
     <footer class="energy-customizer-footer">
       <button id="energy-layout-reset" class="energy-layout-reset" type="button">Standard wiederherstellen</button>
       <button id="energy-customizer-done" class="energy-customizer-done" type="button">Fertig</button>
