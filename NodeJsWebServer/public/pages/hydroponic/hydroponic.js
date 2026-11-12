@@ -134,10 +134,13 @@ async function loadReadings() {
         if (secRes?.readings?.length) {
           secondaryOrdered = secRes.readings.slice().reverse();
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Fehler beim Abruf des Vergleichswerts:', err);
+      }
     }
+    secondaryChartDataCache = secondaryOrdered;
 
-    drawChart(ordered, secondaryOrdered);
+    drawChart(ordered, secondaryChartDataCache);
     lastReadingsCache = list;
     if (exportCsvBtn) exportCsvBtn.disabled = false;
     checkThresholds(list);
@@ -299,6 +302,7 @@ let chartMeta = null;
 let chartTooltip = null;
 let chartHoverIndex = null;
 let chartDataCache = [];
+let secondaryChartDataCache = null;
 let autoRefreshTimer = null;
 const GRAPH_LIMIT = 1000;
 
@@ -784,7 +788,10 @@ function prepareCanvas() {
   return { ctx, w: cssWidth, h: cssHeight };
 }
 
-function drawChart(readings, secondaryReadings = null) {
+function drawChart(readings = chartDataCache, secondaryReadings = undefined) {
+  if (secondaryReadings === undefined) {
+    secondaryReadings = secondaryChartDataCache;
+  }
   const canvas = prepareCanvas();
   if (!canvas) return;
   const { ctx, w, h } = canvas;
@@ -801,7 +808,6 @@ function drawChart(readings, secondaryReadings = null) {
   }
 
   const valuesByIndex = readings.map((r) => parseNumber(r.value_text));
-  const points = valuesByIndex.map((v, i) => (v === null ? null : { x: i, y: v }));
   const values = valuesByIndex.filter((v) => Number.isFinite(v));
 
   if (values.length === 0) {
@@ -814,88 +820,187 @@ function drawChart(readings, secondaryReadings = null) {
   }
 
   if (chartHoverIndex === null) {
-    document.getElementById('chart-point-detail').textContent = 'Tippe auf den Graphen oder nutze die Pfeiltasten, um einen Messwert abzulesen.';
+    document.getElementById('chart-point-detail').textContent = 'Tippe auf den Graphen oder fahre mit der Maus darüber, um Messwerte abzulesen.';
+  }
+
+  const hasSec = Array.isArray(secondaryReadings) && secondaryReadings.length > 0;
+  let secValuesByIndex = [];
+  let secMin = 0;
+  let secMax = 1;
+  let secSpan = 1;
+  let secUnit = '';
+  let secLabel = 'Vergleich';
+
+  if (hasSec) {
+    secValuesByIndex = secondaryReadings.map((r) => parseNumber(r.value_text));
+    const secFiniteValues = secValuesByIndex.filter((v) => Number.isFinite(v));
+    if (secFiniteValues.length > 0) {
+      secMin = Math.min(...secFiniteValues);
+      secMax = Math.max(...secFiniteValues);
+      const secRange = secMax - secMin || 1;
+      secMin -= secRange * 0.06;
+      secMax += secRange * 0.06;
+      secSpan = secMax - secMin || 1;
+      const secKeyVal = secondaryKeySelect?.value || '';
+      secUnit = getUnitForKey(secKeyVal);
+      const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
+      secLabel = secKeyObj?.label || secKeyVal || 'Vergleich';
+    }
   }
 
   let min = Math.min(...values);
   let max = Math.max(...values);
   const range = max - min || 1;
-  const padVal = range * 0.05;
-  min -= padVal;
-  max += padVal;
-  const pad = 36;
+  min -= range * 0.06;
+  max += range * 0.06;
   const span = max - min || 1;
-  const xSpan = readings.length - 1 || 1;
+
+  const padLeft = 52;
+  const padRight = hasSec ? 64 : 32;
+  const padTop = 34;
+  const padBottom = 38;
+  const plotX = padLeft;
+  const plotY = padTop;
+  const plotW = Math.max(10, w - padLeft - padRight);
+  const plotH = Math.max(10, h - padTop - padBottom);
+
+  const primTimes = readings.map((r) => r?.created_at ? new Date(r.created_at).getTime() : NaN).filter(Number.isFinite);
+  const secTimes = hasSec ? secondaryReadings.map((r) => r?.created_at ? new Date(r.created_at).getTime() : NaN).filter(Number.isFinite) : [];
+  const allTimes = [...primTimes, ...secTimes];
+  const minTime = allTimes.length > 1 ? Math.min(...allTimes) : 0;
+  const maxTime = allTimes.length > 1 ? Math.max(...allTimes) : 0;
+  const timeSpan = maxTime - minTime;
+  const timeBased = timeSpan > 1000 && allTimes.length > 1;
+
+  const getPrimaryX = (idx) => {
+    if (timeBased && readings[idx]?.created_at) {
+      const t = new Date(readings[idx].created_at).getTime();
+      if (Number.isFinite(t)) return plotX + ((t - minTime) / timeSpan) * plotW;
+    }
+    return plotX + (idx / (readings.length - 1 || 1)) * plotW;
+  };
+
+  const getSecondaryX = (idx) => {
+    if (timeBased && secondaryReadings[idx]?.created_at) {
+      const t = new Date(secondaryReadings[idx].created_at).getTime();
+      if (Number.isFinite(t)) return plotX + ((t - minTime) / timeSpan) * plotW;
+    }
+    return plotX + (idx / (secondaryReadings.length - 1 || 1)) * plotW;
+  };
+
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const median = computeMedian(values);
   const headBudget = Math.max(200, Math.floor(w));
   const maxPoints = GRAPH_TAIL + headBudget;
   const draw = buildDrawIndicesWithTail(valuesByIndex, maxPoints, GRAPH_TAIL);
-  chartMeta = { readings, valuesByIndex, min, max, span, pad, w, h, unit, draw };
 
-  // Axis
-  ctx.strokeStyle = 'rgba(148,163,184,0.4)';
-  ctx.beginPath();
-  ctx.moveTo(pad, pad);
-  ctx.lineTo(pad, h - pad);
-  ctx.lineTo(w - pad, h - pad);
-  ctx.stroke();
+  chartMeta = {
+    readings,
+    secondaryReadings,
+    valuesByIndex,
+    secValuesByIndex,
+    min,
+    max,
+    secMin,
+    secMax,
+    span,
+    secSpan,
+    padLeft,
+    padRight,
+    padTop,
+    padBottom,
+    plotX,
+    plotY,
+    plotW,
+    plotH,
+    w,
+    h,
+    unit,
+    secUnit,
+    hasSec,
+    timeBased,
+    minTime,
+    maxTime,
+    timeSpan,
+    draw
+  };
 
-  // Y ticks and labels
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '12px system-ui, sans-serif';
+  ctx.font = '11px system-ui, sans-serif';
   const ticks = 5;
   for (let i = 0; i < ticks; i++) {
     const t = i / (ticks - 1);
     const v = max - t * span;
-    const y = pad + t * (h - pad * 2);
-    ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+    const y = plotY + t * plotH;
+
+    ctx.strokeStyle = 'rgba(148,163,184,0.12)';
     ctx.beginPath();
-    ctx.moveTo(pad, y);
-    ctx.lineTo(w - pad, y);
+    ctx.moveTo(plotX, y);
+    ctx.lineTo(plotX + plotW, y);
     ctx.stroke();
-    const label = unit ? `${v.toFixed(2)} ${unit}` : v.toFixed(2);
-    ctx.fillText(label, 6, y + 4);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'right';
+    const label = unit ? `${v.toFixed(1)} ${unit}` : v.toFixed(1);
+    ctx.fillText(label, plotX - 8, y + 4);
   }
 
-  // X labels: choose up to 4 evenly spaced points
-  const len = readings.length;
-  const targetLabels = Math.min(4, len);
-  const idxs = [];
-  if (targetLabels <= 1) {
-    idxs.push(0);
-  } else {
-    for (let i = 0; i < targetLabels; i++) {
-      idxs.push(Math.floor((len - 1) * (i / (targetLabels - 1))));
+  ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+  ctx.beginPath();
+  ctx.moveTo(plotX, plotY);
+  ctx.lineTo(plotX, plotY + plotH);
+  ctx.lineTo(plotX + plotW, plotY + plotH);
+  ctx.stroke();
+
+  if (hasSec) {
+    ctx.strokeStyle = 'rgba(245,158,11,0.45)';
+    ctx.beginPath();
+    ctx.moveTo(plotX + plotW, plotY);
+    ctx.lineTo(plotX + plotW, plotY + plotH);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.textAlign = 'left';
+    for (let i = 0; i < ticks; i++) {
+      const t = i / (ticks - 1);
+      const v = secMax - t * secSpan;
+      const y = plotY + t * plotH;
+      const label = secUnit ? `${v.toFixed(1)} ${secUnit}` : v.toFixed(1);
+      ctx.fillText(label, plotX + plotW + 8, y + 4);
     }
   }
-  const labelFont = '12px system-ui, sans-serif';
+
   ctx.fillStyle = '#94a3b8';
-  ctx.font = labelFont;
   ctx.textAlign = 'center';
-  idxs.forEach((i) => {
-    const x = pad + (i / xSpan) * (w - pad * 2);
-    const ts = readings[i]?.created_at ? new Date(readings[i].created_at) : null;
-    let label;
-    if (ts) {
-      const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const date = ts.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
-      label = i === 0 || i === len - 1 ? `${time}
-${date}` : time;
+  const numLabels = Math.min(5, readings.length);
+  for (let k = 0; k < numLabels; k++) {
+    const fraction = numLabels <= 1 ? 0 : k / (numLabels - 1);
+    const xPos = plotX + fraction * plotW;
+    let timeLabel = '';
+    let dateLabel = '';
+    if (timeBased && timeSpan > 0) {
+      const curT = new Date(minTime + fraction * timeSpan);
+      timeLabel = curT.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      dateLabel = curT.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
     } else {
-      label = String(i);
+      const readingIdx = Math.floor(fraction * (readings.length - 1));
+      const ts = readings[readingIdx]?.created_at ? new Date(readings[readingIdx].created_at) : null;
+      if (ts) {
+        timeLabel = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        dateLabel = ts.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+      } else {
+        timeLabel = String(readingIdx);
+      }
     }
-    const lines = label.split('\n');
-    lines.forEach((line, lineIndex) => {
-      ctx.fillText(line, x, h - 12 + lineIndex * 14);
-    });
-  });
+    ctx.fillText(timeLabel, xPos, plotY + plotH + 16);
+    if (k === 0 || k === numLabels - 1 || numLabels <= 3) {
+      ctx.fillText(dateLabel, xPos, plotY + plotH + 30);
+    }
+  }
   ctx.textAlign = 'left';
 
-  // Line
-  const drawLine = (indices, color) => {
+  const drawPrimaryPath = (indices, color, lineWidth = 2) => {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = lineWidth;
     ctx.beginPath();
     let started = false;
     indices.forEach((idx) => {
@@ -904,8 +1009,8 @@ ${date}` : time;
         started = false;
         return;
       }
-      const x = pad + (idx / xSpan) * (w - pad * 2);
-      const y = h - pad - ((v - min) / span) * (h - pad * 2);
+      const x = getPrimaryX(idx);
+      const y = plotY + plotH - ((v - min) / span) * plotH;
       if (!started) {
         ctx.moveTo(x, y);
         started = true;
@@ -916,142 +1021,119 @@ ${date}` : time;
     ctx.stroke();
   };
 
-  // Head (approximated) line
-  drawLine(chartMeta.draw.head, '#3b82f6');
-  // Tail (last 1000) exact line
-  drawLine(chartMeta.draw.tail, '#22d3ee');
+  drawPrimaryPath(chartMeta.draw.head, '#3b82f6', 2);
+  drawPrimaryPath(chartMeta.draw.tail, '#22d3ee', 2);
 
-  // Mean line
-  if (Number.isFinite(mean)) {
-    const y = h - pad - ((mean - min) / span) * (h - pad * 2);
-    ctx.strokeStyle = '#22c55e';
+  if (!hasSec && Number.isFinite(mean)) {
+    const y = plotY + plotH - ((mean - min) / span) * plotH;
+    ctx.strokeStyle = 'rgba(34,197,94,0.7)';
+    ctx.setLineDash([3, 3]);
     ctx.beginPath();
-    ctx.moveTo(pad, y);
-    ctx.lineTo(w - pad, y);
+    ctx.moveTo(plotX, y);
+    ctx.lineTo(plotX + plotW, y);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.fillStyle = '#22c55e';
-    const label = unit ? `Mittel: ${mean.toFixed(2)} ${unit}` : `Mittel: ${mean.toFixed(2)}`;
-    ctx.fillText(label, w - pad - 150, y - 4);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(`Mittel: ${mean.toFixed(1)} ${unit || ''}`, plotX + plotW - 120, y - 4);
   }
 
-  // Median line
-  if (Number.isFinite(median)) {
-    const y = h - pad - ((median - min) / span) * (h - pad * 2);
+  if (hasSec && Array.isArray(secondaryReadings) && secondaryReadings.length > 0) {
     ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(pad, y);
-    ctx.lineTo(w - pad, y);
-    ctx.stroke();
-    ctx.fillStyle = '#f59e0b';
-    const label = unit ? `Median: ${median.toFixed(2)} ${unit}` : `Median: ${median.toFixed(2)}`;
-    ctx.fillText(label, w - pad - 150, y + 14);
-  }
-
-  // Regression line (Trend)
-  const reg = computeRegression(valuesByIndex);
-  if (reg) {
-    const y0 = reg.m * 0 + reg.b;
-    const y1 = reg.m * (readings.length - 1) + reg.b;
-    const x0 = pad;
-    const x1 = w - pad;
-    const cy0 = h - pad - ((y0 - min) / span) * (h - pad * 2);
-    const cy1 = h - pad - ((y1 - min) / span) * (h - pad * 2);
-    ctx.strokeStyle = '#a855f7';
-    ctx.beginPath();
-    ctx.moveTo(x0, cy0);
-    ctx.lineTo(x1, cy1);
-    ctx.stroke();
-    ctx.fillStyle = '#a855f7';
-    ctx.fillText('Trend', w - pad - 60, pad + 12);
-  }
-
-  // Secondary curve (Comparison)
-  if (Array.isArray(secondaryReadings) && secondaryReadings.length > 0) {
-    const secValues = secondaryReadings.map((r) => parseNumber(r.value_text)).filter((v) => Number.isFinite(v));
-    if (secValues.length > 0) {
-      let secMin = Math.min(...secValues);
-      let secMax = Math.max(...secValues);
-      const secRange = secMax - secMin || 1;
-      secMin -= secRange * 0.05;
-      secMax += secRange * 0.05;
-      const secSpan = secMax - secMin || 1;
-      const secXSpan = secondaryReadings.length - 1 || 1;
-      const secKeyVal = secondaryKeySelect?.value || '';
-      const secUnit = getUnitForKey(secKeyVal);
-      const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
-      const secLabel = secKeyObj?.label || secKeyVal || 'Vergleich';
-
-      // Right axis line & ticks
-      ctx.strokeStyle = 'rgba(245,158,11,0.35)';
-      ctx.beginPath();
-      ctx.moveTo(w - pad, pad);
-      ctx.lineTo(w - pad, h - pad);
-      ctx.stroke();
-
-      ctx.fillStyle = '#f59e0b';
-      ctx.font = '11px system-ui, sans-serif';
-      const ticks = 5;
-      for (let i = 0; i < ticks; i++) {
-        const t = i / (ticks - 1);
-        const v = secMax - t * secSpan;
-        const y = pad + t * (h - pad * 2);
-        const label = secUnit ? `${v.toFixed(1)} ${secUnit}` : v.toFixed(1);
-        ctx.textAlign = 'right';
-        ctx.fillText(label, w - 4, y + 4);
+    let started = false;
+    secondaryReadings.forEach((r, idx) => {
+      const v = parseNumber(r.value_text);
+      if (!Number.isFinite(v)) {
+        started = false;
+        return;
       }
-      ctx.textAlign = 'left';
+      const x = getSecondaryX(idx);
+      const y = plotY + plotH - ((v - secMin) / secSpan) * plotH;
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+  }
 
-      // Secondary Line
-      ctx.strokeStyle = '#f59e0b';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-      secondaryReadings.forEach((r, idx) => {
-        const v = parseNumber(r.value_text);
-        if (!Number.isFinite(v)) {
-          started = false;
-          return;
-        }
-        const x = pad + (idx / secXSpan) * (w - pad * 2);
-        const y = h - pad - ((v - secMin) / secSpan) * (h - pad * 2);
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
+  const primKeyObj = getSelectedKeyMeta();
+  const primLabel = primKeyObj?.label || getSelectedKey() || 'Primär';
+  ctx.font = '12px system-ui, sans-serif';
 
-      // Top Comparison Legend
-      const primKeyObj = getSelectedKeyMeta();
-      const primLabel = primKeyObj?.label || getSelectedKey();
-      ctx.fillStyle = '#22d3ee';
-      ctx.fillRect(pad + 10, 10, 12, 4);
-      ctx.font = '12px system-ui, sans-serif';
-      ctx.fillText(`${primLabel} (${unit || '-'})`, pad + 26, 15);
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillRect(plotX, 12, 14, 5);
+  ctx.fillStyle = '#e2e8f0';
+  const primText = `${primLabel} (${unit || '-'})`;
+  ctx.fillText(primText, plotX + 20, 18);
+  const primWidth = ctx.measureText(primText).width;
 
-      ctx.fillStyle = '#f59e0b';
-      ctx.fillRect(pad + 180, 10, 12, 4);
-      ctx.fillText(`${secLabel} (${secUnit || '-'})`, pad + 196, 15);
-    }
+  if (hasSec) {
+    const secLegendX = plotX + 20 + primWidth + 24;
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(secLegendX, 12, 14, 5);
+    ctx.fillText(`${secLabel} (${secUnit || '-'})`, secLegendX + 20, 18);
   }
 
   if (chartHoverIndex !== null) {
     const idx = findNearestIndex(chartHoverIndex, valuesByIndex);
     if (idx >= 0 && Number.isFinite(valuesByIndex[idx])) {
-      const x = pad + (idx / xSpan) * (w - pad * 2);
-      const y = h - pad - ((valuesByIndex[idx] - min) / span) * (h - pad * 2);
-      ctx.strokeStyle = 'rgba(56,189,248,0.6)';
+      const cursorX = getPrimaryX(idx);
+      const primY = plotY + plotH - ((valuesByIndex[idx] - min) / span) * plotH;
+
+      ctx.strokeStyle = 'rgba(148,163,184,0.4)';
+      ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(x, pad);
-      ctx.lineTo(x, h - pad);
+      ctx.moveTo(cursorX, plotY);
+      ctx.lineTo(cursorX, plotY + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.arc(cursorX, primY, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#083344';
+      ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.fillStyle = '#38bdf8';
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fill();
+      if (hasSec && Array.isArray(secValuesByIndex) && secValuesByIndex.length > 0) {
+        let secIdx = -1;
+        if (timeBased && readings[idx]?.created_at) {
+          const primTime = new Date(readings[idx].created_at).getTime();
+          let minDiff = Infinity;
+          secondaryReadings.forEach((sr, sI) => {
+            const st = new Date(sr.created_at).getTime();
+            if (Number.isFinite(st)) {
+              const diff = Math.abs(st - primTime);
+              if (diff < minDiff) {
+                minDiff = diff;
+                secIdx = sI;
+              }
+            }
+          });
+        } else {
+          secIdx = Math.round((idx / (readings.length - 1 || 1)) * (secondaryReadings.length - 1 || 1));
+        }
+
+        if (secIdx >= 0 && Number.isFinite(secValuesByIndex[secIdx])) {
+          const secVal = secValuesByIndex[secIdx];
+          const secCursorX = getSecondaryX(secIdx);
+          const secY = plotY + plotH - ((secVal - secMin) / secSpan) * plotH;
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(secCursorX, secY, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#451a03';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
     }
   }
 }

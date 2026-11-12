@@ -661,17 +661,49 @@ function selectChartPoint(index, pointer = null) {
     return;
   }
 
+  const primaryReading = chartMeta.readings[nearest];
   const value = chartMeta.valuesByIndex[nearest];
-  const time = chartMeta.readings[nearest]?.created_at
-    ? new Date(chartMeta.readings[nearest].created_at).toLocaleString()
+  const time = primaryReading?.created_at
+    ? new Date(primaryReading.created_at).toLocaleString()
     : '';
   const unit = chartMeta.unit ? ` ${chartMeta.unit}` : '';
   const meta = getSelectedKeyMeta();
-  const name = meta?.label ? `${meta.label} (${meta.value_key})` : (meta?.value_key || '');
-  const prefix = name ? `${name}: ` : '';
+  const name = meta?.label ? `${meta.label}` : (meta?.value_key || 'Primär');
+  let detailText = `${time} | ${name}: ${value.toFixed(2)}${unit}`;
+
+  if (chartMeta.hasSec && Array.isArray(chartMeta.secondaryReadings) && chartMeta.secondaryReadings.length > 0) {
+    const secKeyVal = secondaryKeySelect?.value || '';
+    const secKeyObj = keysCache.find((k) => k.value_key === secKeyVal);
+    const secName = secKeyObj?.label || secKeyVal || 'Vergleich';
+    const secUnitStr = chartMeta.secUnit ? ` ${chartMeta.secUnit}` : '';
+
+    let secNearest = -1;
+    if (chartMeta.timeBased && primaryReading?.created_at) {
+      const primTime = new Date(primaryReading.created_at).getTime();
+      let bestDiff = Infinity;
+      chartMeta.secondaryReadings.forEach((sr, sIdx) => {
+        const sTime = new Date(sr.created_at).getTime();
+        if (Number.isFinite(sTime)) {
+          const diff = Math.abs(sTime - primTime);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            secNearest = sIdx;
+          }
+        }
+      });
+    } else {
+      const sFraction = nearest / (chartMeta.readings.length - 1 || 1);
+      secNearest = Math.round(sFraction * (chartMeta.secondaryReadings.length - 1 || 1));
+    }
+
+    if (secNearest >= 0 && Number.isFinite(chartMeta.secValuesByIndex?.[secNearest])) {
+      const secVal = chartMeta.secValuesByIndex[secNearest];
+      detailText += ` · ${secName}: ${secVal.toFixed(2)}${secUnitStr}`;
+    }
+  }
 
   const tooltip = getChartTooltip();
-  tooltip.textContent = `${time} | ${prefix}${value.toFixed(2)}${unit}`;
+  tooltip.textContent = detailText;
   if (pointer?.pointerType === 'mouse') {
     tooltip.style.display = 'block';
     tooltip.style.left = `${Math.max(8, Math.min(pointer.clientX + 12, window.innerWidth - tooltip.offsetWidth - 8))}px`;
@@ -679,17 +711,19 @@ function selectChartPoint(index, pointer = null) {
   } else {
     hideChartTooltip();
   }
-  document.getElementById('chart-point-detail').textContent = tooltip.textContent;
+  const detailEl = document.getElementById('chart-point-detail');
+  if (detailEl) detailEl.textContent = detailText;
 
   chartHoverIndex = nearest;
-  if (chartDataCache.length) drawChart(chartDataCache);
+  if (chartDataCache.length) drawChart(chartDataCache, secondaryChartDataCache);
 }
 
 function selectChartPointer(event) {
   if (!chartMeta) return;
   const rect = chartCanvas.getBoundingClientRect();
-  const fraction = ((event.clientX - rect.left) - chartMeta.pad) / (chartMeta.w - chartMeta.pad * 2);
-  if (fraction < 0 || fraction > 1) return;
+  const plotX = chartMeta.plotX ?? 52;
+  const plotW = chartMeta.plotW ?? (chartMeta.w - plotX * 2);
+  const fraction = Math.max(0, Math.min(1, ((event.clientX - rect.left) - plotX) / plotW));
   selectChartPoint(Math.round(fraction * (chartMeta.readings.length - 1)), event);
 }
 chartCanvas?.addEventListener('pointerdown', selectChartPointer);
@@ -698,12 +732,19 @@ chartCanvas?.addEventListener('pointermove', (event) => {
 });
 chartCanvas?.addEventListener('pointerleave', () => {
   hideChartTooltip();
+  chartHoverIndex = null;
+  if (chartDataCache.length) drawChart(chartDataCache, secondaryChartDataCache);
+  const detailEl = document.getElementById('chart-point-detail');
+  if (detailEl) detailEl.textContent = 'Tippe auf den Graphen oder fahre mit der Maus darüber, um Messwerte abzulesen.';
 });
 chartCanvas?.addEventListener('keydown', (event) => {
   if (!chartMeta || !['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].includes(event.key)) return;
   event.preventDefault();
   if (event.key === 'Escape') {
-    hideChartTooltip(); chartHoverIndex = null; drawChart(chartDataCache); return;
+    hideChartTooltip();
+    chartHoverIndex = null;
+    drawChart(chartDataCache, secondaryChartDataCache);
+    return;
   }
   const last = chartMeta.readings.length - 1;
   let index = chartHoverIndex ?? (event.key === 'ArrowLeft' ? last + 1 : -1);
@@ -715,6 +756,11 @@ chartCanvas?.addEventListener('keydown', (event) => {
 });
 
 keySelect?.addEventListener('change', () => {
+  if (secondaryKeySelect && secondaryKeySelect.value === keySelect.value) {
+    secondaryKeySelect.value = '';
+    secondaryChartDataCache = null;
+  }
+  renderKeySelect(keysCache, keySelect.value);
   populateThresholdInputs();
   loadReadings();
 });
