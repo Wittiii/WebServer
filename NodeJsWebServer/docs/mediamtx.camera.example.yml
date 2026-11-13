@@ -22,9 +22,11 @@ paths:
   esp32-p4-cam-01:
     source: publisher
     # Wandelt nur die Audiospur (AAC -> Opus) für Browser-WebRTC um; Video bleibt unverändert (-c:v copy).
+    # -rtsp_transport tcp steht bewusst für Input UND Output; aresample=async=1 verhindert rückwärtslaufende Audio-Timestamps.
     runOnReady: >-
-      ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
-      -c:v copy -c:a libopus -b:a 64k -ar 48000 -ac 1
+      ffmpeg -fflags +genpts -rtsp_transport tcp -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+      -c:v copy -c:a libopus -b:a 64k -ar 48000 -ac 1 -af aresample=async=1:first_pts=0
+      -max_interleave_delta 0 -rtsp_transport tcp
       -f rtsp rtsp://127.0.0.1:$RTSP_PORT/esp32-p4-cam-01-webrtc
     runOnReadyRestart: yes
 
