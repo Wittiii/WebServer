@@ -1,0 +1,33 @@
+rtsp: true
+rtspAddress: :8554
+
+hls: true
+hlsAddress: :8888
+# HLS erst bei Abruf erzeugen; die erste Wiedergabe kann dadurch länger dauern.
+hlsAlwaysRemux: false
+
+webrtc: true
+webrtcAddress: :8889
+
+api: true
+apiAddress: :9997
+
+paths:
+  pi-zero-01: {}
+  esp32-cam-01: {}
+  dfr1154-cam-01: {}
+
+  # ESP32-P4 publiziert H.264 + AAC-LC direkt per RTSP-PUSH (ANNOUNCE / SETUP / RECORD).
+  # Für RTSP / VLC / FFmpeg-Clip-Aufzeichnung wird direkt esp32-p4-cam-01 genutzt.
+  esp32-p4-cam-01:
+    source: publisher
+    # Wandelt nur die Audiospur (AAC -> Opus) für Browser-WebRTC um; Video bleibt unverändert (-c:v copy).
+    runOnReady: >-
+      ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+      -c:v copy -c:a libopus -b:a 64k -ar 48000 -ac 1
+      -f rtsp rtsp://127.0.0.1:$RTSP_PORT/esp32-p4-cam-01-webrtc
+    runOnReadyRestart: yes
+
+  # Browser-WebRTC-Pfad mit Opus-Audio für esp32-p4-cam-01
+  esp32-p4-cam-01-webrtc:
+    source: publisher
