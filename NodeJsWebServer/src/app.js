@@ -28,13 +28,14 @@ function createApp({ sessionStore = new BoundedMemorySessionStore(), health, dia
   app.use(express.static(path.join(__dirname, '..', 'public')));
   app.use(express.urlencoded({ extended: false, limit: '100kb', parameterLimit: 100 }));
   app.use(express.json({ limit: '100kb' }));
-  app.use(session({
+  const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', secure: 'auto' },
-  }));
+  });
+  app.use(sessionMiddleware);
   app.use(requestOriginGuard);
   app.use('/', require('./routes/home/home'));
   app.use('/dashboard', authGuard, require('./routes/dashboard/dashboard'));
@@ -68,6 +69,7 @@ function createApp({ sessionStore = new BoundedMemorySessionStore(), health, dia
     return res.status(status).send(message);
   });
   app.locals.sessionStore = sessionStore;
+  app.locals.sessionMiddleware = sessionMiddleware;
   return app;
 }
 

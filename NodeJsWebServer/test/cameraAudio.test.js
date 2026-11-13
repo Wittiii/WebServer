@@ -1,11 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
+const http = require("node:http");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const { WebSocket } = require("ws");
 
 const { getCameraConfigs } = require("../src/config/cameraConfig");
 const cameraAudioService = require("../src/services/cameraAudioService");
+const { attachCameraIntercomWebSocket } = require("../src/services/cameraIntercomService");
 
 test("Only esp32-p4-cam-01 exposes audio capabilities and separate -webrtc path", () => {
   const cameras = getCameraConfigs("localhost");
@@ -105,5 +109,93 @@ test("cameraAudioService handles audio_db threshold, cooldown, timelapse markers
     if (prevDir === undefined) delete process.env.CAMERA_AUDIO_DATA_DIR;
     else process.env.CAMERA_AUDIO_DATA_DIR = prevDir;
     await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("cameraIntercomService authenticates WebSocket upgrades and bridges PCM bytes to ESP32 TCP port", async () => {
+  const receivedChunks = [];
+  let tcpClosed = false;
+
+  const tcpServer = net.createServer((sock) => {
+    sock.on("data", (buf) => receivedChunks.push(buf));
+    sock.once("close", () => {
+      tcpClosed = true;
+    });
+  });
+
+  await new Promise((resolve) => tcpServer.listen(0, "127.0.0.1", resolve));
+  const tcpPort = tcpServer.address().port;
+
+  let allowAuth = false;
+  const httpServer = http.createServer((_req, res) => {
+    res.writeHead(404);
+    res.end();
+  });
+
+  const intercom = attachCameraIntercomWebSocket(httpServer, {
+    sessionMiddleware(req, _res, next) {
+      req.session = allowAuth ? { user: { username: "admin" } } : {};
+      next();
+    },
+    getCamera() {
+      return {
+        cameraId: "esp32-p4-cam-01",
+        capabilities: { intercom: true, intercomPort: tcpPort },
+      };
+    },
+    resolveIp() {
+      return "127.0.0.1";
+    },
+  });
+
+  await new Promise((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+  const httpPort = httpServer.address().port;
+
+  try {
+    // 1. Unauthenticated upgrade must be rejected
+    await assert.rejects(
+      () =>
+        new Promise((resolve, reject) => {
+          const ws = new WebSocket(`ws://127.0.0.1:${httpPort}/ws/camera/intercom?cameraId=esp32-p4-cam-01`);
+          ws.once("open", resolve);
+          ws.once("error", reject);
+        })
+    );
+
+    // 2. Authenticated upgrade forwards PCM binary frames to TCP
+    allowAuth = true;
+    const pcmSample = Buffer.from([0x01, 0x02, 0xfe, 0xff, 0x10, 0x20]);
+
+    const readyMsg = await new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${httpPort}/ws/camera/intercom?cameraId=esp32-p4-cam-01`);
+      ws.once("error", reject);
+      ws.on("message", (data, isBinary) => {
+        if (!isBinary) {
+          const parsed = JSON.parse(data.toString());
+          if (parsed.type === "ready") {
+            ws.send(pcmSample, { binary: true }, () => {
+              setTimeout(() => {
+                ws.close();
+                resolve(parsed);
+              }, 40);
+            });
+          }
+        }
+      });
+    });
+
+    assert.equal(readyMsg.type, "ready");
+    assert.equal(readyMsg.sampleRate, 32000);
+    assert.equal(readyMsg.format, "s16le");
+    assert.equal(readyMsg.port, tcpPort);
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const combined = Buffer.concat(receivedChunks);
+    assert.deepEqual(combined, pcmSample);
+    assert.equal(tcpClosed, true);
+  } finally {
+    intercom.closeAll();
+    await new Promise((resolve) => httpServer.close(resolve));
+    await new Promise((resolve) => tcpServer.close(resolve));
   }
 });

@@ -11,10 +11,12 @@ async function startServerRuntime(diagnostics) {
   const { startCameraTimelapseCaptureSupervisor, stopCameraTimelapseCaptureSupervisor } = require('./services/cameraTimelapseCaptureService');
   const { stopTimelapseVideoBuilds } = require('./services/timelapseService');
   const { startRuntimeHealthMonitor } = require('./services/runtimeHealthService');
+  const { attachCameraIntercomWebSocket } = require('./services/cameraIntercomService');
   const { createApp } = require('./app');
   const health = startRuntimeHealthMonitor();
   let app;
   let server;
+  let intercomWs;
   let stopping;
 
   function stop() {
@@ -27,6 +29,7 @@ async function startServerRuntime(diagnostics) {
         stopAutomationEngine(), stopCameraTimelapseCaptureSupervisor(),
         stopEsp32TranscodeSupervisor(), stopTimelapseVideoBuilds(),
       ]);
+      intercomWs?.closeAll();
       await httpClosed;
       clearTimeout(drainTimer);
       await stopMqttBroker();
@@ -51,6 +54,9 @@ async function startServerRuntime(diagnostics) {
     server.headersTimeout = 15000;
     server.requestTimeout = 30000;
     server.keepAliveTimeout = 5000;
+    intercomWs = attachCameraIntercomWebSocket(server, {
+      sessionMiddleware: app.locals.sessionMiddleware,
+    });
     await startMqttBroker();
     startAutomationEngine();
     startEsp32TranscodeSupervisor();

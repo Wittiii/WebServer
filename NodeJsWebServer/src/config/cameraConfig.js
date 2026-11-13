@@ -311,6 +311,8 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
       audio: true,
       audioCodec: "aac",
       webrtcAudioCodec: "opus",
+      intercom: true,
+      intercomPort: Number(process.env.CAMERA_ESP32_P4_INTERCOM_PORT || 3234),
       directRtsp: true,
       requiresTranscode: false,
       serverTimelapse: true,

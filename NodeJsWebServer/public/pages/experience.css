@@ -3029,4 +3029,30 @@ label {
     bottom: 0.75rem;
     font-size: 0.85rem;
   }
+  .camera-intercom-ptt {
+    flex: 1 1 100%;
+    min-height: 2.5rem;
+    font-size: 0.88rem;
+  }
+}
+
+.camera-intercom-ptt {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.camera-intercom-ptt.is-talking {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.75);
+  color: #fecaca;
+}
+
+.camera-intercom-status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.camera-intercom-status.is-error {
+  color: #fca5a5;
 }

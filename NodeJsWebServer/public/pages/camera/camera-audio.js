@@ -9,6 +9,8 @@ const streamVideoEl = document.getElementById("camera-stream-video");
 const streamFrameEl = document.getElementById("camera-stream-frame");
 const audioBarEl = document.getElementById("camera-audio-bar");
 const muteBtnEl = document.getElementById("camera-audio-mute-btn");
+const pttBtnEl = document.getElementById("camera-intercom-ptt");
+const intercomStatusEl = document.getElementById("camera-intercom-status");
 const volumeEl = document.getElementById("camera-audio-volume");
 const volumePctEl = document.getElementById("camera-audio-volume-pct");
 const alarmBadgeEl = document.getElementById("camera-audio-alarm-badge");
@@ -290,8 +292,10 @@ export function renderCameraAudio(camera) {
   const hasAudio = Boolean(camera?.capabilities?.audio);
 
   if (!hasAudio) {
+    stopIntercom();
     disconnectAudioPlayer();
     if (audioBarEl) audioBarEl.hidden = true;
+    if (pttBtnEl) pttBtnEl.hidden = true;
     if (audioPanelEl) audioPanelEl.hidden = true;
     if (timelapseMarkersEl) timelapseMarkersEl.hidden = true;
     loadedAudioCameraId = null;
@@ -299,6 +303,7 @@ export function renderCameraAudio(camera) {
   }
 
   if (audioBarEl) audioBarEl.hidden = false;
+  if (pttBtnEl) pttBtnEl.hidden = !camera?.capabilities?.intercom;
   if (audioPanelEl) audioPanelEl.hidden = false;
 
   if (camera.stream?.urls?.webrtcWhep && camera.status?.streaming) {
@@ -449,4 +454,204 @@ audioRefreshEl?.addEventListener("click", () => {
   if (currentCameraRef?.cameraId) {
     loadCameraAudioDetails(currentCameraRef.cameraId);
   }
+});
+
+// --- Push-to-Talk Intercom (32000 Hz Mono s16le over WebSocket -> ESP32 TCP:3234) ---
+let intercomActive = false;
+let intercomWs = null;
+let intercomCtx = null;
+let intercomStream = null;
+let intercomNode = null;
+let intercomSource = null;
+let wasMutedBeforePtt = true;
+
+function setIntercomStatus(text, isError = false) {
+  if (!intercomStatusEl) return;
+  intercomStatusEl.textContent = text;
+  intercomStatusEl.hidden = !text;
+  intercomStatusEl.classList.toggle("is-error", Boolean(isError));
+}
+
+function stopIntercom() {
+  const wasActive = intercomActive;
+  intercomActive = false;
+
+  if (pttBtnEl) {
+    pttBtnEl.classList.remove("is-talking");
+    pttBtnEl.textContent = "🎙️ Sprechen (gedrueckt halten)";
+  }
+
+  if (wasActive && streamVideoEl && !wasMutedBeforePtt) {
+    streamVideoEl.muted = false;
+    updateMuteUi();
+  }
+
+  if (intercomNode) {
+    try {
+      intercomNode.disconnect();
+    } catch {}
+    intercomNode = null;
+  }
+  if (intercomSource) {
+    try {
+      intercomSource.disconnect();
+    } catch {}
+    intercomSource = null;
+  }
+  if (intercomCtx) {
+    intercomCtx.close().catch(() => {});
+    intercomCtx = null;
+  }
+  if (intercomStream) {
+    intercomStream.getTracks().forEach((t) => t.stop());
+    intercomStream = null;
+  }
+  if (intercomWs) {
+    try {
+      if (intercomWs.readyState <= 1) intercomWs.close();
+    } catch {}
+    intercomWs = null;
+  }
+}
+
+async function startIntercom() {
+  if (intercomActive || !currentCameraRef?.capabilities?.intercom) return;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setIntercomStatus("Mikrofon erfordert HTTPS oder localhost.", true);
+    return;
+  }
+
+  intercomActive = true;
+  if (pttBtnEl) {
+    pttBtnEl.classList.add("is-talking");
+    pttBtnEl.textContent = "🔴 Mikrofon aktiv...";
+  }
+  setIntercomStatus("Verbinde Gegensprechanlage...");
+
+  // Temporarily mute local camera playback during PTT to prevent acoustic feedback.
+  if (streamVideoEl) {
+    wasMutedBeforePtt = streamVideoEl.muted;
+    if (!streamVideoEl.muted) {
+      streamVideoEl.muted = true;
+      updateMuteUi();
+    }
+  }
+
+  try {
+    intercomStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    if (!intercomActive) {
+      stopIntercom();
+      return;
+    }
+
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${proto}//${window.location.host}/ws/camera/intercom?cameraId=${encodeURIComponent(
+      currentCameraRef.cameraId
+    )}`;
+    intercomWs = new WebSocket(wsUrl);
+    intercomWs.binaryType = "arraybuffer";
+
+    intercomWs.onmessage = (ev) => {
+      if (typeof ev.data !== "string") return;
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === "ready") {
+          setIntercomStatus(`🎙️ Live (${msg.host}:${msg.port})`);
+        } else if (msg.type === "error") {
+          setIntercomStatus(msg.message || "Gegensprech-Fehler", true);
+          stopIntercom();
+        } else if (msg.type === "closed") {
+          stopIntercom();
+        }
+      } catch {}
+    };
+
+    intercomWs.onerror = () => {
+      setIntercomStatus("WebSocket-Fehler zur Gegensprechanlage", true);
+      stopIntercom();
+    };
+
+    intercomWs.onclose = () => {
+      if (intercomActive) stopIntercom();
+    };
+
+    await new Promise((resolve, reject) => {
+      if (!intercomWs) return reject(new Error("ws_closed"));
+      intercomWs.addEventListener("open", resolve, { once: true });
+      intercomWs.addEventListener("error", () => reject(new Error("ws_connect_failed")), { once: true });
+    });
+
+    if (!intercomActive) {
+      stopIntercom();
+      return;
+    }
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    intercomCtx = new AudioContextCtor();
+    intercomSource = intercomCtx.createMediaStreamSource(intercomStream);
+
+    if (intercomCtx.audioWorklet) {
+      await intercomCtx.audioWorklet.addModule("/pages/camera/camera-intercom-worklet.js");
+      if (!intercomActive) {
+        stopIntercom();
+        return;
+      }
+      intercomNode = new AudioWorkletNode(intercomCtx, "intercom-capture-processor");
+      intercomNode.port.onmessage = (event) => {
+        if (intercomActive && intercomWs?.readyState === WebSocket.OPEN && event.data) {
+          intercomWs.send(event.data);
+        }
+      };
+      intercomSource.connect(intercomNode);
+      intercomNode.connect(intercomCtx.destination);
+    } else {
+      // Fallback for browsers without AudioWorklet
+      const processor = intercomCtx.createScriptProcessor(2048, 1, 1);
+      const srcRate = intercomCtx.sampleRate || 48000;
+      const step = srcRate / 32000;
+      processor.onaudioprocess = (e) => {
+        if (!intercomActive || intercomWs?.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const outLen = Math.floor(input.length / step);
+        const pcm = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i += 1) {
+          const sample = Math.max(-1, Math.min(1, input[Math.floor(i * step)]));
+          pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        intercomWs.send(pcm.buffer);
+      };
+      intercomSource.connect(processor);
+      processor.connect(intercomCtx.destination);
+      intercomNode = processor;
+    }
+  } catch (err) {
+    setIntercomStatus(`Mikrofon/Stream fehlgeschlagen: ${err?.message || "unbekannt"}`, true);
+    stopIntercom();
+  }
+}
+
+pttBtnEl?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (pttBtnEl.setPointerCapture) {
+    try { pttBtnEl.setPointerCapture(e.pointerId); } catch {}
+  }
+  startIntercom();
+});
+pttBtnEl?.addEventListener("pointerup", () => {
+  stopIntercom();
+  setIntercomStatus("");
+});
+pttBtnEl?.addEventListener("pointercancel", () => {
+  stopIntercom();
+  setIntercomStatus("");
+});
+window.addEventListener("blur", () => {
+  if (intercomActive) stopIntercom();
 });

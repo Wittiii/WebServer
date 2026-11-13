@@ -86,12 +86,14 @@
       <div id="camera-audio-bar" class="camera-audio-bar" hidden>
         <div class="camera-audio-controls">
           <button id="camera-audio-mute-btn" type="button" class="btn-secondary camera-audio-mute-btn">🔇 Ton aus</button>
+          <button id="camera-intercom-ptt" type="button" class="btn-secondary camera-intercom-ptt" hidden>🎙️ Sprechen (gedrueckt halten)</button>
           <label class="camera-audio-volume-wrap" for="camera-audio-volume">
             <span class="camera-audio-volume-label">Lautstaerke</span>
             <input id="camera-audio-volume" type="range" min="0" max="1" step="0.05" value="0.8">
             <span id="camera-audio-volume-pct" class="camera-audio-volume-pct">80%</span>
           </label>
           <span id="camera-audio-alarm-badge" class="camera-audio-alarm-badge" hidden>🔔 Geräusch-Alarm!</span>
+          <span id="camera-intercom-status" class="camera-intercom-status" hidden></span>
         </div>
         <div class="camera-vu-wrap" title="Live Audio-Pegel (dBFS)">
           <span class="camera-vu-label">Pegel</span>
