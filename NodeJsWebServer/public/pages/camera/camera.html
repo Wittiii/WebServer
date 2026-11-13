@@ -79,8 +79,27 @@
       <div id="camera-stream-stage" class="camera-stream-stage">
         <div id="camera-single-shell" class="camera-stream-shell">
           <iframe id="camera-stream-frame" class="camera-stream-frame" title="MediaMTX Stream"></iframe>
+          <video id="camera-stream-video" class="camera-stream-frame" autoplay muted playsinline hidden></video>
         </div>
         <div id="camera-multiview-grid" class="camera-multiview-grid" hidden></div>
+      </div>
+      <div id="camera-audio-bar" class="camera-audio-bar" hidden>
+        <div class="camera-audio-controls">
+          <button id="camera-audio-mute-btn" type="button" class="btn-secondary camera-audio-mute-btn">🔇 Ton aus</button>
+          <label class="camera-audio-volume-wrap" for="camera-audio-volume">
+            <span class="camera-audio-volume-label">Lautstaerke</span>
+            <input id="camera-audio-volume" type="range" min="0" max="1" step="0.05" value="0.8">
+            <span id="camera-audio-volume-pct" class="camera-audio-volume-pct">80%</span>
+          </label>
+          <span id="camera-audio-alarm-badge" class="camera-audio-alarm-badge" hidden>🔔 Geräusch-Alarm!</span>
+        </div>
+        <div class="camera-vu-wrap" title="Live Audio-Pegel (dBFS)">
+          <span class="camera-vu-label">Pegel</span>
+          <div class="camera-vu-track">
+            <div id="camera-vu-fill" class="camera-vu-fill"></div>
+          </div>
+          <span id="camera-vu-db" class="camera-vu-db">-- dBFS</span>
+        </div>
       </div>
       <p id="camera-stream-hint" class="camera-muted-line"></p>
 
@@ -214,6 +233,7 @@
           </div>
           <div class="timelapse-scrubber-controls">
             <input type="range" id="timelapse-scrubber-slider" min="0" max="0" value="0" step="1" disabled>
+            <div id="timelapse-audio-markers" class="timelapse-audio-markers" hidden></div>
             <div class="timelapse-scrubber-info">
               <span id="timelapse-scrubber-counter">0 / 0</span>
               <span id="timelapse-scrubber-filename">--</span>
@@ -224,6 +244,60 @@
         <section class="subpanel" data-collapsible="false">
           <h3>Dateien</h3>
           <ul id="timelapse-file-list" class="readings-list"></ul>
+        </section>
+      </div>
+    </section>
+
+    <section id="camera-audio-panel" class="panel" hidden>
+      <div class="section-header">
+        <div>
+          <h2>Audio-Ueberwachung, Smart Events &amp; Clips</h2>
+          <p class="camera-muted-line">Schwellwert-Alarm (dBFS), automatische 30s-MP4-Clips mit AAC-Ton und KI-Audio-Ereignisse fuer ESP32-P4.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="camera-audio-refresh" type="button" class="btn-secondary">Neu laden</button>
+        </div>
+      </div>
+
+      <form id="camera-audio-settings-form" class="camera-audio-settings-grid">
+        <label class="switch-line" for="camera-audio-enabled">
+          <input id="camera-audio-enabled" type="checkbox">
+          <span>Schwellwert-Alarm aktiv</span>
+        </label>
+        <label class="switch-line" for="camera-audio-autoclip">
+          <input id="camera-audio-autoclip" type="checkbox">
+          <span>Auto-30s-Clip bei Alarm</span>
+        </label>
+        <label class="switch-line" for="camera-audio-markers">
+          <input id="camera-audio-markers" type="checkbox">
+          <span>Zeitraffer Audio-Marker</span>
+        </label>
+        <label class="camera-audio-field">
+          <span>Schwellwert (dBFS)</span>
+          <input id="camera-audio-threshold" type="number" min="-90" max="0" step="1" value="-30">
+        </label>
+        <label class="camera-audio-field">
+          <span>Cooldown (Sek.)</span>
+          <input id="camera-audio-cooldown" type="number" min="5" max="3600" step="1" value="30">
+        </label>
+        <label class="camera-audio-field camera-audio-webhook-field">
+          <span>Webhook / HA URL (optional)</span>
+          <input id="camera-audio-webhook" type="url" placeholder="http://homeassistant.local:8123/api/webhook/...">
+        </label>
+        <div class="camera-audio-save-wrap">
+          <button type="submit">Audio-Regeln speichern</button>
+        </div>
+      </form>
+      <p id="camera-audio-status" class="status-line"></p>
+
+      <div class="grid-2 dashboard-columns" style="margin-top: 0.75rem;">
+        <section class="subpanel" data-collapsible="false">
+          <h3>Letzte Audio- &amp; KI-Ereignisse</h3>
+          <ul id="camera-audio-events-list" class="readings-list"></ul>
+        </section>
+        <section class="subpanel" data-collapsible="false">
+          <h3>Aufgenommene MP4-Clips (mit Ton)</h3>
+          <ul id="camera-audio-clips-list" class="readings-list"></ul>
         </section>
       </div>
     </section>

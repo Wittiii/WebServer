@@ -27,6 +27,15 @@ function controllerWithBroker({ captureSnapshot } = {}) {
       ...(captureSnapshot ? { captureCameraLiveSnapshot: captureSnapshot } : {}),
     },
     "../services/timelapseService": {},
+    "../services/cameraAudioService": {
+      getCameraAudioSnapshotSync: () => null,
+      getCameraAudioSnapshot: async () => null,
+      listAudioClips: async () => [],
+      resolveAudioClipFile: async () => null,
+      deleteAudioClip: async () => false,
+      triggerAudioEvent: async () => null,
+      updateSettings: async () => ({}),
+    },
   };
   vm.runInNewContext(fs.readFileSync(file, "utf8"), {
     module,
@@ -183,9 +192,13 @@ test("ESP32-P4 is a direct H264 MediaMTX camera without an FFmpeg bridge", () =>
   assert.equal(camera.mqttTopicBase, "camera/esp32-p4-cam-01");
   assert.equal(camera.streamPath, "esp32-p4-cam-01");
   assert.equal(camera.capabilities.h264, true);
+  assert.equal(camera.capabilities.audio, true);
+  assert.equal(camera.capabilities.audioCodec, "aac");
+  assert.equal(camera.capabilities.webrtcAudioCodec, "opus");
   assert.equal(camera.capabilities.requiresTranscode, false);
   assert.equal(camera.requiresCommandAck, true);
-  assert.equal(camera.urls.webrtcPage, "http://localhost:8889/esp32-p4-cam-01");
+  assert.equal(camera.urls.webrtcPage, "http://localhost:8889/esp32-p4-cam-01-webrtc");
+  assert.equal(camera.urls.webrtcWhep, "http://localhost:8889/esp32-p4-cam-01-webrtc/whep");
   assert.equal(camera.urls.rtsp, "rtsp://localhost:8554/esp32-p4-cam-01");
 });
 

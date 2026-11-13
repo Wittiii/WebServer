@@ -74,3 +74,29 @@ export async function deleteTimelapse(payload) {
     body: JSON.stringify(payload),
   }));
 }
+
+export async function fetchCameraAudio(cameraId) {
+  const query = new URLSearchParams({ cameraId });
+  return readJson(await fetch(`/api/camera/audio?${query}`, {
+    credentials: "same-origin",
+    signal: AbortSignal.timeout(12000),
+  }));
+}
+
+export async function saveCameraAudioSettings(cameraId, settings) {
+  return readJson(await fetch("/api/camera/audio/settings", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cameraId, ...settings }),
+  }));
+}
+
+export async function deleteCameraAudioClip(cameraId, name) {
+  return readJson(await fetch("/api/camera/audio/clip/delete", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cameraId, name }),
+  }));
+}

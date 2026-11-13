@@ -13,6 +13,10 @@ import {
   normalizeFieldValue,
   setStatusLine,
 } from "./camera-utils.js";
+import {
+  renderCameraAudio,
+  renderTimelapseAudioMarkers,
+} from "./camera-audio.js";
 
 const summaryEl = document.getElementById("camera-summary");
 const pickerEl = document.getElementById("camera-picker");
@@ -594,6 +598,7 @@ function renderState(camera) {
       <div><strong>Direkt streamend</strong><span>${escapeHtml(camera.status.directStreamingClients ?? camera.status.clients ?? "-")}</span></div>
       <div><strong>${camera.kind === "esp32-p4" ? "Encoder-FPS" : "Quell-FPS"}</strong><span>${escapeHtml(camera.status.frameFps ?? "-")}</span></div>
       ${camera.kind === "esp32-p4" ? `<div><strong>Publisher-FPS</strong><span>${escapeHtml(camera.status.publisherReadFps || "-")}</span></div>` : ""}
+      ${camera.capabilities?.audio ? `<div><strong>Audio (ES8311)</strong><span>${escapeHtml((camera.audio?.audioCodec || "aac").toUpperCase())} → ${escapeHtml((camera.audio?.webrtcAudioCodec || "opus").toUpperCase())}${camera.audio?.currentDb != null ? ` (${Number(camera.audio.currentDb).toFixed(1)} dBFS)` : ""}</span></div>` : ""}
       <div><strong>Publisher</strong><span>${camera.status.publisherConnected === true ? "VERBUNDEN" : camera.status.publisherConnected === false ? "GETRENNT" : "-"}</span></div>
       <div><strong>Reconnects</strong><span>${escapeHtml(camera.status.reconnectCount ?? "-")}</span></div>
       <div><strong>WLAN / MQTT Reconnects</strong><span>${escapeHtml(camera.status.wifiReconnectCount ?? 0)} / ${escapeHtml(camera.status.mqttReconnectCount ?? 0)}</span></div>
@@ -978,6 +983,10 @@ function renderTimelapseData() {
       scrubberSliderEl.value = String(initialIdx);
       updateScrubberView(initialIdx);
     }
+    renderTimelapseAudioMarkers(activeCamera, images, (idx) => {
+      scrubberSliderEl.value = String(idx);
+      updateScrubberView(idx);
+    });
   }
 
   if (!timelapseFileListEl) return;
@@ -1368,6 +1377,7 @@ function renderActiveCamera(options = {}) {
   renderTopics(activeCamera);
   renderTargets(activeCamera);
   renderStream(activeCamera);
+  renderCameraAudio(activeCamera);
   if (isMultiviewMode) renderMultiview();
   renderSettingsForm(activeCamera, { force: Boolean(options.forceSettings) });
   syncSettingsStatus(activeCamera);

@@ -16,9 +16,11 @@ function trimSlashes(value, { leading = true, trailing = true } = {}) {
   return current;
 }
 
-function buildUrls({ mediaHost, webrtcPort, hlsPort, rtspPort, apiPort, apiEnabled, streamPath }) {
+function buildUrls({ mediaHost, webrtcPort, hlsPort, rtspPort, apiPort, apiEnabled, streamPath, webrtcPath }) {
+  const resolvedWebrtcPath = webrtcPath || streamPath;
   return {
-    webrtcPage: `http://${mediaHost}:${webrtcPort}/${streamPath}`,
+    webrtcPage: `http://${mediaHost}:${webrtcPort}/${resolvedWebrtcPath}`,
+    webrtcWhep: `http://${mediaHost}:${webrtcPort}/${resolvedWebrtcPath}/whep`,
     hlsPage: `http://${mediaHost}:${hlsPort}/${streamPath}`,
     hlsPlaylist: `http://${mediaHost}:${hlsPort}/${streamPath}/index.m3u8`,
     rtsp: `rtsp://${mediaHost}:${rtspPort}/${streamPath}`,
@@ -286,6 +288,7 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
   );
   const mqttClientId = process.env.CAMERA_ESP32_P4_MQTT_CLIENT_ID || cameraId;
   const streamPath = trimSlashes(process.env.CAMERA_ESP32_P4_STREAM_PATH || cameraId);
+  const webrtcPath = trimSlashes(process.env.CAMERA_ESP32_P4_WEBRTC_PATH || `${streamPath}-webrtc`);
 
   return {
     cameraId,
@@ -294,9 +297,10 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
     mqttClientId,
     mqttTopicBase,
     streamPath,
+    webrtcPath,
     mediaHost: mediaConfig.mediaHost || hostname,
     mediaMTX: mediaConfig,
-    urls: buildUrls({ ...mediaConfig, streamPath }),
+    urls: buildUrls({ ...mediaConfig, streamPath, webrtcPath }),
     archive: {
       type: "server_capture",
       localDir: process.env.CAMERA_ESP32_P4_TIMELAPSE_DIR || "",
@@ -304,6 +308,9 @@ function createEsp32P4CameraConfig(hostname, mediaConfig) {
     },
     capabilities: {
       h264: true,
+      audio: true,
+      audioCodec: "aac",
+      webrtcAudioCodec: "opus",
       directRtsp: true,
       requiresTranscode: false,
       serverTimelapse: true,

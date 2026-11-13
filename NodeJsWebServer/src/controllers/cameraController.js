@@ -16,6 +16,15 @@ const {
   listTimelapseFiles,
   resolveTimelapseFilePath,
 } = require("../services/timelapseService");
+const {
+  deleteAudioClip,
+  getCameraAudioSnapshot,
+  getCameraAudioSnapshotSync,
+  listAudioClips,
+  resolveAudioClipFile,
+  triggerAudioEvent,
+  updateSettings: updateAudioSettings,
+} = require("../services/cameraAudioService");
 
 function getCameraPage(req, res) {
   const filePath = path.join(__dirname, "..", "..", "public", "pages", "camera", "camera.html");
@@ -269,6 +278,7 @@ function buildCameraOverview(config) {
   const ipValue = getLatestTopicValue(statusTopics, "ip");
   const rtspUrlValue = getLatestTopicValue(statusTopics, "rtsp_url");
   const lastStatusValue = getLatestTopicValue(statusTopics, "last_status");
+  const audioDbValue = getLatestTopicValue(statusTopics, "audio_db");
 
   const mqttClient = getClientSnapshot(config.mqttClientId);
   const reportedOnline = parseBoolean(onlineValue);
@@ -290,6 +300,12 @@ function buildCameraOverview(config) {
     : null;
   const serverCapture = config.archive?.type === "server_capture"
     ? getCameraTimelapseCaptureSnapshot(config.cameraId)
+    : null;
+  const audioSnapshot = config.capabilities?.audio
+    ? getCameraAudioSnapshotSync(config.cameraId)
+    : null;
+  const parsedAudioDb = audioDbValue !== "" && Number.isFinite(Number(audioDbValue))
+    ? Number(audioDbValue)
     : null;
   const online = mqttClient ? Boolean(mqttClient.connected && reportedOnline !== false) : reportedOnline;
   const cameraState = config.kind === "esp32-p4"
@@ -358,6 +374,16 @@ function buildCameraOverview(config) {
       : null,
     mediamtx: config.mediaMTX,
     bridge,
+    audio: config.capabilities?.audio
+      ? {
+          supported: true,
+          streamingAudio: streamStatus?.audio ?? null,
+          audioCodec: streamStatus?.audio_codec || config.capabilities.audioCodec || "aac",
+          webrtcAudioCodec: config.capabilities.webrtcAudioCodec || "opus",
+          ...(audioSnapshot || {}),
+          currentDb: audioSnapshot?.currentDb ?? parsedAudioDb,
+        }
+      : null,
     status: {
       online,
       streaming,
@@ -653,13 +679,82 @@ async function sendCommand(req, res) {
   }
 }
 
+async function getAudioOverview(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+  if (!camera.capabilities?.audio) {
+    return res.json({ ok: true, cameraId: camera.cameraId, audio: null, clips: [] });
+  }
+  const [audio, clips] = await Promise.all([
+    getCameraAudioSnapshot(camera.cameraId),
+    listAudioClips(camera.cameraId),
+  ]);
+  return res.json({ ok: true, cameraId: camera.cameraId, audio, clips });
+}
+
+async function saveAudioSettings(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+  if (!camera.capabilities?.audio) {
+    return res.status(400).json({ ok: false, error: "audio_not_supported" });
+  }
+  const settings = await updateAudioSettings(camera.cameraId, req.body || {});
+  return res.json({ ok: true, cameraId: camera.cameraId, settings, overview: buildOverview(req) });
+}
+
+async function postAudioEvent(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+  if (!camera.capabilities?.audio) {
+    return res.status(400).json({ ok: false, error: "audio_not_supported" });
+  }
+  const label = String(req.body?.label || "").trim();
+  if (!label) {
+    return res.status(400).json({ ok: false, error: "missing_label" });
+  }
+  const event = await triggerAudioEvent(camera, {
+    type: req.body?.type === "threshold" ? "threshold" : "ai_classification",
+    label: label.slice(0, 80),
+    db: req.body?.db ?? null,
+    confidence: req.body?.confidence ?? null,
+    source: String(req.body?.source || "api").slice(0, 40),
+  });
+  return res.json({ ok: true, event, overview: buildOverview(req) });
+}
+
+async function getAudioClipFile(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+  const name = String(req.query.name || "");
+  const resolved = await resolveAudioClipFile(camera.cameraId, name);
+  if (!resolved) return res.status(404).json({ ok: false, error: "clip_not_found" });
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `inline; filename="${resolved.name}"`);
+  return res.sendFile(resolved.path);
+}
+
+async function removeAudioClip(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+  const name = String(req.body?.name || req.query?.name || "");
+  const deleted = await deleteAudioClip(camera.cameraId, name);
+  if (!deleted) return res.status(404).json({ ok: false, error: "clip_not_found" });
+  const clips = await listAudioClips(camera.cameraId);
+  return res.json({ ok: true, clips });
+}
+
 module.exports = {
   buildTimelapse,
   deleteTimelapse,
+  getAudioClipFile,
+  getAudioOverview,
   getCameraPage,
   getOverview,
   getSnapshot,
   getTimelapse,
   getTimelapseFile,
+  postAudioEvent,
+  removeAudioClip,
+  saveAudioSettings,
   sendCommand,
 };

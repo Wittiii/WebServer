@@ -2827,3 +2827,206 @@ label {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* --- ESP32-P4 Camera Audio Bar, VU Meter & Smart Events --- */
+.camera-audio-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.camera-audio-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.camera-audio-mute-btn.is-active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #6ee7b7;
+}
+
+.camera-audio-volume-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.camera-audio-volume-wrap input[type="range"] {
+  width: 110px;
+  accent-color: #38bdf8;
+}
+
+.camera-audio-volume-pct {
+  min-width: 2.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.camera-audio-alarm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  font-size: 0.8rem;
+  font-weight: 600;
+  animation: pulse 1.4s infinite;
+}
+
+.camera-vu-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
+.camera-vu-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.camera-vu-track {
+  position: relative;
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+
+.camera-vu-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22c55e 0%, #eab308 68%, #ef4444 92%);
+  transition: width 80ms linear;
+}
+
+.camera-vu-db {
+  min-width: 5.1rem;
+  text-align: right;
+  font-size: 0.8rem;
+  font-family: monospace;
+  color: var(--text);
+}
+
+.camera-audio-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.camera-audio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.camera-audio-webhook-field {
+  grid-column: span 2;
+}
+
+.camera-audio-save-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
+.timelapse-audio-markers {
+  position: relative;
+  height: 14px;
+  margin-top: 0.2rem;
+}
+
+.timelapse-audio-marker-dot {
+  position: absolute;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  min-height: 0;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: #f59e0b;
+  border: 1px solid #fef3c7;
+  cursor: pointer;
+}
+
+.timelapse-audio-marker-dot:hover {
+  background: #ef4444;
+  transform: translateX(-50%) scale(1.25);
+}
+
+.camera-audio-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1200;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.94);
+  border: 1px solid rgba(248, 113, 113, 0.65);
+  color: #fee2e2;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 760px) {
+  .camera-audio-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+    padding: 0.55rem 0.65rem;
+  }
+  .camera-audio-controls {
+    justify-content: space-between;
+    gap: 0.45rem;
+  }
+  .camera-audio-volume-wrap {
+    flex: 1;
+    justify-content: flex-end;
+  }
+  .camera-audio-volume-wrap input[type="range"] {
+    width: 86px;
+  }
+  .camera-vu-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+  .camera-audio-settings-grid {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+  .camera-audio-webhook-field {
+    grid-column: span 1;
+  }
+  .camera-audio-save-wrap button {
+    width: 100%;
+  }
+  .camera-audio-toast {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+}

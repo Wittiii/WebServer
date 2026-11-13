@@ -7,6 +7,7 @@ const { limitMqttConnection } = require('./services/mqttTransportService');
 const db = require('./database/db');
 const { ingestPowerMeterMessage } = require('./services/powerMeterService');
 const { ingestVictronMessage } = require('./services/victronMpptService');
+const { ingestCameraAudioMessage } = require('./services/cameraAudioService');
 const { createValueExtractor } = require('./services/mqttPayloadService');
 const { createRetentionCleanup } = require('./services/retentionCleanupService');
 const { configuredNumber } = require('./services/sensorReadingUtils');
@@ -356,6 +357,13 @@ aedes.on('publish', (p, c) => {
     ingestVictronMessage(p.topic, payloadStr);
   } catch (e) {
     console.error('[MQTT] Victron MPPT ingest error', e);
+  }
+  try {
+    ingestCameraAudioMessage(p.topic, payloadStr).catch((e) => {
+      console.error('[MQTT] camera audio ingest error', e);
+    });
+  } catch (e) {
+    console.error('[MQTT] camera audio ingest error', e);
   }
   try {
     storeReading(p.topic, payloadStr);
