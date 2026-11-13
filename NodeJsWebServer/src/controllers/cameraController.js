@@ -679,6 +679,11 @@ async function sendCommand(req, res) {
   }
 }
 
+function resolveCameraFromRequest(req) {
+  const cameraId = String(req.body?.cameraId || req.query?.cameraId || "").trim();
+  return getCameraConfigById(cameraId || null, req.hostname);
+}
+
 async function getAudioOverview(req, res) {
   const camera = resolveCameraFromRequest(req);
   if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });

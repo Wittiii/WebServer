@@ -634,3 +634,25 @@ test("ESP32-P4 resolution mode, ping command, intermediate states, and capture_r
   assert.equal(published[1].options.qos, 1);
   assert.equal(Boolean(published[1].options.retain), false);
 });
+
+test("ESP32-P4 audio settings and overview endpoints resolve camera cleanly", async () => {
+  const { controller } = controllerWithBroker();
+  const camera = p4Camera();
+
+  const saveRes = response();
+  await controller.saveAudioSettings({
+    hostname: "localhost",
+    body: { cameraId: camera.cameraId, enabled: true, thresholdDb: -25, cooldownSeconds: 45 },
+  }, saveRes);
+  assert.equal(saveRes.statusCode, 200);
+  assert.equal(saveRes.body.ok, true);
+  assert.equal(saveRes.body.cameraId, camera.cameraId);
+
+  const getRes = response();
+  await controller.getAudioOverview({
+    hostname: "localhost",
+    query: { cameraId: camera.cameraId },
+  }, getRes);
+  assert.equal(getRes.statusCode, 200);
+  assert.equal(getRes.body.ok, true);
+});
