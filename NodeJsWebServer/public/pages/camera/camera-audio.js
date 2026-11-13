@@ -129,16 +129,17 @@ export function disconnectAudioPlayer() {
   }
 }
 
-async function connectWhepPlayer(whepUrl) {
-  if (!streamVideoEl || !whepUrl || typeof RTCPeerConnection === "undefined") {
+async function connectWhepPlayer(whepUrl, cameraId) {
+  if (!streamVideoEl || (!whepUrl && !cameraId) || typeof RTCPeerConnection === "undefined") {
     return false;
   }
-  if (activeWhepUrl === whepUrl && whepPc) {
+  const sessionKey = `${cameraId || ""}|${whepUrl || ""}`;
+  if (activeWhepUrl === sessionKey && whepPc) {
     return true;
   }
 
   disconnectAudioPlayer();
-  activeWhepUrl = whepUrl;
+  activeWhepUrl = sessionKey;
 
   try {
     const pc = new RTCPeerConnection({ iceServers: [] });
@@ -177,22 +178,35 @@ async function connectWhepPlayer(whepUrl) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const response = await fetch(whepUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/sdp" },
-      body: offer.sdp,
-      signal: AbortSignal.timeout(5000),
-    });
+    let response = null;
+    if (cameraId) {
+      response = await fetch(`/api/camera/whep?cameraId=${encodeURIComponent(cameraId)}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp,
+        signal: AbortSignal.timeout(8000),
+      }).catch(() => null);
+    }
 
-    if (!response.ok) {
-      throw new Error(`WHEP HTTP ${response.status}`);
+    if ((!response || !response.ok) && whepUrl && window.location.protocol !== "https:") {
+      response = await fetch(whepUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp,
+        signal: AbortSignal.timeout(5000),
+      });
+    }
+
+    if (!response || !response.ok) {
+      throw new Error(`WHEP HTTP ${response?.status || "failed"}`);
     }
 
     const answerSdp = await response.text();
     await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
     return true;
   } catch {
-    if (activeWhepUrl === whepUrl) {
+    if (activeWhepUrl === sessionKey) {
       disconnectAudioPlayer();
     }
     return false;
@@ -293,12 +307,16 @@ export function renderCameraAudio(camera) {
 
   if (!hasAudio) {
     stopIntercom();
-    disconnectAudioPlayer();
     if (audioBarEl) audioBarEl.hidden = true;
     if (pttBtnEl) pttBtnEl.hidden = true;
     if (audioPanelEl) audioPanelEl.hidden = true;
     if (timelapseMarkersEl) timelapseMarkersEl.hidden = true;
     loadedAudioCameraId = null;
+    if (window.location.protocol === "https:" && camera?.status?.streaming && camera?.stream?.urls?.webrtcWhep) {
+      connectWhepPlayer(camera.stream.urls.webrtcWhep, camera.cameraId);
+    } else {
+      disconnectAudioPlayer();
+    }
     return;
   }
 
@@ -307,7 +325,7 @@ export function renderCameraAudio(camera) {
   if (audioPanelEl) audioPanelEl.hidden = false;
 
   if (camera.stream?.urls?.webrtcWhep && camera.status?.streaming) {
-    connectWhepPlayer(camera.stream.urls.webrtcWhep);
+    connectWhepPlayer(camera.stream.urls.webrtcWhep, camera.cameraId);
   } else if (!camera.status?.streaming) {
     disconnectAudioPlayer();
   }

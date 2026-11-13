@@ -1,15 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createRequire } = require("node:module");
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
+const vm = require("node:vm");
 const { WebSocket } = require("ws");
 
 const { getCameraConfigs } = require("../src/config/cameraConfig");
 const cameraAudioService = require("../src/services/cameraAudioService");
 const { attachCameraIntercomWebSocket } = require("../src/services/cameraIntercomService");
+const { ensureLocalTlsCredentials } = require("../src/services/localHttpsService");
 
 test("Only esp32-p4-cam-01 exposes audio capabilities and separate -webrtc path", () => {
   const cameras = getCameraConfigs("localhost");
@@ -197,5 +201,110 @@ test("cameraIntercomService authenticates WebSocket upgrades and bridges PCM byt
     intercom.closeAll();
     await new Promise((resolve) => httpServer.close(resolve));
     await new Promise((resolve) => tcpServer.close(resolve));
+  }
+});
+
+test("ensureLocalTlsCredentials generates a valid self-signed cert/key pair and reuses existing files", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "local-https-test-"));
+  try {
+    const first = await ensureLocalTlsCredentials({ certDir: tmpDir });
+    assert.equal(first.generated, true);
+    assert.ok(first.key.toString("utf8").includes("BEGIN PRIVATE KEY"));
+    assert.ok(first.cert.toString("utf8").includes("BEGIN CERTIFICATE"));
+
+    const second = await ensureLocalTlsCredentials({ certDir: tmpDir });
+    assert.equal(second.generated, false);
+    assert.equal(second.keyPath, first.keyPath);
+    assert.equal(second.certPath, first.certPath);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("proxyCameraWhep rejects invalid SDP offers and forwards valid offers to MediaMTX", async () => {
+  const upstreamServer = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
+    req.on("end", () => {
+      assert.equal(req.url, "/esp32-p4-cam-01-webrtc/whep");
+      assert.equal(req.headers["content-type"], "application/sdp");
+      assert.ok(body.includes("v=0"));
+      res.writeHead(201, { "Content-Type": "application/sdp" });
+      res.end("v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\n");
+    });
+  });
+
+  await new Promise((resolve) => upstreamServer.listen(0, "127.0.0.1", resolve));
+  const upstreamPort = upstreamServer.address().port;
+
+  const controllerFile = path.join(__dirname, "../src/controllers/cameraController.js");
+  const nativeRequire = createRequire(controllerFile);
+  const mod = { exports: {} };
+  const deps = {
+    "../mqttBroker": { topics: new Map(), getClientSnapshot: () => ({ connected: true }), publish: async () => {} },
+    "../config/cameraConfig": {
+      getCameraConfigs: () => [],
+      getCameraConfigById: () => ({
+        cameraId: "esp32-p4-cam-01",
+        streamPath: "esp32-p4-cam-01",
+        webrtcPath: "esp32-p4-cam-01-webrtc",
+        mediaMTX: { internalHost: "127.0.0.1", webrtcPort: upstreamPort },
+      }),
+      getCameraImageProfiles: () => [],
+    },
+    "../services/esp32TranscodeService": { getEsp32BridgeSnapshot: () => null },
+    "../services/cameraTimelapseCaptureService": { getCameraTimelapseCaptureSnapshot: () => null },
+    "../services/timelapseService": {},
+    "../services/cameraAudioService": {
+      getCameraAudioSnapshotSync: () => null,
+      getCameraAudioSnapshot: async () => null,
+      listAudioClips: async () => [],
+      resolveAudioClipFile: async () => null,
+      deleteAudioClip: async () => false,
+      triggerAudioEvent: async () => null,
+      updateSettings: async () => ({}),
+    },
+  };
+  vm.runInNewContext(
+    fsSync.readFileSync(controllerFile, "utf8"),
+    {
+      module: mod,
+      fetch,
+      AbortSignal,
+      require(id) {
+        if (Object.hasOwn(deps, id)) return deps[id];
+        if (["fs/promises", "path", "crypto"].includes(id)) return nativeRequire(id);
+        throw new Error(`Unexpected dependency: ${id}`);
+      },
+    },
+    { filename: controllerFile }
+  );
+
+  function makeRes() {
+    return {
+      statusCode: 200,
+      headers: {},
+      status(c) { this.statusCode = c; return this; },
+      set(k, v) { this.headers[k] = v; return this; },
+      json(b) { this.body = b; return this; },
+      send(b) { this.body = b; return this; },
+    };
+  }
+
+  try {
+    const badRes = makeRes();
+    await mod.exports.proxyCameraWhep({ hostname: "localhost", query: { cameraId: "esp32-p4-cam-01" }, body: "invalid" }, badRes);
+    assert.equal(badRes.statusCode, 400);
+    assert.equal(badRes.body.error, "invalid_sdp_offer");
+
+    const okRes = makeRes();
+    await mod.exports.proxyCameraWhep({ hostname: "localhost", query: { cameraId: "esp32-p4-cam-01" }, body: "v=0\r\ns=-\r\n" }, okRes);
+    assert.equal(okRes.statusCode, 201);
+    assert.equal(okRes.headers["Content-Type"], "application/sdp");
+    assert.ok(String(okRes.body).includes("v=0"));
+  } finally {
+    await new Promise((resolve) => upstreamServer.close(resolve));
   }
 });

@@ -1,3 +1,4 @@
+const https = require('node:https');
 const path = require('node:path');
 
 async function startServerRuntime(diagnostics) {
@@ -12,25 +13,33 @@ async function startServerRuntime(diagnostics) {
   const { stopTimelapseVideoBuilds } = require('./services/timelapseService');
   const { startRuntimeHealthMonitor } = require('./services/runtimeHealthService');
   const { attachCameraIntercomWebSocket } = require('./services/cameraIntercomService');
+  const { isHttpsEnabled, resolveHttpsPort, ensureLocalTlsCredentials } = require('./services/localHttpsService');
   const { createApp } = require('./app');
   const health = startRuntimeHealthMonitor();
   let app;
   let server;
+  let httpsServer;
   let intercomWs;
+  let httpsIntercomWs;
   let stopping;
 
   function stop() {
     if (stopping) return stopping;
     stopping = (async () => {
       const httpClosed = server ? new Promise((resolve) => server.close(resolve)) : Promise.resolve();
-      const drainTimer = setTimeout(() => server?.closeAllConnections(), 3000);
+      const httpsClosed = httpsServer ? new Promise((resolve) => httpsServer.close(resolve)) : Promise.resolve();
+      const drainTimer = setTimeout(() => {
+        server?.closeAllConnections();
+        httpsServer?.closeAllConnections();
+      }, 3000);
       drainTimer.unref();
       const results = await Promise.allSettled([
         stopAutomationEngine(), stopCameraTimelapseCaptureSupervisor(),
         stopEsp32TranscodeSupervisor(), stopTimelapseVideoBuilds(),
       ]);
       intercomWs?.closeAll();
-      await httpClosed;
+      httpsIntercomWs?.closeAll();
+      await Promise.all([httpClosed, httpsClosed]);
       clearTimeout(drainTimer);
       await stopMqttBroker();
       health.stop();
@@ -44,8 +53,9 @@ async function startServerRuntime(diagnostics) {
 
   try {
     app = createApp({ health, diagnostics });
+    const httpHost = process.env.HTTP_HOST || '0.0.0.0';
     server = await new Promise((resolve, reject) => {
-      const listener = app.listen(Number(process.env.PORT || 3000), process.env.HTTP_HOST || '0.0.0.0', () => {
+      const listener = app.listen(Number(process.env.PORT || 3000), httpHost, () => {
         listener.removeListener('error', reject);
         resolve(listener);
       });
@@ -57,12 +67,30 @@ async function startServerRuntime(diagnostics) {
     intercomWs = attachCameraIntercomWebSocket(server, {
       sessionMiddleware: app.locals.sessionMiddleware,
     });
+    if (isHttpsEnabled()) {
+      const tls = await ensureLocalTlsCredentials();
+      httpsServer = await new Promise((resolve, reject) => {
+        const listener = https.createServer({ key: tls.key, cert: tls.cert }, app);
+        listener.once('error', reject);
+        listener.listen(resolveHttpsPort(), httpHost, () => {
+          listener.removeListener('error', reject);
+          resolve(listener);
+        });
+      });
+      httpsServer.headersTimeout = 15000;
+      httpsServer.requestTimeout = 30000;
+      httpsServer.keepAliveTimeout = 5000;
+      httpsIntercomWs = attachCameraIntercomWebSocket(httpsServer, {
+        sessionMiddleware: app.locals.sessionMiddleware,
+      });
+      console.log(`HTTPS Server laeuft auf Port ${httpsServer.address().port}`);
+    }
     await startMqttBroker();
     startAutomationEngine();
     startEsp32TranscodeSupervisor();
     startCameraTimelapseCaptureSupervisor();
     console.log(`Server laeuft auf Port ${server.address().port}`);
-    return { app, server, stop, health };
+    return { app, server, httpsServer, stop, health };
   } catch (error) {
     await stop();
     throw error;
@@ -80,7 +108,7 @@ async function startServer() {
     diagnostics.ready(runtime.server.address());
     let stopping;
     return {
-      app: runtime.app, server: runtime.server, diagnostics,
+      app: runtime.app, server: runtime.server, httpsServer: runtime.httpsServer, diagnostics,
       stop() {
         if (!stopping) {
           diagnostics.event('server_stopping');

@@ -1,4 +1,5 @@
-const { Router } = require("express");
+const express = require("express");
+const { Router } = express;
 
 const apiAuth = require("../../middlewares/apiAuth");
 const {
@@ -11,6 +12,7 @@ const {
   getTimelapse,
   getTimelapseFile,
   postAudioEvent,
+  proxyCameraWhep,
   removeAudioClip,
   saveAudioSettings,
   sendCommand,
@@ -27,6 +29,7 @@ router.get("/audio/clip", apiAuth, getAudioClipFile);
 router.post("/audio/settings", apiAuth, saveAudioSettings);
 router.post("/audio/event", apiAuth, postAudioEvent);
 router.post("/audio/clip/delete", apiAuth, removeAudioClip);
+router.post("/whep", apiAuth, express.text({ type: ["application/sdp", "text/plain"], limit: "64kb" }), proxyCameraWhep);
 router.post("/command", apiAuth, sendCommand);
 router.post("/timelapse/build", apiAuth, buildTimelapse);
 router.post("/timelapse/delete", apiAuth, deleteTimelapse);

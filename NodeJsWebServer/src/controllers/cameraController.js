@@ -748,6 +748,39 @@ async function removeAudioClip(req, res) {
   return res.json({ ok: true, clips });
 }
 
+async function proxyCameraWhep(req, res) {
+  const camera = resolveCameraFromRequest(req);
+  if (!camera) return res.status(404).json({ ok: false, error: "camera_not_found" });
+
+  const sdpOffer = typeof req.body === "string" ? req.body : "";
+  if (!sdpOffer || !sdpOffer.includes("v=0")) {
+    return res.status(400).json({ ok: false, error: "invalid_sdp_offer" });
+  }
+
+  const internalHost = camera.mediaMTX?.internalHost || "127.0.0.1";
+  const webrtcPort = camera.mediaMTX?.webrtcPort || 8889;
+  const webrtcPath = camera.webrtcPath || camera.streamPath;
+  const upstreamUrl = `http://${internalHost}:${webrtcPort}/${webrtcPath}/whep`;
+
+  try {
+    const upstreamRes = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp" },
+      body: sdpOffer,
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!upstreamRes.ok) {
+      return res.status(upstreamRes.status).json({ ok: false, error: "whep_upstream_failed" });
+    }
+
+    const answerSdp = await upstreamRes.text();
+    return res.status(201).set("Content-Type", "application/sdp").send(answerSdp);
+  } catch {
+    return res.status(502).json({ ok: false, error: "whep_proxy_error" });
+  }
+}
+
 module.exports = {
   buildTimelapse,
   deleteTimelapse,
@@ -759,6 +792,7 @@ module.exports = {
   getTimelapse,
   getTimelapseFile,
   postAudioEvent,
+  proxyCameraWhep,
   removeAudioClip,
   saveAudioSettings,
   sendCommand,
