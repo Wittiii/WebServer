@@ -13,7 +13,12 @@ async function startServerRuntime(diagnostics) {
   const { stopTimelapseVideoBuilds } = require('./services/timelapseService');
   const { startRuntimeHealthMonitor } = require('./services/runtimeHealthService');
   const { attachCameraIntercomWebSocket } = require('./services/cameraIntercomService');
-  const { isHttpsEnabled, resolveHttpsPort, ensureLocalTlsCredentials } = require('./services/localHttpsService');
+  const {
+    isHttpsEnabled,
+    resolveHttpsPort,
+    ensureLocalTlsCredentials,
+    startTlsAutoReload,
+  } = require('./services/localHttpsService');
   const { createApp } = require('./app');
   const health = startRuntimeHealthMonitor();
   let app;
@@ -21,6 +26,7 @@ async function startServerRuntime(diagnostics) {
   let httpsServer;
   let intercomWs;
   let httpsIntercomWs;
+  let tlsAutoReload;
   let stopping;
 
   function stop() {
@@ -39,6 +45,7 @@ async function startServerRuntime(diagnostics) {
       ]);
       intercomWs?.closeAll();
       httpsIntercomWs?.closeAll();
+      tlsAutoReload?.stop();
       await Promise.all([httpClosed, httpsClosed]);
       clearTimeout(drainTimer);
       await stopMqttBroker();
@@ -82,6 +89,10 @@ async function startServerRuntime(diagnostics) {
       httpsServer.keepAliveTimeout = 5000;
       httpsIntercomWs = attachCameraIntercomWebSocket(httpsServer, {
         sessionMiddleware: app.locals.sessionMiddleware,
+      });
+      tlsAutoReload = startTlsAutoReload(httpsServer, {
+        keyPath: tls.keyPath,
+        certPath: tls.certPath,
       });
       console.log(`HTTPS Server laeuft auf Port ${httpsServer.address().port}`);
     }

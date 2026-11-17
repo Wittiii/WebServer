@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const db = require('../database/db');
+const { getDirectorySizeBytes } = require('../services/databaseMaintenanceService');
 
 const execFileAsync = promisify(execFile);
 const DB_FILE_PATH = db.name;
@@ -169,15 +170,27 @@ const saveDashboardWidgets = (req, res) => {
 
 const getDashboardSystem = async (req, res) => {
   try {
-    const [dbFile, walFile, storage] = await Promise.all([
+    const dataRoot = path.resolve(process.cwd(), 'data');
+    const diagnosticsDir = path.resolve(
+      process.env.DIAGNOSTICS_DIR || path.join(process.cwd(), 'logs', 'diagnostics')
+    );
+    const [dbFile, walFile, storage, timelapseBytes, clipsBytes, diagnosticsBytes] = await Promise.all([
       fs.promises.stat(DB_FILE_PATH).catch(() => null),
       fs.promises.stat(`${DB_FILE_PATH}-wal`).catch(() => null),
       getStorageStats(DB_FILE_PATH).catch(() => null),
+      getDirectorySizeBytes(path.join(dataRoot, 'timelapse')),
+      getDirectorySizeBytes(path.join(dataRoot, 'clips')),
+      getDirectorySizeBytes(diagnosticsDir),
     ]);
 
     const totalMemoryBytes = os.totalmem();
     const freeMemoryBytes = os.freemem();
     const usedMemoryBytes = Math.max(0, totalMemoryBytes - freeMemoryBytes);
+    const storageInfo = storage || {
+      totalBytes: 0,
+      freeBytes: 0,
+      usedBytes: 0,
+    };
 
     res.json({
       cpu: {
@@ -190,10 +203,13 @@ const getDashboardSystem = async (req, res) => {
         freeBytes: freeMemoryBytes,
         usedBytes: usedMemoryBytes,
       },
-      storage: storage || {
-        totalBytes: 0,
-        freeBytes: 0,
-        usedBytes: 0,
+      storage: {
+        ...storageInfo,
+        breakdown: {
+          timelapseBytes,
+          clipsBytes,
+          diagnosticsBytes,
+        },
       },
       database: {
         sizeBytes: Number(dbFile?.size || 0) + Number(walFile?.size || 0),

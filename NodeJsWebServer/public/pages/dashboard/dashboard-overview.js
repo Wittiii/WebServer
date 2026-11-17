@@ -14,6 +14,8 @@ const elements = {
   storageMeta: document.getElementById("server-storage-meta"),
   dbSize: document.getElementById("server-db-size"),
   dbMeta: document.getElementById("server-db-meta"),
+  storageBreakdown: document.getElementById("server-storage-breakdown"),
+  optimizeDbBtn: document.getElementById("dashboard-db-optimize-btn"),
 };
 
 let topicTreeInitialized = false;
@@ -153,6 +155,10 @@ async function loadSystem() {
   applyHealth(elements.dbSize, severity(storageTotal ? (dbSize / storageTotal) * 100 : 0, 10, 20));
   elements.dbSize.textContent = formatBytes(dbSize);
   elements.dbMeta.textContent = `${formatBytes(storageFree)} frei auf dem Server`;
+  if (elements.storageBreakdown) {
+    const bd = data?.storage?.breakdown || {};
+    elements.storageBreakdown.textContent = `Datenbank: ${formatBytes(dbSize)} · Zeitraffer: ${formatBytes(bd.timelapseBytes || 0)} · Audio-Clips: ${formatBytes(bd.clipsBytes || 0)} · Logs: ${formatBytes(bd.diagnosticsBytes || 0)}`;
+  }
 }
 
 async function refresh() {
@@ -193,6 +199,27 @@ export function initDashboardOverview() {
     if (event.target.closest("summary")) topicExpansion = null;
   });
   refreshButton.addEventListener("click", refresh);
+  elements.optimizeDbBtn?.addEventListener("click", async () => {
+    const confirmed = window.confirm(
+      "Die SQLite-Datenbank jetzt optimieren (VACUUM)? Je nach Größe reagiert der Server kurzzeitig nicht."
+    );
+    if (!confirmed) return;
+    elements.optimizeDbBtn.disabled = true;
+    refreshStatus.textContent = "Optimiere Datenbank …";
+    refreshStatus.classList.remove("refresh-error");
+    try {
+      const res = await fetch("/api/objects/maintenance/database/optimize", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      await loadSystem();
+      refreshStatus.textContent = `Datenbank optimiert (${formatBytes(data.reclaimedBytes || 0)} freigegeben).`;
+    } catch (err) {
+      refreshStatus.textContent = `Datenbankoptimierung fehlgeschlagen: ${err.message || err}`;
+      refreshStatus.classList.add("refresh-error");
+    } finally {
+      elements.optimizeDbBtn.disabled = false;
+    }
+  });
   window.addEventListener("online", refresh);
   refresh();
   setInterval(refresh, 10000);

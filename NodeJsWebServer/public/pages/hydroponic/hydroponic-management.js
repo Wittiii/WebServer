@@ -406,7 +406,9 @@ function renderDatabaseStorageStatus(stats) {
   if (!databaseStorageStatus) return;
   const fileSize = formatStorageBytes(stats?.fileSizeBytes);
   const reclaimable = formatStorageBytes(stats?.reclaimableBytes);
-  databaseStorageStatus.textContent = `SQLite-Datei: ${fileSize} | freigebbar: ${reclaimable}`;
+  const timelapse = formatStorageBytes(stats?.timelapseBytes);
+  const clips = formatStorageBytes(stats?.clipsBytes);
+  databaseStorageStatus.textContent = `SQLite-Datei: ${fileSize} | freigebbar: ${reclaimable} | Zeitraffer: ${timelapse} | Clips: ${clips}`;
 }
 
 async function loadDatabaseStorageStatus() {

@@ -20,6 +20,7 @@ const {
 } = require('./readingsController');
 const {
   databaseStatus,
+  downloadDatabaseBackup,
   optimizeDatabaseFile
 } = require('./maintenanceController');
 
@@ -381,5 +382,6 @@ module.exports = {
   sanitizeAutomationActions,
   // Delegated: Maintenance
   databaseStatus,
+  downloadDatabaseBackup,
   optimizeDatabaseFile
 };

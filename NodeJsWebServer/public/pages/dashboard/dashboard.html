@@ -217,6 +217,13 @@
             <p id="server-db-meta">Lade...</p>
           </div>
         </div>
+        <div class="server-maintenance-bar" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.65rem; margin-top:0.75rem; padding-top:0.65rem; border-top:1px solid rgba(148,163,184,0.16);">
+          <span id="server-storage-breakdown" class="camera-muted-line" style="margin:0;">Speicher-Details werden geladen …</span>
+          <div class="inline-actions">
+            <a id="dashboard-db-backup-btn" href="/api/objects/maintenance/database/backup" class="btn btn-secondary" download>⬇ DB-Backup (.db)</a>
+            <button id="dashboard-db-optimize-btn" type="button" class="btn-secondary">DB optimieren</button>
+          </div>
+        </div>
       </section>
 
       <!-- 3. MQTT Broker: Clients & Topics -->

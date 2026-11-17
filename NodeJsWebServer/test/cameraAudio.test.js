@@ -13,7 +13,7 @@ const { WebSocket } = require("ws");
 const { getCameraConfigs } = require("../src/config/cameraConfig");
 const cameraAudioService = require("../src/services/cameraAudioService");
 const { attachCameraIntercomWebSocket } = require("../src/services/cameraIntercomService");
-const { ensureLocalTlsCredentials } = require("../src/services/localHttpsService");
+const { ensureLocalTlsCredentials, getCertificateExpirationInfo, startTlsAutoReload } = require("../src/services/localHttpsService");
 
 test("Only esp32-p4-cam-01 exposes audio capabilities and separate -webrtc path", () => {
   const cameras = getCameraConfigs("localhost");
@@ -216,6 +216,39 @@ test("ensureLocalTlsCredentials generates a valid self-signed cert/key pair and 
     assert.equal(second.generated, false);
     assert.equal(second.keyPath, first.keyPath);
     assert.equal(second.certPath, first.certPath);
+
+    const info = getCertificateExpirationInfo(first.cert);
+    assert.ok(info.daysRemaining > 3000);
+    assert.ok(info.validTo);
+
+    let secureContextUpdates = 0;
+    const fakeHttpsServer = {
+      setSecureContext({ key, cert }) {
+        assert.ok(key.length > 0);
+        assert.ok(cert.length > 0);
+        secureContextUpdates += 1;
+      },
+    };
+    const reloader = startTlsAutoReload(fakeHttpsServer, {
+      keyPath: first.keyPath,
+      certPath: first.certPath,
+      renewThresholdDays: 0,
+      checkIntervalMs: 60000,
+    });
+    try {
+      const noChange = await reloader.checkAndReload();
+      assert.equal(noChange.reloaded, false);
+      assert.equal(secureContextUpdates, 0);
+
+      // Simulate renewed cert by bumping file mtime
+      const future = new Date(Date.now() + 5000);
+      await fs.utimes(first.certPath, future, future);
+      const reloaded = await reloader.checkAndReload();
+      assert.equal(reloaded.reloaded, true);
+      assert.equal(secureContextUpdates, 1);
+    } finally {
+      reloader.stop();
+    }
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
