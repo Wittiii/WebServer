@@ -15,6 +15,7 @@ const elements = {
   dbSize: document.getElementById("server-db-size"),
   dbMeta: document.getElementById("server-db-meta"),
   storageBreakdown: document.getElementById("server-storage-breakdown"),
+  backupDbBtn: document.getElementById("dashboard-db-backup-btn"),
   optimizeDbBtn: document.getElementById("dashboard-db-optimize-btn"),
 };
 
@@ -199,6 +200,41 @@ export function initDashboardOverview() {
     if (event.target.closest("summary")) topicExpansion = null;
   });
   refreshButton.addEventListener("click", refresh);
+  elements.backupDbBtn?.addEventListener("click", async () => {
+    elements.backupDbBtn.disabled = true;
+    elements.backupDbBtn.textContent = "⏳ Erstelle Backup …";
+    refreshStatus.textContent = "Erstelle Datenbank-Backup …";
+    refreshStatus.classList.remove("refresh-error");
+    try {
+      const res = await fetch("/api/objects/maintenance/database/backup", { credentials: "same-origin" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msg = res.status === 404
+          ? "Backup-Route nicht gefunden – bitte Server neu starten (HTTP 404)"
+          : data.error || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      const filename = match?.[1] || "backup.db";
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      refreshStatus.textContent = `Datenbank-Backup heruntergeladen (${filename}, ${formatBytes(blob.size)}).`;
+    } catch (err) {
+      refreshStatus.textContent = `Backup fehlgeschlagen: ${err.message || err}`;
+      refreshStatus.classList.add("refresh-error");
+    } finally {
+      elements.backupDbBtn.disabled = false;
+      elements.backupDbBtn.textContent = "⬇ DB-Backup (.db)";
+    }
+  });
   elements.optimizeDbBtn?.addEventListener("click", async () => {
     const confirmed = window.confirm(
       "Die SQLite-Datenbank jetzt optimieren (VACUUM)? Je nach Größe reagiert der Server kurzzeitig nicht."

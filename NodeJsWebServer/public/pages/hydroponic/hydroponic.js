@@ -269,6 +269,7 @@ const readingsLogSection = document.getElementById('log-section');
 const readingsLogToggle = document.getElementById('readings-log-toggle');
 const readingsRefresh = document.getElementById('readings-refresh');
 const deleteReadingsBtn = document.getElementById('delete-readings');
+const backupDatabaseBtn = document.getElementById('backup-database');
 const optimizeDatabaseBtn = document.getElementById('optimize-database');
 const readingsStatus = document.getElementById('readings-status');
 const databaseStorageStatus = document.getElementById('database-storage-status');

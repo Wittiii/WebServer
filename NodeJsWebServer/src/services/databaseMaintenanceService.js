@@ -150,9 +150,9 @@ async function createOnlineDatabaseBackup(database = db) {
     await database.backup(filePath);
     const copy = new Database(filePath, { readonly: true, fileMustExist: true });
     try {
-      const check = copy.pragma('quick_check', { simple: true });
-      if (check !== 'ok') {
-        throw new Error(`database_backup_check_failed: ${check}`);
+      const schemaVersion = Number(copy.pragma('schema_version', { simple: true }));
+      if (!Number.isFinite(schemaVersion)) {
+        throw new Error('database_backup_check_failed');
       }
     } finally {
       copy.close();

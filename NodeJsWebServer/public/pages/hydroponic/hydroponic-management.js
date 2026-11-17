@@ -629,6 +629,40 @@ HydroActions.bind(deleteReadingsBtn, 'click', async () => {
   }
 });
 
+HydroActions.bind(backupDatabaseBtn, 'click', async () => {
+  setReadingsStatus('Erstelle Datenbank-Backup ...');
+  backupDatabaseBtn.disabled = true;
+  backupDatabaseBtn.textContent = '⏳ Erstelle Backup ...';
+  try {
+    const res = await fetch('/api/objects/maintenance/database/backup', { credentials: 'same-origin' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg = res.status === 404
+        ? 'Backup-Route nicht gefunden – bitte Server neu starten (HTTP 404)'
+        : data.error || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match?.[1] || 'backup.db';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setReadingsStatus(`Datenbank-Backup heruntergeladen (${filename}, ${formatStorageBytes(blob.size)}).`);
+  } catch (err) {
+    setReadingsStatus(`Backup fehlgeschlagen: ${err.message || err}`, true);
+  } finally {
+    backupDatabaseBtn.disabled = false;
+    backupDatabaseBtn.textContent = '⬇ Backup (.db)';
+  }
+});
+
 HydroActions.bind(optimizeDatabaseBtn, 'click', async () => {
   const confirmed = window.confirm(
     'Die gesamte SQLite-Datenbank jetzt verkleinern? Je nach Datenbankgroesse reagiert der Server laengere Zeit nicht; auch die Messwerterfassung pausiert. Nur in einer Wartungszeit ausfuehren.'
